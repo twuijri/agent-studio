@@ -18,6 +18,7 @@ import { getAgentBridgeManager } from '../agent-bridge/manager'
 import { redactAgentBridgeError } from '../agent-bridge/redact'
 import { handleApiRun, resolveRunSource, loadSessionStateFromDb } from './handle-api-run'
 import { handleBridgeRun, resumeBridgeRun } from './handle-bridge-run'
+import { handleCodingAgentRun } from './handle-coding-agent-run'
 import { handleAbort } from './abort'
 import { getOrCreateSession } from './compression'
 import { handleSessionCommand, isSessionCommand, parseSessionCommand } from './session-command'
@@ -141,7 +142,17 @@ export class ChatRunSocket {
       provider?: string
       model_groups?: Array<{ provider: string; models: string[] }>
       queue_id?: string
+      workspace?: string | null
       source?: string
+      coding_agent_id?: 'claude-code' | 'codex'
+      agent_id?: 'claude-code' | 'codex'
+      mode?: 'scoped' | 'global'
+      baseUrl?: string
+      base_url?: string
+      apiKey?: string
+      api_key?: string
+      apiMode?: string
+      api_mode?: string
       profile?: string
     }) => {
       let runProfile: string
@@ -195,7 +206,17 @@ export class ChatRunSocket {
             model_groups: data.model_groups,
             instructions: data.instructions,
             profile: runProfile,
+            workspace: data.workspace,
             source,
+            codingAgentId: data.coding_agent_id,
+            agentId: data.agent_id,
+            mode: data.mode,
+            baseUrl: data.baseUrl,
+            base_url: data.base_url,
+            apiKey: data.apiKey,
+            api_key: data.api_key,
+            apiMode: data.apiMode,
+            api_mode: data.api_mode,
             originSocketId: socket.id,
           })
           this.nsp.to(`session:${data.session_id}`).emit('run.queued', {
@@ -208,7 +229,7 @@ export class ChatRunSocket {
           return
         }
         state.events = []
-        state.isWorking = true
+        state.isWorking = source !== 'coding_agent'
         state.profile = runProfile
         state.source = source
       }
@@ -316,9 +337,19 @@ export class ChatRunSocket {
       provider?: string
       model_groups?: Array<{ provider: string; models: string[] }>
       instructions?: string
+      workspace?: string | null
       source?: string
       queue_id?: string
       peerExcludeSocketId?: string
+      coding_agent_id?: 'claude-code' | 'codex'
+      agent_id?: 'claude-code' | 'codex'
+      mode?: 'scoped' | 'global'
+      baseUrl?: string
+      base_url?: string
+      apiKey?: string
+      api_key?: string
+      apiMode?: string
+      api_mode?: string
     },
     profile: string,
     skipUserMessage = false,
@@ -371,8 +402,9 @@ export class ChatRunSocket {
         : getSystemPrompt()
       if (data.session_id) {
         const sessionRow = getSession(data.session_id)
-        if (sessionRow?.workspace) {
-          const workspaceCtx = `[Current working directory: ${sessionRow.workspace}]`
+        const workspace = sessionRow?.workspace || String(data.workspace || '').trim()
+        if (workspace) {
+          const workspaceCtx = `[Current working directory: ${workspace}]`
           fullInstructions = `\n${workspaceCtx}\n${fullInstructions}`
         }
       }
@@ -383,6 +415,17 @@ export class ChatRunSocket {
         skipUserMessage,
         loadSessionStateFromDb,
         this.dequeueNextQueuedRun.bind(this),
+      )
+      return
+    }
+
+    if (source === 'coding_agent') {
+      await handleCodingAgentRun(
+        this.nsp,
+        socket,
+        data,
+        profile,
+        this.sessionMap,
       )
       return
     }
@@ -505,6 +548,9 @@ export class ChatRunSocket {
     if (!state?.queue.length) return false
 
     const next = state.queue.shift()!
+    state.isWorking = true
+    state.profile = next.profile || fallbackProfile
+    state.source = next.source
     logger.info('[chat-run-socket] dequeuing queued run for session %s (remaining: %d)', sessionId, state.queue.length)
     this.nsp.to(`session:${sessionId}`).emit('run.queued', {
       event: 'run.queued',
@@ -529,13 +575,65 @@ export class ChatRunSocket {
       provider: next.provider,
       model_groups: next.model_groups,
       instructions: next.instructions,
+      workspace: next.workspace,
       source: next.source,
       queue_id: next.queue_id,
       peerExcludeSocketId: next.originSocketId,
+      coding_agent_id: next.codingAgentId,
+      agent_id: next.agentId,
+      mode: next.mode,
+      baseUrl: next.baseUrl,
+      base_url: next.base_url,
+      apiKey: next.apiKey,
+      api_key: next.api_key,
+      apiMode: next.apiMode,
+      api_mode: next.api_mode,
     }, next.profile || fallbackProfile, skipUserMessage)
   }
 
   // --- Helpers ---
+
+  emitExternalEvent(sessionId: string, event: string, payload: any) {
+    const tagged = { ...payload, session_id: sessionId }
+    const state = this.sessionMap.get(sessionId)
+    if (state?.isWorking) {
+      state.events.push({ event, data: tagged })
+      if (state.events.length > 200) state.events.splice(0, state.events.length - 200)
+    }
+    this.nsp.to(`session:${sessionId}`).emit(event, tagged)
+  }
+
+  markExternalRunCompleted(sessionId: string, event: string) {
+    const state = this.sessionMap.get(sessionId)
+    if (!state) return
+    state.isWorking = false
+    state.abortController = undefined
+    state.runId = undefined
+    state.activeRunMarker = undefined
+    state.events = []
+    state.responseRun = undefined
+    state.profile = undefined
+    logger.info('[chat-run-socket] external run completed for session %s (%s)', sessionId, event)
+    if (state.queue.length > 0) {
+      const socket = this.socketForQueuedRun(sessionId, state.queue[0])
+      if (socket) this.dequeueNextQueuedRun(socket, sessionId)
+    }
+  }
+
+  private socketForQueuedRun(sessionId: string, next?: QueuedRun): Socket | null {
+    if (next?.originSocketId) {
+      const origin = this.nsp.sockets.get(next.originSocketId)
+      if (origin) return origin
+    }
+    const room = this.nsp.adapter.rooms.get(`session:${sessionId}`)
+    if (room) {
+      for (const socketId of room) {
+        const socket = this.nsp.sockets.get(socketId)
+        if (socket) return socket
+      }
+    }
+    return this.nsp.sockets.values().next().value || null
+  }
 
   private clearClarifyEventState(sessionId: string, clarifyId: string) {
     const state = this.sessionMap.get(sessionId)
