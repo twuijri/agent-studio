@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto'
 import { existsSync, readdirSync, realpathSync } from 'fs'
 import { chmod, mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { homedir } from 'os'
-import { delimiter, dirname, extname, join } from 'path'
+import { delimiter, dirname, join } from 'path'
 import { promisify } from 'util'
 import { getWebUiHome } from '../config'
 import { PROVIDER_ENV_MAP, readConfigYamlForProfile, safeReadFile } from './config-helpers'
@@ -16,6 +16,7 @@ import { getProfileDir } from './hermes/hermes-profile'
 import { codingAgentRunManager } from './agent-runner/coding-agent-run-manager'
 import { getSession, updateSession, type HermesSessionRow } from '../db/hermes/session-store'
 import type { SessionState } from './hermes/run-chat/types'
+import { normalizeWindowsCommandPath, windowsCmdShimExecution, windowsCommandNeedsShell, type WindowsCommandExecution } from './windows-command'
 
 const execFileAsync = promisify(execFile)
 const LAUNCH_API_MODES = new Set<ApiMode>(['chat_completions', 'codex_responses', 'anthropic_messages'])
@@ -26,6 +27,12 @@ const NODE_ENVIRONMENT_MISSING_CODE = 'node_environment_missing'
 const POSIX_LAUNCHER_FILE = 'launch.sh'
 const WINDOWS_LAUNCHER_FILE = 'launch.ps1'
 const CODING_AGENT_SCOPED_AUTH_PROVIDERS = new Set(['openai-codex', 'copilot', 'xai-oauth', 'nous'])
+
+interface CommandExecution {
+  command: string
+  args: string[]
+  windowsVerbatimArguments?: WindowsCommandExecution['windowsVerbatimArguments']
+}
 
 export type CodingAgentId = 'claude-code' | 'codex'
 
@@ -556,10 +563,6 @@ function powerShellQuote(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
 }
 
-function cmdQuote(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`
-}
-
 function buildLaunchShellCommand(input: {
   workspaceDir: string
   env: Record<string, string>
@@ -798,7 +801,7 @@ function getCurrentNodeEnv(): NodeJS.ProcessEnv {
   }
 }
 
-async function npmExecution(args: string[], env: NodeJS.ProcessEnv): Promise<{ command: string; args: string[] }> {
+async function npmExecution(args: string[], env: NodeJS.ProcessEnv): Promise<CommandExecution> {
   const bundledNpmCli = getNpmCliPath()
   if (bundledNpmCli) return { command: process.execPath, args: [bundledNpmCli, ...args] }
 
@@ -838,6 +841,7 @@ async function runNpm(args: string[], options: { timeout?: number; env?: NodeJS.
     encoding: 'utf-8',
     timeout: options.timeout,
     windowsHide: true,
+    windowsVerbatimArguments: execution.windowsVerbatimArguments,
     maxBuffer: 10 * 1024 * 1024,
     env,
   })
@@ -865,15 +869,10 @@ async function findCommandPaths(command: string, env: NodeJS.ProcessEnv): Promis
       windowsHide: true,
       env,
     })
-    return stdout.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+    return stdout.split(/\r?\n/).map(line => normalizeWindowsCommandPath(line.trim())).filter(Boolean)
   } catch {
     return []
   }
-}
-
-function windowsCommandNeedsShell(command: string): boolean {
-  const extension = extname(command).toLowerCase()
-  return extension === '.cmd' || extension === '.bat'
 }
 
 async function resolveCommandForExecution(command: string, env: NodeJS.ProcessEnv): Promise<string> {
@@ -885,18 +884,12 @@ async function resolveCommandForExecution(command: string, env: NodeJS.ProcessEn
   return windowsPath || paths[0] || command
 }
 
-function commandExecution(command: string, args: string[]): { command: string; args: string[] } {
-  if (process.platform === 'win32' && windowsCommandNeedsShell(command)) {
-    // For CMD /C, the command and args need to be passed as a single string
-    // The command path should be quoted if it contains spaces, but args are joined directly
-    const commandArg = / /.test(command) ? `"${command}"` : command
-    const argsString = args.map(arg => / /.test(arg) ? `"${arg}"` : arg).join(' ')
-    return {
-      command: 'cmd.exe',
-      args: ['/d', '/s', '/c', `${commandArg} ${argsString}`],
-    }
+function commandExecution(command: string, args: string[]): CommandExecution {
+  const normalizedCommand = normalizeWindowsCommandPath(command)
+  if (process.platform === 'win32' && windowsCommandNeedsShell(normalizedCommand)) {
+    return windowsCmdShimExecution(normalizedCommand, args)
   }
-  return { command, args }
+  return { command: normalizedCommand, args }
 }
 
 function packageParts(packageName: string): string[] {
@@ -999,6 +992,7 @@ export async function getCodingAgentStatus(definition: CodingAgentDefinition): P
       encoding: 'utf-8',
       timeout: 8000,
       windowsHide: true,
+      windowsVerbatimArguments: execution.windowsVerbatimArguments,
       env,
     })
     const rawVersion = `${stdout || ''}${stderr || ''}`.trim()
