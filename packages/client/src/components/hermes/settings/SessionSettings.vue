@@ -1,14 +1,17 @@
 <script setup lang="ts">
+import { onMounted, ref } from "vue";
 import { NInputNumber, NSelect, NSwitch, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { useSettingsStore } from "@/stores/hermes/settings";
 import { useSessionBrowserPrefsStore } from "@/stores/hermes/session-browser-prefs";
+import { fetchPendingWrites } from "@/api/hermes/write-gate";
 import SettingRow from "./SettingRow.vue";
 
 const settingsStore = useSettingsStore();
 const sessionBrowserPrefsStore = useSessionBrowserPrefsStore();
 const message = useMessage();
 const { t } = useI18n();
+const writeApprovalSupported = ref(true);
 
 // 防抖保存：每个字段独立定时器，300ms 内只发最后一次 HTTP 请求
 const debounceTimers: Record<string, ReturnType<typeof setTimeout>> = {};
@@ -46,6 +49,25 @@ async function toggleRequireAuth(value: boolean) {
     message.error(t("settings.saveFailed"));
   }
 }
+
+async function toggleWriteApproval(section: "memory" | "skills", value: boolean) {
+  try {
+    settingsStore.updateLocal(section, { write_approval: value });
+    await settingsStore.saveSection(section, { write_approval: value });
+    message.success(t("settings.saved"));
+  } catch (err: any) {
+    message.error(t("settings.saveFailed"));
+  }
+}
+
+onMounted(async () => {
+  try {
+    const data = await fetchPendingWrites();
+    writeApprovalSupported.value = data.supported !== false;
+  } catch {
+    writeApprovalSupported.value = true;
+  }
+});
 </script>
 
 <template>
@@ -55,6 +77,26 @@ async function toggleRequireAuth(value: boolean) {
       :hint="t('settings.session.requireAuthHint')"
     >
       <NSwitch :value="settingsStore.approvals.mode === 'manual'" @update:value="toggleRequireAuth" />
+    </SettingRow>
+    <SettingRow
+      v-if="writeApprovalSupported"
+      :label="t('settings.session.memoryWriteApproval')"
+      :hint="t('settings.session.memoryWriteApprovalHint')"
+    >
+      <NSwitch
+        :value="settingsStore.memory.write_approval === true"
+        @update:value="(value) => toggleWriteApproval('memory', value)"
+      />
+    </SettingRow>
+    <SettingRow
+      v-if="writeApprovalSupported"
+      :label="t('settings.session.skillsWriteApproval')"
+      :hint="t('settings.session.skillsWriteApprovalHint')"
+    >
+      <NSwitch
+        :value="settingsStore.skills.write_approval === true"
+        @update:value="(value) => toggleWriteApproval('skills', value)"
+      />
     </SettingRow>
     <SettingRow
       :label="t('settings.session.mode')"

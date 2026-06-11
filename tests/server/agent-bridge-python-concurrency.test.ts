@@ -112,7 +112,7 @@ approval.load_permanent_allowlist = load_permanent_allowlist
 approval.check_execute_code_guard = check_execute_code_guard
 sys.modules["tools.approval"] = approval
 
-path = Path("packages/server/src/services/hermes/agent-bridge/hermes_bridge.py")
+path = Path("packages/server/src/services/hermes/agent-bridge/python/hermes_bridge.py")
 spec = importlib.util.spec_from_file_location("hermes_bridge", path)
 bridge = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = bridge
@@ -788,6 +788,96 @@ assert calls == []
 pool._run_context.session_id = "session-a"
 assert pool._approval_dispatcher("cmd", "desc", allow_permanent=False) == "once"
 assert calls == [("cmd", "desc", False)]
+`)
+  })
+
+  it('does not persist session-level approval for repeated memory write prompts', () => {
+    runPython(String.raw`
+${harness}
+
+pool, _fake_db = make_pool()
+callback = pool._approval_callback("session-a")
+result = {}
+
+def first_prompt():
+    result["first"] = callback("memory text", "Save to memory: add to memory", allow_permanent=False)
+
+thread = threading.Thread(target=first_prompt)
+thread.start()
+
+deadline = time.time() + 5
+approval_id = None
+while time.time() < deadline:
+    with pool._lock:
+        approval_id = next(iter(pool._approval_requests), None)
+    if approval_id:
+        break
+    time.sleep(0.01)
+
+assert approval_id is not None
+assert pool.respond_approval(approval_id, "session") == {
+    "approval_id": approval_id,
+    "resolved": True,
+    "choice": "session",
+}
+thread.join(timeout=5)
+assert result["first"] == "session"
+
+second_result = {}
+def second_prompt():
+    second_result["choice"] = callback("memory text 2", "Save to memory: add to memory", allow_permanent=False)
+
+thread = threading.Thread(target=second_prompt)
+thread.start()
+deadline = time.time() + 5
+approval_id = None
+while time.time() < deadline:
+    with pool._lock:
+        approval_id = next(iter(pool._approval_requests), None)
+    if approval_id:
+        break
+    time.sleep(0.01)
+
+assert approval_id is not None
+pool.respond_approval(approval_id, "once")
+thread.join(timeout=5)
+assert second_result["choice"] == "once"
+`)
+  })
+
+  it('keeps bound approval session when Hermes propagates callback to tool workers', () => {
+    runPython(String.raw`
+${harness}
+
+pool, _fake_db = make_pool()
+pool._install_approval_dispatcher_for_current_thread("session-a")
+parent_callback = terminal_tool._get_approval_callback()
+assert parent_callback is not None
+
+result = {}
+def worker_prompt():
+    # Hermes propagates the terminal approval callback object to worker threads,
+    # but it does not propagate bridge_pool._run_context because that is a
+    # bridge-local threading.local(). The callback itself must carry session-a.
+    assert getattr(pool._run_context, "session_id", "") == ""
+    result["first"] = parent_callback("memory text", "Save to memory: add preference", allow_permanent=False)
+
+thread = threading.Thread(target=worker_prompt)
+thread.start()
+
+deadline = time.time() + 5
+approval_id = None
+while time.time() < deadline:
+    with pool._lock:
+        approval_id = next(iter(pool._approval_requests), None)
+    if approval_id:
+        break
+    time.sleep(0.01)
+
+assert approval_id is not None
+pool.respond_approval(approval_id, "session")
+thread.join(timeout=5)
+assert result["first"] == "session"
 `)
   })
 
