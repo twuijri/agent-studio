@@ -106,6 +106,7 @@ export default {
 
   sidebar: {
     chat: 'Чат',
+    backToChat: 'Назад',
     search: 'Поиск',
     apiRelay: 'Ретранслятор API',
     history: 'История',
@@ -123,6 +124,7 @@ export default {
     channels: 'Каналы',
     gateways: 'Шлюзы',
     terminal: 'Терминал',
+    singleChat: 'Чат',
     groupChat: 'Групповой чат',
     files: 'Файлы',
     devices: 'Устройства',

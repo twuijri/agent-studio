@@ -1078,6 +1078,8 @@ function isImage(type: string): boolean {
 .context-info {
   font-size: 11px;
   color: $text-muted;
+  min-width: 0;
+  white-space: nowrap;
 
   &.context-warning {
     color: #e8a735;
@@ -1100,6 +1102,7 @@ function isImage(type: string): boolean {
 .context-bar {
   width: 60px;
   height: 4px;
+  margin-left: -4px;
   background: rgba(128, 128, 128, 0.2);
   border-radius: 2px;
   overflow: hidden;
@@ -1117,6 +1120,25 @@ function isImage(type: string): boolean {
 
   &.context-bar-danger {
     background: linear-gradient(90deg, #c43a2a, #e85d4a);
+  }
+}
+
+@media (max-width: 768px) {
+  .input-top-bar {
+    gap: 5px;
+  }
+
+  .context-info {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 10px;
+    line-height: 14px;
+    margin-right: 10px;
+  }
+
+  .context-bar {
+    width: 42px;
+    flex-shrink: 0;
   }
 }
 

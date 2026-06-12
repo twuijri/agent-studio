@@ -441,17 +441,17 @@ export async function startWebUiServer(port = DEFAULT_PORT): Promise<string> {
 
 async function waitForReady(port: number, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs
-  const url = `http://127.0.0.1:${port}/api/health`
+  const url = `http://127.0.0.1:${port}/`
   while (Date.now() < deadline) {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(1000) })
-      if (res.ok || res.status === 401) return // 401 = up but auth-gated, server is alive
+      if (res.ok) return
     } catch {
       /* not ready yet */
     }
     await new Promise(r => setTimeout(r, 300))
   }
-  throw new Error(`Web UI server did not become ready within ${timeoutMs}ms`)
+  throw new Error(`Web UI shell did not become ready within ${timeoutMs}ms`)
 }
 
 export function stopWebUiServer(): Promise<void> {

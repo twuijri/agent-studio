@@ -180,6 +180,7 @@ export default {
   // Sidebar
   sidebar: {
     chat: 'Chat',
+    backToChat: 'Back',
     search: 'Search',
     apiRelay: 'API Relay',
     history: 'History',
@@ -198,6 +199,7 @@ export default {
     channels: 'Channels',
     gateways: 'Gateways',
     terminal: 'Terminal',
+    singleChat: 'Chat',
     groupChat: 'Group Chat',
     files: 'Files',
     devices: 'Devices',

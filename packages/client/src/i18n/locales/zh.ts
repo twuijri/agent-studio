@@ -180,6 +180,7 @@ export default {
 
   sidebar: {
     chat: '对话',
+    backToChat: '返回',
     search: '搜索',
     apiRelay: '饲料',
     history: '历史',
@@ -198,6 +199,7 @@ export default {
     channels: '频道',
     gateways: '网关',
     terminal: '终端',
+    singleChat: '单聊',
     groupChat: '群聊',
     files: '文件',
     devices: '设备',
