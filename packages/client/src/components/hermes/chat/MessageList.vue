@@ -1229,14 +1229,19 @@ defineExpose({
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  width: min(640px, 100%);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 4px;
+  box-sizing: border-box;
 }
 
 .thinking-status {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
+  min-width: 0;
   min-height: 40px;
 }
 
@@ -1246,6 +1251,10 @@ defineExpose({
   border-radius: $radius-md;
   object-fit: cover;
   flex-shrink: 0;
+
+  .dark & {
+    filter: brightness(1.18) contrast(1.08) saturate(1.08);
+  }
 }
 
 .thinking-status-copy {
@@ -1262,26 +1271,27 @@ defineExpose({
   display: inline-flex;
   align-items: center;
   color: transparent;
-  background: linear-gradient(105deg, $text-secondary 30%, rgba(255, 255, 255, 0.85) 48%, $text-secondary 66%);
-  background-size: 260% 100%;
-  background-position: 160% 0;
+  background: linear-gradient(105deg, $text-secondary 0%, $text-secondary 39%, #ffffff 48%, #ffffff 52%, $text-secondary 61%, $text-secondary 100%);
+  background-size: 300% 100%;
+  background-position: 0% 0;
   -webkit-background-clip: text;
   background-clip: text;
   font-size: 15px;
   font-weight: 600;
   line-height: 20px;
-  animation: thinking-label-shimmer 2.6s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+  animation: thinking-label-shimmer 2.2s linear infinite;
   backface-visibility: hidden;
   contain: paint;
   transform: translateZ(0);
   will-change: background-position;
 
   .dark & {
-    background: linear-gradient(105deg, #d8d8d8 30%, #ffffff 48%, #d8d8d8 66%);
-    background-size: 260% 100%;
-    background-position: 160% 0;
+    background: linear-gradient(105deg, #f0f0f0 0%, #f0f0f0 37%, #2f3540 47%, #2f3540 53%, #f0f0f0 63%, #f0f0f0 100%);
+    background-size: 300% 100%;
+    background-position: 0% 0;
     -webkit-background-clip: text;
     background-clip: text;
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.16));
   }
 }
 
@@ -1299,12 +1309,11 @@ defineExpose({
 
 @keyframes thinking-label-shimmer {
   0% {
-    background-position: 160% 0;
+    background-position: 100% 0;
   }
 
-  52%,
   100% {
-    background-position: -160% 0;
+    background-position: 0% 0;
   }
 }
 
@@ -1313,6 +1322,7 @@ defineExpose({
   flex-direction: column;
   gap: 4px;
   width: 100%;
+  min-width: 0;
   max-height: 180px;
   overflow-y: auto;
   scrollbar-width: none;
@@ -1326,6 +1336,9 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   font-size: 11px;
   color: $text-secondary;
   padding: 3px 8px;
@@ -1349,13 +1362,16 @@ defineExpose({
   .tool-call-name {
     font-family: $font-code;
     flex-shrink: 0;
+    min-width: 0;
   }
 
   .tool-call-preview {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 300px;
+    max-width: none;
     color: $text-muted;
   }
 }
