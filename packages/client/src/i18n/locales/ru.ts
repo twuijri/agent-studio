@@ -494,7 +494,7 @@ export default {
     unchangedLines: '{count} строк без изменений',
     executionDuration: 'Длительность выполнения',
     thinkingLabel: 'Процесс размышления',
-    thinkingInProgress: 'Размышление…',
+    thinkingInProgress: 'Размышление',
     thinkingShow: 'Развернуть процесс размышления',
     thinkingHide: 'Свернуть процесс размышления',
     thinkingDuration: 'Наблюдается {duration}',

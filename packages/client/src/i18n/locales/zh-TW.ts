@@ -582,7 +582,7 @@ export default {
     unchangedLines: '{count} 行未修改',
     executionDuration: '執行時長',
     thinkingLabel: '思考過程',
-    thinkingInProgress: '思考中…',
+    thinkingInProgress: '正在思考',
     thinkingShow: '展開思考過程',
     thinkingHide: '收起思考過程',
     thinkingDuration: '已觀察 {duration}',

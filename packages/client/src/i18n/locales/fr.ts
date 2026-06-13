@@ -537,7 +537,7 @@ export default {
     truncated: '... (tronque)',
     unchangedLines: '{count} lignes inchangées',
     executionDuration: 'Temps d’exécution',    thinkingLabel: 'Raisonnement',
-    thinkingInProgress: 'En réflexion…',
+    thinkingInProgress: 'En réflexion',
     thinkingShow: 'Afficher le raisonnement',
     thinkingHide: 'Masquer le raisonnement',
     thinkingDuration: 'Observé {duration}',

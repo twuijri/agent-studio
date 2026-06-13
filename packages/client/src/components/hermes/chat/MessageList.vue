@@ -21,19 +21,19 @@ import { NButton, NInput } from "naive-ui";
 import VirtualMessageList from "./VirtualMessageList.vue";
 import MessageItem from "./MessageItem.vue";
 import { LIVE_CHAT_MAX_LOADED_MESSAGES, useChatStore } from "@/stores/hermes/chat";
-import thinkingImageLight from "@/assets/thinking-light.gif";
-import thinkingImageDark from "@/assets/thinking-dark.gif";
-import { useTheme } from "@/composables/useTheme";
+import thinkingImage from "@/assets/thinking.gif";
 import { useToolTraceVisibility } from "@/composables/useToolTraceVisibility";
 
 const chatStore = useChatStore();
 const { t } = useI18n();
-const { isDark } = useTheme();
 const { toolTraceVisible } = useToolTraceVisibility();
 const listRef = ref<InstanceType<typeof VirtualMessageList> | null>(null);
 const pendingInitialScrollSessionId = ref<string | null>(null);
 const showScrollBottomButton = ref(false);
+const thinkingElapsedMs = ref(0);
 const initialBottomScrollOptions = { frames: 8, keepAliveMs: 1200 };
+let thinkingStartedAt = 0;
+let thinkingTimer: ReturnType<typeof setInterval> | null = null;
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
@@ -48,6 +48,26 @@ function formatToolDuration(seconds: number): string {
   const secs = Math.round(seconds % 60)
   return `${mins}m ${secs}s`
 }
+
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  if (hours > 0) return `${hours}h${mins}m${secs}s`;
+  if (mins > 0) return `${mins}m${secs}s`;
+  return `${secs}s`;
+}
+
+function stopThinkingTimer() {
+  if (thinkingTimer) {
+    clearInterval(thinkingTimer);
+    thinkingTimer = null;
+  }
+}
+
+const isThinkingIndicatorVisible = computed(() => chatStore.isRunActive || !!chatStore.abortState);
+const formattedThinkingElapsed = computed(() => formatElapsed(thinkingElapsedMs.value));
 
 const currentToolCalls = computed(() => {
   const msgs = chatStore.messages;
@@ -86,7 +106,7 @@ const emptyState = computed(() => {
     };
   }
   return {
-    logo: "/logo.png",
+    logo: "/coding-agents/hermes.png",
     alt: "Hermes",
     text: t("chat.emptyState"),
   };
@@ -294,6 +314,24 @@ watch(
   },
 );
 
+watch(
+  isThinkingIndicatorVisible,
+  (visible) => {
+    stopThinkingTimer();
+    if (!visible) {
+      thinkingStartedAt = 0;
+      thinkingElapsedMs.value = 0;
+      return;
+    }
+    thinkingStartedAt = Date.now();
+    thinkingElapsedMs.value = 0;
+    thinkingTimer = setInterval(() => {
+      thinkingElapsedMs.value = Date.now() - thinkingStartedAt;
+    }, 1000);
+  },
+  { immediate: true },
+);
+
 // During streaming, only auto-scroll if the user is already near the bottom
 watch(
   () => chatStore.messages[chatStore.messages.length - 1]?.content,
@@ -331,6 +369,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  stopThinkingTimer();
   saveSessionScrollPosition(chatStore.activeSessionId);
 });
 
@@ -383,13 +422,19 @@ defineExpose({
       </template>
       <template #after>
         <Transition name="fade">
-        <div v-if="chatStore.isRunActive || chatStore.abortState" class="streaming-indicator">
-          <img
-            :src="isDark ? thinkingImageDark : thinkingImageLight"
-            alt=""
-            aria-hidden="true"
-            class="thinking-video"
-          >
+        <div v-if="isThinkingIndicatorVisible" class="streaming-indicator">
+          <div class="thinking-status">
+            <img
+              :src="thinkingImage"
+              alt=""
+              aria-hidden="true"
+              class="thinking-avatar"
+            >
+            <div class="thinking-status-copy">
+              <span class="thinking-status-label">{{ t("chat.thinkingInProgress") }}</span>
+              <span class="thinking-status-time">{{ formattedThinkingElapsed }}</span>
+            </div>
+          </div>
           <div v-if="visibleToolCalls.length > 0 || chatStore.compressionState || chatStore.abortState" class="tool-calls-panel">
             <!-- Abort indicator -->
             <div v-if="chatStore.abortState" class="tool-call-item compression-item">
@@ -1181,15 +1226,85 @@ defineExpose({
 
 .streaming-indicator {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
+  width: min(640px, 100%);
   padding: 4px;
-  .thinking-video {
-    width: 120px;
-    height: 213px;
-    border-radius: $radius-md;
-    object-fit: contain;
-    flex-shrink: 0;
+}
+
+.thinking-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+}
+
+.thinking-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: $radius-md;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.thinking-status-copy {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  row-gap: 2px;
+  min-width: 0;
+  min-height: 20px;
+}
+
+.thinking-status-label {
+  display: inline-flex;
+  align-items: center;
+  color: transparent;
+  background: linear-gradient(105deg, $text-secondary 30%, rgba(255, 255, 255, 0.85) 48%, $text-secondary 66%);
+  background-size: 260% 100%;
+  background-position: 160% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  animation: thinking-label-shimmer 2.6s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+  backface-visibility: hidden;
+  contain: paint;
+  transform: translateZ(0);
+  will-change: background-position;
+
+  .dark & {
+    background: linear-gradient(105deg, #d8d8d8 30%, #ffffff 48%, #d8d8d8 66%);
+    background-size: 260% 100%;
+    background-position: 160% 0;
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+}
+
+.thinking-status-time {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 2px;
+  color: $text-muted;
+  font-family: $font-code;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+  min-width: 44px;
+}
+
+@keyframes thinking-label-shimmer {
+  0% {
+    background-position: 160% 0;
+  }
+
+  52%,
+  100% {
+    background-position: -160% 0;
   }
 }
 
@@ -1197,9 +1312,9 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 213px;
+  width: 100%;
+  max-height: 180px;
   overflow-y: auto;
-  padding-top: 4px;
   scrollbar-width: none;
   -ms-overflow-style: none;
   &::-webkit-scrollbar {

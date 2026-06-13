@@ -537,7 +537,7 @@ export default {
     truncated: '... (省略)',
     unchangedLines: '変更なし {count} 行',
     executionDuration: '実行時間',    thinkingLabel: '思考過程',
-    thinkingInProgress: '思考中…',
+    thinkingInProgress: '思考中',
     thinkingShow: '思考過程を表示',
     thinkingHide: '思考過程を隠す',
     thinkingDuration: '観測 {duration}',

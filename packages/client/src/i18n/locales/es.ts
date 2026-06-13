@@ -537,7 +537,7 @@ export default {
     truncated: '... (truncado)',
     unchangedLines: '{count} líneas sin cambios',
     executionDuration: 'Tiempo de ejecución',    thinkingLabel: 'Pensamiento',
-    thinkingInProgress: 'Pensando…',
+    thinkingInProgress: 'Pensando',
     thinkingShow: 'Mostrar pensamiento',
     thinkingHide: 'Ocultar pensamiento',
     thinkingDuration: 'Observado {duration}',

@@ -588,7 +588,7 @@ export default {
     unchangedLines: '{count} unchanged lines',
     executionDuration: 'Execution time',
     thinkingLabel: 'Thinking',
-    thinkingInProgress: 'Thinking…',
+    thinkingInProgress: 'Thinking',
     thinkingShow: 'Show thinking',
     thinkingHide: 'Hide thinking',
     thinkingDuration: 'Observed {duration}',

@@ -537,7 +537,7 @@ export default {
     truncated: '... (abgeschnitten)',
     unchangedLines: '{count} unveränderte Zeilen',
     executionDuration: 'Ausführungszeit',    thinkingLabel: 'Denkprozess',
-    thinkingInProgress: 'Denkt…',
+    thinkingInProgress: 'Denkt',
     thinkingShow: 'Denkprozess anzeigen',
     thinkingHide: 'Denkprozess ausblenden',
     thinkingDuration: 'Beobachtet {duration}',
