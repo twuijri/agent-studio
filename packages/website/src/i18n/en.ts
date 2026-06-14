@@ -284,7 +284,7 @@ export default {
           ['HERMES_OPENROUTER_APP_REFERER', 'OpenRouter attribution referer sent by bridge runs'],
           ['HERMES_OPENROUTER_APP_TITLE', 'OpenRouter attribution title sent by bridge runs'],
           ['HERMES_OPENROUTER_APP_CATEGORIES', 'OpenRouter attribution categories sent by bridge runs'],
-          ['HERMES_WEB_UI_MANAGED_GATEWAY', 'Force Web UI-managed Hermes gateway process handling'],
+          ['HERMES_WEB_UI_MANAGED_GATEWAY', 'Controls Web UI-managed Hermes gateway handling. Enabled by default; set 0/false/off to use hermes gateway start'],
           ['HERMES_WEB_UI_DISABLE_GATEWAY_AUTOSTART', 'Skip startup gateway checks/autostart for dashboard-only deployments where another service owns Hermes gateway lifecycle'],
           ['HERMES_WEB_UI_DISABLE_SKILL_INJECTION', 'Skip startup bundled skill injection when skills are managed outside Hermes Web UI. Enabled injection only updates Web UI-managed or identical bundled copies; local edits are skipped'],
           ['HERMES_WEB_UI_STOP_GATEWAYS_ON_SHUTDOWN', 'Controls whether Hermes Studio shutdown also stops managed gateway processes'],

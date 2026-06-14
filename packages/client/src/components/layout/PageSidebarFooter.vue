@@ -20,6 +20,7 @@ const { t } = useI18n()
 const showChangelog = ref(false)
 const showVersionManagement = ref(false)
 const showSettingsPopover = ref(false)
+const profileModalOpen = ref(false)
 const modelModalOpen = ref(false)
 const currentUsername = computed(() => getStoredUsername())
 const isDesktopShell = computed(() =>
@@ -57,7 +58,7 @@ function handleLogout() {
 }
 
 function handleSettingsPopoverShowChange(show: boolean) {
-  if (!show && modelModalOpen.value) return
+  if (!show && (profileModalOpen.value || modelModalOpen.value)) return
   showSettingsPopover.value = show
 }
 </script>
@@ -82,7 +83,7 @@ function handleSettingsPopoverShowChange(show: boolean) {
         </button>
       </template>
       <div class="page-sidebar-popover">
-        <ProfileSelector />
+        <ProfileSelector @modal-show-change="profileModalOpen = $event" />
         <ModelSelector @modal-show-change="modelModalOpen = $event" />
         <div class="page-sidebar-popover-row">
           <div

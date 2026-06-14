@@ -37,6 +37,13 @@ const profileState = new Map<string, ProfileState>()
 
 /** Delay before respawning a gateway that exited unexpectedly. */
 const RESPAWN_DELAY_MS = 2000
+const DEFAULT_SHUTDOWN_TIMEOUT_MS = 2000
+
+export interface ManagedGatewayShutdownResult {
+  signaled: number
+  forced: number
+  errors: number
+}
 
 function getOrCreateProfileState(profileDir: string): ProfileState {
   let state = profileState.get(profileDir)
@@ -45,6 +52,83 @@ function getOrCreateProfileState(profileDir: string): ProfileState {
     profileState.set(profileDir, state)
   }
   return state
+}
+
+function clearRespawnTimer(state: ProfileState, profileDir: string): void {
+  if (!state.respawnTimer) return
+  clearTimeout(state.respawnTimer)
+  state.respawnTimer = null
+  logger.info('[gateway-runner] cancelled pending respawn profileDir=%s', profileDir)
+}
+
+async function stopManagedGateway(entry: SupervisedGateway, timeoutMs: number): Promise<{ forced: boolean; error?: unknown }> {
+  return new Promise(resolve => {
+    let settled = false
+    let forced = false
+
+    const finish = (error?: unknown) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      entry.child.off('exit', onExit)
+      resolve({ forced, error })
+    }
+
+    const onExit = () => finish()
+    const timer = setTimeout(() => {
+      forced = true
+      try {
+        entry.child.kill('SIGKILL')
+      } catch (err) {
+        finish(err)
+        return
+      }
+      finish()
+    }, timeoutMs)
+
+    entry.child.once('exit', onExit)
+
+    try {
+      const signaled = entry.child.kill('SIGTERM')
+      if (!signaled) finish(new Error(`Failed to signal managed gateway pid=${entry.pid}`))
+    } catch (err) {
+      finish(err)
+    }
+  })
+}
+
+export async function shutdownManagedGateways(
+  opts: { timeoutMs?: number } = {},
+): Promise<ManagedGatewayShutdownResult> {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS
+  const stops: Promise<{ forced: boolean; error?: unknown }>[] = []
+  let signaled = 0
+
+  for (const [profileDir, state] of profileState) {
+    clearRespawnTimer(state, profileDir)
+
+    const entry = state.current
+    if (!entry) {
+      profileState.delete(profileDir)
+      continue
+    }
+
+    state.current = null
+    signaled += 1
+    logger.info('[gateway-runner] stopping managed gateway profileDir=%s pid=%s', profileDir, entry.pid)
+    stops.push(stopManagedGateway(entry, timeoutMs))
+    profileState.delete(profileDir)
+  }
+
+  const results = await Promise.all(stops)
+  const forced = results.filter(result => result.forced).length
+  const errors = results.filter(result => result.error).length
+
+  if (signaled > 0) {
+    logger.info('[gateway-runner] managed gateway shutdown complete signaled=%s forced=%s errors=%s', signaled, forced, errors)
+  }
+
+  return { signaled, forced, errors }
 }
 
 export function startGatewayRunManaged(
@@ -57,11 +141,7 @@ export function startGatewayRunManaged(
   // A new spawn for this profile cancels any pending respawn from a previous
   // unexpected exit. Without this, `/restart` (stop -> start) would race
   // against the respawn timer and end up with two gateways on the same port.
-  if (state.respawnTimer) {
-    clearTimeout(state.respawnTimer)
-    state.respawnTimer = null
-    logger.info('[gateway-runner] cancelled pending respawn for new start profileDir=%s', profileDir)
-  }
+  clearRespawnTimer(state, profileDir)
 
   const child = spawnHermesWithBin(hermesBin, ['gateway', 'run', '--replace'], {
     detached: true,

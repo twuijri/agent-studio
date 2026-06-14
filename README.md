@@ -327,7 +327,7 @@ These variables configure Hermes Web UI, its local Hermes runtime integration, a
 | `HERMES_OPENROUTER_APP_REFERER` | `https://hermes-studio.ai` | OpenRouter attribution referer sent by bridge runs. |
 | `HERMES_OPENROUTER_APP_TITLE` | `Hermes Web UI` | OpenRouter attribution title sent by bridge runs. |
 | `HERMES_OPENROUTER_APP_CATEGORIES` | `cli-agent,personal-agent` | OpenRouter attribution categories sent by bridge runs. |
-| `HERMES_WEB_UI_MANAGED_GATEWAY` | platform/runtime dependent | Force Web UI-managed Hermes gateway process handling. Set `1`, `true`, `yes`, or `on` to enable. |
+| `HERMES_WEB_UI_MANAGED_GATEWAY` | enabled | Controls Web UI-managed Hermes gateway process handling. Set `0`, `false`, `no`, or `off` to use `hermes gateway start` instead. |
 | `HERMES_WEB_UI_DISABLE_GATEWAY_AUTOSTART` | unset | Skip startup gateway checks/autostart. Set `1`, `true`, `yes`, or `on` for dashboard-only deployments where another service owns Hermes gateway lifecycle. |
 | `HERMES_WEB_UI_DISABLE_SKILL_INJECTION` | unset | Skip startup bundled skill injection. Set `1`, `true`, `yes`, or `on` when bundled skills are managed outside Hermes Web UI. When injection is enabled, Web UI updates only skills it previously installed or identical existing bundled copies; local edits and user-owned same-name skills are skipped. |
 | `HERMES_WEB_UI_STOP_GATEWAYS_ON_SHUTDOWN` | enabled in production | Controls whether Web UI shutdown also stops managed gateway processes. Set `0` or `false` to detach them. |

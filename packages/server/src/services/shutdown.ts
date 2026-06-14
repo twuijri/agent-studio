@@ -2,6 +2,7 @@ import { logger } from './logger'
 import { closeDb } from '../db'
 import { stopPreviewRuntime } from '../controllers/update'
 import { codingAgentRunManager } from './agent-runner/coding-agent-run-manager'
+import { shutdownManagedGateways } from './hermes/gateway-runner'
 
 const DEFAULT_SHUTDOWN_FORCE_EXIT_MS = 15_000
 const DEFAULT_DESKTOP_SHUTDOWN_FORCE_EXIT_MS = 3_000
@@ -29,6 +30,14 @@ export function shouldStopAgentBridgeOnShutdown(signal: string): boolean {
   return signal !== 'SIGUSR2'
 }
 
+export function shouldStopManagedGatewaysOnShutdown(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = String(env.HERMES_WEB_UI_STOP_GATEWAYS_ON_SHUTDOWN || '').trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(raw)) return true
+  if (['0', 'false', 'no', 'off'].includes(raw)) return false
+
+  return String(env.NODE_ENV || '').trim().toLowerCase() === 'production'
+}
+
 export function bindShutdown(server: any, groupChatServer?: any, chatRunServer?: any, agentBridgeManager?: any): void {
   let isShuttingDown = false
 
@@ -49,6 +58,17 @@ export function bindShutdown(server: any, groupChatServer?: any, chatRunServer?:
         logger.info('Preview runtime stopped')
       } catch (err) {
         logger.warn(err, 'Failed to stop preview runtime (non-fatal)')
+      }
+
+      if (shouldStopManagedGatewaysOnShutdown()) {
+        try {
+          const result = await shutdownManagedGateways()
+          logger.info('[shutdown] managed gateways stopped result=%j', result)
+        } catch (err) {
+          logger.warn(err, 'Failed to stop managed gateways (non-fatal)')
+        }
+      } else {
+        logger.info('[shutdown] leaving managed gateways running')
       }
 
       if (agentBridgeManager && shouldStopAgentBridgeOnShutdown(signal)) {

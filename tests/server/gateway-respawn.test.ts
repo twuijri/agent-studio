@@ -5,12 +5,16 @@ const originalEnv = { ...process.env }
 
 class FakeChild extends EventEmitter {
   pid: number
+  killSignals: string[] = []
   constructor(pid: number) {
     super()
     this.pid = pid
   }
   unref() { /* no-op */ }
-  kill() { return true }
+  kill(signal?: string) {
+    this.killSignals.push(signal || 'SIGTERM')
+    return true
+  }
 }
 
 let fakeChildren: FakeChild[] = []
@@ -30,6 +34,7 @@ vi.mock('../../packages/server/src/services/hermes/hermes-process', () => ({
 }))
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
   vi.resetModules()
   process.env = { ...originalEnv }
@@ -60,8 +65,6 @@ describe('gateway-runner supervision', () => {
     expect(fakeChildren.length).toBeGreaterThanOrEqual(2)
     const newPid = fakeChildren[fakeChildren.length - 1].pid
     expect(newPid).not.toBe(10000)
-
-    vi.useRealTimers()
   })
 
   it('cancels a pending respawn when a fresh start is issued for the same profile (the /restart case)', async () => {
@@ -91,8 +94,6 @@ describe('gateway-runner supervision', () => {
     // with the second.
     await vi.advanceTimersByTimeAsync(5000)
     expect(fakeChildren).toHaveLength(2)
-
-    vi.useRealTimers()
   })
 
   it('tracks respawns independently per profile', async () => {
@@ -114,8 +115,6 @@ describe('gateway-runner supervision', () => {
     // profile-x was respawned (3rd child), profile-y was untouched
     expect(fakeChildren).toHaveLength(3)
     expect(fakeChildren[2].pid).toBe(10002)
-
-    vi.useRealTimers()
   })
 
   it('does not respawn if a new start for the same profile has already replaced the dead child', async () => {
@@ -140,7 +139,65 @@ describe('gateway-runner supervision', () => {
 
     // Exactly two children total: the original, and the replacement
     expect(fakeChildren).toHaveLength(2)
+  })
 
-    vi.useRealTimers()
+  it('stops managed gateways on shutdown without respawning them', async () => {
+    vi.useFakeTimers()
+    vi.resetModules()
+    const { shutdownManagedGateways, startGatewayRunManaged } = await import(
+      '../../packages/server/src/services/hermes/gateway-runner'
+    )
+
+    startGatewayRunManaged('/usr/bin/hermes', { profileDir: '/tmp/shutdown-a' })
+    startGatewayRunManaged('/usr/bin/hermes', { profileDir: '/tmp/shutdown-b' })
+    expect(fakeChildren).toHaveLength(2)
+
+    const shutdown = shutdownManagedGateways({ timeoutMs: 5000 })
+
+    expect(fakeChildren[0].killSignals).toEqual(['SIGTERM'])
+    expect(fakeChildren[1].killSignals).toEqual(['SIGTERM'])
+
+    fakeChildren[0].emit('exit', 0, 'SIGTERM')
+    fakeChildren[1].emit('exit', 0, 'SIGTERM')
+
+    await expect(shutdown).resolves.toEqual({ signaled: 2, forced: 0, errors: 0 })
+    await vi.advanceTimersByTimeAsync(6000)
+
+    expect(fakeChildren).toHaveLength(2)
+  })
+
+  it('cancels pending respawn timers during managed gateway shutdown', async () => {
+    vi.useFakeTimers()
+    vi.resetModules()
+    const { shutdownManagedGateways, startGatewayRunManaged } = await import(
+      '../../packages/server/src/services/hermes/gateway-runner'
+    )
+
+    startGatewayRunManaged('/usr/bin/hermes', { profileDir: '/tmp/shutdown-c' })
+    fakeChildren[0].emit('exit', 1, null)
+
+    const result = await shutdownManagedGateways({ timeoutMs: 5000 })
+    expect(result).toEqual({ signaled: 0, forced: 0, errors: 0 })
+
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(fakeChildren).toHaveLength(1)
+  })
+
+  it('forces managed gateway shutdown when children do not exit', async () => {
+    vi.useFakeTimers()
+    vi.resetModules()
+    const { shutdownManagedGateways, startGatewayRunManaged } = await import(
+      '../../packages/server/src/services/hermes/gateway-runner'
+    )
+
+    startGatewayRunManaged('/usr/bin/hermes', { profileDir: '/tmp/shutdown-d' })
+
+    const shutdown = shutdownManagedGateways({ timeoutMs: 1000 })
+    expect(fakeChildren[0].killSignals).toEqual(['SIGTERM'])
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    await expect(shutdown).resolves.toEqual({ signaled: 1, forced: 1, errors: 0 })
+    expect(fakeChildren[0].killSignals).toEqual(['SIGTERM', 'SIGKILL'])
   })
 })

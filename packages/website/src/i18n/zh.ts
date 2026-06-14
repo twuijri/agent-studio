@@ -284,7 +284,7 @@ export default {
           ['HERMES_OPENROUTER_APP_REFERER', 'bridge 运行发送给 OpenRouter 的 attribution referer'],
           ['HERMES_OPENROUTER_APP_TITLE', 'bridge 运行发送给 OpenRouter 的 attribution title'],
           ['HERMES_OPENROUTER_APP_CATEGORIES', 'bridge 运行发送给 OpenRouter 的 attribution categories'],
-          ['HERMES_WEB_UI_MANAGED_GATEWAY', '强制启用 Web UI 托管的 Hermes gateway 进程'],
+          ['HERMES_WEB_UI_MANAGED_GATEWAY', '控制 Web UI 托管 Hermes gateway。默认开启；设为 0/false/off 时改用 hermes gateway start'],
           ['HERMES_WEB_UI_DISABLE_GATEWAY_AUTOSTART', '跳过启动时的 gateway 检查/自动启动；适用于由其它服务管理 Hermes gateway 的 dashboard-only 部署'],
           ['HERMES_WEB_UI_DISABLE_SKILL_INJECTION', '跳过启动时的内置 skill 注入；适用于由 Hermes Web UI 外部管理 skills 的部署。启用注入时只更新 Web UI 管理或完全相同的内置副本，本地修改会跳过'],
           ['HERMES_WEB_UI_STOP_GATEWAYS_ON_SHUTDOWN', 'Hermes Studio 关闭时是否同时停止托管的 gateway 进程'],
