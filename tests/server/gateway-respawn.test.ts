@@ -67,6 +67,60 @@ describe('gateway-runner supervision', () => {
     expect(newPid).not.toBe(10000)
   })
 
+  it('stops respawning after three consecutive quick failures', async () => {
+    vi.useFakeTimers()
+    vi.resetModules()
+    const { startGatewayRunManaged } = await import(
+      '../../packages/server/src/services/hermes/gateway-runner'
+    )
+
+    startGatewayRunManaged('/usr/bin/hermes', { profileDir: '/tmp/flapping' })
+    expect(fakeChildren).toHaveLength(1)
+
+    for (let i = 0; i < 3; i += 1) {
+      fakeChildren[fakeChildren.length - 1].emit('exit', 1, null)
+      await vi.advanceTimersByTimeAsync(2500)
+    }
+
+    expect(fakeChildren).toHaveLength(4)
+
+    fakeChildren[fakeChildren.length - 1].emit('exit', 1, null)
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(fakeChildren).toHaveLength(4)
+  })
+
+  it('resets the respawn limit after a stable run', async () => {
+    vi.useFakeTimers()
+    vi.resetModules()
+    const { startGatewayRunManaged } = await import(
+      '../../packages/server/src/services/hermes/gateway-runner'
+    )
+
+    startGatewayRunManaged('/usr/bin/hermes', { profileDir: '/tmp/recovered' })
+
+    fakeChildren[0].emit('exit', 1, null)
+    await vi.advanceTimersByTimeAsync(2500)
+    fakeChildren[1].emit('exit', 1, null)
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(fakeChildren).toHaveLength(3)
+
+    await vi.advanceTimersByTimeAsync(31000)
+    fakeChildren[2].emit('exit', 1, null)
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(fakeChildren).toHaveLength(4)
+
+    fakeChildren[3].emit('exit', 1, null)
+    await vi.advanceTimersByTimeAsync(2500)
+    fakeChildren[4].emit('exit', 1, null)
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(fakeChildren).toHaveLength(6)
+
+    fakeChildren[5].emit('exit', 1, null)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(fakeChildren).toHaveLength(6)
+  })
+
   it('cancels a pending respawn when a fresh start is issued for the same profile (the /restart case)', async () => {
     vi.useFakeTimers()
     vi.resetModules()

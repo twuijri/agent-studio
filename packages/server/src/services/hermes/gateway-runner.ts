@@ -9,6 +9,7 @@ interface SupervisedGateway {
   child: ReturnType<typeof spawnHermesWithBin>
   hermesBin: string
   profileDir: string
+  startedAt: number
 }
 
 /**
@@ -33,12 +34,15 @@ interface SupervisedGateway {
 interface ProfileState {
   current: SupervisedGateway | null
   respawnTimer: NodeJS.Timeout | null
+  respawnAttempts: number
 }
 
 const profileState = new Map<string, ProfileState>()
 
 /** Delay before respawning a gateway that exited unexpectedly. */
 const RESPAWN_DELAY_MS = 2000
+const RESPAWN_STABLE_RUN_MS = 30000
+const MAX_RESPAWN_ATTEMPTS = 3
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 2000
 const execFileAsync = promisify(execFile)
 
@@ -51,7 +55,7 @@ export interface ManagedGatewayShutdownResult {
 function getOrCreateProfileState(profileDir: string): ProfileState {
   let state = profileState.get(profileDir)
   if (!state) {
-    state = { current: null, respawnTimer: null }
+    state = { current: null, respawnTimer: null, respawnAttempts: 0 }
     profileState.set(profileDir, state)
   }
   return state
@@ -175,6 +179,16 @@ export function startGatewayRunManaged(
   hermesBin: string,
   opts: { profileDir?: string } = {},
 ): { pid: number | null; reused: boolean } {
+  return startGatewayRunManagedInternal(hermesBin, {
+    profileDir: opts.profileDir,
+    preserveRespawnAttempts: false,
+  })
+}
+
+function startGatewayRunManagedInternal(
+  hermesBin: string,
+  opts: { profileDir?: string; preserveRespawnAttempts?: boolean } = {},
+): { pid: number | null; reused: boolean } {
   const profileDir = opts.profileDir || getActiveProfileDir()
   const state = getOrCreateProfileState(profileDir)
 
@@ -182,6 +196,9 @@ export function startGatewayRunManaged(
   // unexpected exit. Without this, `/restart` (stop -> start) would race
   // against the respawn timer and end up with two gateways on the same port.
   clearRespawnTimer(state, profileDir)
+  if (!opts.preserveRespawnAttempts) {
+    state.respawnAttempts = 0
+  }
 
   const child = spawnHermesWithBin(hermesBin, ['gateway', 'run', '--replace'], {
     detached: true,
@@ -196,7 +213,7 @@ export function startGatewayRunManaged(
 
   const pid = child.pid ?? null
   if (pid) {
-    const entry: SupervisedGateway = { pid, child, hermesBin, profileDir }
+    const entry: SupervisedGateway = { pid, child, hermesBin, profileDir, startedAt: Date.now() }
     state.current = entry
 
     child.on('exit', (code, signal) => {
@@ -205,19 +222,34 @@ export function startGatewayRunManaged(
       // want the old child's exit to trigger anything.
       if (state.current?.pid !== pid) return
       state.current = null
+      if (Date.now() - entry.startedAt >= RESPAWN_STABLE_RUN_MS) {
+        state.respawnAttempts = 0
+      }
+      state.respawnAttempts += 1
+
+      if (state.respawnAttempts > MAX_RESPAWN_ATTEMPTS) {
+        logger.error(
+          '[gateway-runner] gateway exited unexpectedly and reached respawn limit (profileDir=%s pid=%s code=%s signal=%s attempts=%s maxAttempts=%s)',
+          profileDir, pid, code, signal, state.respawnAttempts - 1, MAX_RESPAWN_ATTEMPTS,
+        )
+        return
+      }
 
       logger.warn(
-        '[gateway-runner] gateway exited unexpectedly (profileDir=%s pid=%s code=%s signal=%s), respawning in %dms',
-        profileDir, pid, code, signal, RESPAWN_DELAY_MS,
+        '[gateway-runner] gateway exited unexpectedly (profileDir=%s pid=%s code=%s signal=%s attempt=%s/%s), respawning in %dms',
+        profileDir, pid, code, signal, state.respawnAttempts, MAX_RESPAWN_ATTEMPTS, RESPAWN_DELAY_MS,
       )
 
       state.respawnTimer = setTimeout(() => {
         state.respawnTimer = null
         try {
-          const next = startGatewayRunManaged(hermesBin, { profileDir })
+          const next = startGatewayRunManagedInternal(hermesBin, {
+            profileDir,
+            preserveRespawnAttempts: true,
+          })
           logger.info(
-            '[gateway-runner] gateway respawned (oldPid=%s newPid=%s profileDir=%s)',
-            pid, next.pid, profileDir,
+            '[gateway-runner] gateway respawned (oldPid=%s newPid=%s profileDir=%s attempt=%s/%s)',
+            pid, next.pid, profileDir, state.respawnAttempts, MAX_RESPAWN_ATTEMPTS,
           )
         } catch (err) {
           logger.error(err, '[gateway-runner] failed to respawn gateway after unexpected exit')
