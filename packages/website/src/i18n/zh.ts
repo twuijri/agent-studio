@@ -113,28 +113,10 @@ export default {
     goTo: '查看第 {number} 张截图',
     items: [
       {
-        src: '/image1.png',
-        alt: 'Hermes Studio Claude Code Agent 对话工作区',
-        title: 'Agent 聊天',
-        desc: '运行 Claude Code、Codex 和 Hermes 对话，支持模型路由和会话历史。',
-      },
-      {
-        src: '/image2.png',
-        alt: 'Hermes Studio 版本预览工作区',
-        title: '版本预览',
-        desc: '在隔离工作区预览 tag 或分支，控制构建并查看日志。',
-      },
-      {
-        src: '/image3.png',
-        alt: 'Hermes Studio 版本管理弹窗',
-        title: '版本管理',
-        desc: '切换 Runtime 与 Web UI 版本，并下载对应发布文件。',
-      },
-      {
-        src: '/image4.png',
-        alt: 'Hermes Studio 文件工作区',
-        title: '文件工作区',
-        desc: '浏览状态、上传文件、创建目录，并快速切换文件与终端。',
+        src: '/image.gif',
+        alt: 'Hermes Studio 产品流程演示',
+        title: 'Hermes Studio 工作流',
+        desc: '在一个应用里完成 Agent 对话、版本预览、Runtime 管理和工作区浏览。',
       },
     ],
   },

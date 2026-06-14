@@ -113,28 +113,10 @@ export default {
     goTo: 'View screenshot {number}',
     items: [
       {
-        src: '/image1.png',
-        alt: 'Hermes Studio chat workspace with Claude Code agent',
-        title: 'Agent Chat',
-        desc: 'Chat with Claude Code, Codex, and Hermes using model routing and session history.',
-      },
-      {
-        src: '/image2.png',
-        alt: 'Hermes Studio version preview workspace',
-        title: 'Version Preview',
-        desc: 'Preview a tag or branch in an isolated workspace with build and log controls.',
-      },
-      {
-        src: '/image3.png',
-        alt: 'Hermes Studio version manager modal',
-        title: 'Version Manager',
-        desc: 'Switch Runtime and Web UI versions, then download assets from GitHub or Cloudflare.',
-      },
-      {
-        src: '/image4.png',
-        alt: 'Hermes Studio file workspace',
-        title: 'File Workspace',
-        desc: 'Browse state, upload files, create folders, and jump between files and terminal.',
+        src: '/image.gif',
+        alt: 'Hermes Studio product walkthrough',
+        title: 'Hermes Studio Workflow',
+        desc: 'Chat with coding agents, preview versions, manage runtime assets, and browse your workspace in one app.',
       },
     ],
   },
