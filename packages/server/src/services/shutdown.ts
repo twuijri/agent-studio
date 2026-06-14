@@ -38,10 +38,12 @@ export function shouldStopManagedGatewaysOnShutdown(env: NodeJS.ProcessEnv = pro
   return String(env.NODE_ENV || '').trim().toLowerCase() === 'production'
 }
 
-export function bindShutdown(server: any, groupChatServer?: any, chatRunServer?: any, agentBridgeManager?: any): void {
+export type ShutdownHandler = (signal: string) => Promise<void>
+
+export function createShutdownHandler(server: any, groupChatServer?: any, chatRunServer?: any, agentBridgeManager?: any): ShutdownHandler {
   let isShuttingDown = false
 
-  const shutdown = async (signal: string) => {
+  return async (signal: string) => {
     if (isShuttingDown) return
     isShuttingDown = true
 
@@ -117,8 +119,14 @@ export function bindShutdown(server: any, groupChatServer?: any, chatRunServer?:
     closeDb()
     process.exit(0)
   }
+}
+
+export function bindShutdown(server: any, groupChatServer?: any, chatRunServer?: any, agentBridgeManager?: any): ShutdownHandler {
+  const shutdown = createShutdownHandler(server, groupChatServer, chatRunServer, agentBridgeManager)
 
   process.once('SIGUSR2', shutdown)
   process.on('SIGINT', shutdown)
   process.on('SIGTERM', shutdown)
+
+  return shutdown
 }

@@ -282,6 +282,20 @@ function splashHtml(label = t('desktop.startingLocalServices')): string {
   return 'data:text/html;charset=utf-8,' + encodeURIComponent(html)
 }
 
+async function showShutdownSplash() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  cancelWindowFade()
+  try {
+    await mainWindow.loadURL(splashHtml(t('desktop.shuttingDown')))
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.setOpacity(1)
+    mainWindow.show()
+    updateTrayMenu()
+  } catch {
+    /* best effort during app shutdown */
+  }
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, char => ({
     '&': '&amp;',
@@ -613,6 +627,7 @@ function runDesktopApp() {
     }
     e.preventDefault()
     cancelWindowFade()
+    await showShutdownSplash()
     await stopWebUiServer().catch(() => undefined)
     app.exit(0)
   })
