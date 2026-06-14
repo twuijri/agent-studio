@@ -8,10 +8,8 @@ import { t } from './desktop-i18n'
 import { installHermesStudioCliShim, installHermesStudioMcpShim } from './cli-shim'
 import { parseHermesCliArgs, runBundledHermesCli } from './hermes-cli'
 import {
-  cachedRuntimeNeedsPackagedReleaseUpdate,
   ensureDesktopRuntime,
   isDesktopRuntimeReady,
-  migrateLegacyDesktopRuntime,
   writeActiveRuntimeVersion,
   type RuntimeDownloadSource,
   type RuntimeProgress,
@@ -284,10 +282,6 @@ function splashHtml(label = t('desktop.startingLocalServices')): string {
   return 'data:text/html;charset=utf-8,' + encodeURIComponent(html)
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, char => ({
     '&': '&amp;',
@@ -427,25 +421,19 @@ async function bootstrap(source?: RuntimeDownloadSource) {
 
   try {
     const selectedSource = source || envRuntimeDownloadSource()
-    migrateLegacyDesktopRuntime(updateSplash)
     const runtimeUrlOverride = !!process.env.HERMES_DESKTOP_RUNTIME_URL?.trim()
     const manifestOverride = !!process.env.HERMES_DESKTOP_RUNTIME_MANIFEST_URL?.trim()
     const forceUpdate = !!process.env.HERMES_DESKTOP_RUNTIME_FORCE_UPDATE
     const runtimeReady = isDesktopRuntimeReady()
-    const packagedRuntimeUpdate = app.isPackaged && runtimeReady && cachedRuntimeNeedsPackagedReleaseUpdate()
-    const shouldCheckRuntime = !runtimeReady || forceUpdate || runtimeUrlOverride || manifestOverride || packagedRuntimeUpdate
+    const needsRuntimeWork = !runtimeReady || forceUpdate || runtimeUrlOverride || manifestOverride
 
-    if (shouldCheckRuntime) {
+    if (needsRuntimeWork) {
       if (!selectedSource && !runtimeUrlOverride && !manifestOverride) {
-        if (mainWindow) {
-          await mainWindow.loadURL(splashHtml(t('runtime.checking')))
-          await delay(350)
-        }
         if (mainWindow) await mainWindow.loadURL(runtimeSourceHtml())
         isBootstrapping = false
         return
       }
-      await ensureDesktopRuntime(updateSplash, selectedSource, true)
+      await ensureDesktopRuntime(updateSplash, selectedSource)
     }
     if (isDesktopRuntimeReady()) {
       writeActiveRuntimeVersion()
@@ -545,7 +533,7 @@ ipcMain.handle('hermes-desktop:retry-bootstrap', async (_event, source?: Runtime
     return
   }
   const selectedSource = source === 'cf' || source === 'github' ? source : undefined
-  await mainWindow?.loadURL(splashHtml(t('runtime.checking')))
+  await mainWindow?.loadURL(splashHtml(t('runtime.downloading')))
   await bootstrap(selectedSource)
 })
 
