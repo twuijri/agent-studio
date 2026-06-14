@@ -1806,6 +1806,16 @@ jobTriggered: 'Job ausgelost',
 
   // Anderungsprotokoll
   changelog: {
+    new_0_6_15_1: 'Chat-Seitenleisten wurden neu gestaltet, und die Historien-Ladecontrols machen lange Unterhaltungen leichter navigierbar',
+    new_0_6_15_2: 'Der Skill-Command-Picker hilft, verfuegbare Skill-Befehle schneller zu finden und aus dem Chat-Eingabefeld einzufuegen',
+    new_0_6_15_3: 'Claude- und Gemini-OAuth-Provider sind verfuegbar, Gemini-Modell-IDs werden korrekt normalisiert, und Modellauswahlen koennen config.yaml-Aenderungen manuell neu laden',
+    new_0_6_15_4: 'Thinking-Zustaende haben einen neuen Indikator und ein aufgeraeumtes Toolbar-Layout, damit Reasoning-Fortschritt leichter lesbar bleibt',
+    new_0_6_15_5: 'Input- und Select-Raender sind im Dark Theme wieder sichtbar',
+    new_0_6_15_6: 'Runtime-Setup prueft jetzt zuerst die lokale Runtime, bevor Download-Quellen angezeigt werden, und haelt den Pruefstatus waehrend des Starts sichtbar',
+    new_0_6_15_7: 'Desktop-Self-Updates blockieren nicht mehr an alten App-Prozessen, und Windows-Gateway-Cleanup beim Beenden ist vollstaendiger',
+    new_0_6_15_8: 'Verwaltete Gateways werden beim App-Shutdown gestoppt; waehrend verwalteter Runtime-Sitzungen koennen unerwartet beendete Gateways weiter neu starten',
+    new_0_6_15_9: 'Der Desktop-Server beendet sich beim Quit sauberer und reduziert verwaiste Backend-, Bridge- und Gateway-Prozesse',
+    new_0_6_15_10: 'README und Website-Showcase nutzen jetzt ein animiertes Walkthrough-GIF, waehrend der Website-Hero ein separates statisches Vorschaubild verwendet',
     new_0_6_14_1: 'Website und Dokumentation wurden mit neu gestalteter Landing Page, erzwungener Light-Theme-Darstellung und neuem Hermes-Studio-Client-Handbuch aktualisiert',
     new_0_6_14_2: 'Abschlussbenachrichtigungen melden fertige Laeufe jetzt in der Desktop-Shell und in unterstuetzten Browsern',
     new_0_6_14_3: 'Desktop erhaelt eine eigene Titelleiste, einen saubereren Start-Splash, breitere Freigabe-Drawer, zentrierte Ladezustaende und Korrekturen fuer Linux-Fensterbuttons',

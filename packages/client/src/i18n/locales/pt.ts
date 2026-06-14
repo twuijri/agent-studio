@@ -1806,6 +1806,16 @@ jobTriggered: 'Job acionado',
 
   // Registro de alteracoes
   changelog: {
+    new_0_6_15_1: 'As barras laterais do chat foram redesenhadas e os controles de carregamento do historico facilitam navegar conversas longas',
+    new_0_6_15_2: 'O seletor de comandos de skills ajuda a descobrir e inserir comandos disponiveis mais rapido pela entrada do chat',
+    new_0_6_15_3: 'Providers OAuth de Claude e Gemini estao disponiveis, IDs de modelo Gemini sao normalizados corretamente e seletores de modelo podem atualizar mudancas do config.yaml sob demanda',
+    new_0_6_15_4: 'Estados de thinking receberam indicador renovado e layout de toolbar mais claro para acompanhar o progresso de reasoning sem interromper o fluxo',
+    new_0_6_15_5: 'Bordas de inputs e selects voltaram a aparecer no tema escuro',
+    new_0_6_15_6: 'A configuracao de runtime agora verifica o runtime local antes de mostrar escolhas de fonte de download e mantem o estado de verificacao visivel durante a inicializacao',
+    new_0_6_15_7: 'Autoatualizacoes desktop nao ficam mais bloqueadas por processos antigos, e a limpeza de gateways no Windows ao sair esta mais completa',
+    new_0_6_15_8: 'Gateways gerenciados sao parados no shutdown do app, enquanto gateways encerrados inesperadamente ainda podem reiniciar em sessoes runtime gerenciadas',
+    new_0_6_15_9: 'O servidor desktop encerra de forma mais limpa ao sair, reduzindo processos orfaos de backend, bridge e gateway',
+    new_0_6_15_10: 'README e showcase do site agora usam um unico GIF animado, com uma imagem estatica dedicada para o hero do site',
     new_0_6_14_1: 'Site e documentacao foram atualizados com landing page redesenhada, tema claro forcado e novo manual do cliente Hermes Studio',
     new_0_6_14_2: 'Notificacoes de conclusao agora avisam execucoes finalizadas no shell desktop e em navegadores compativeis',
     new_0_6_14_3: 'O desktop ganhou barra de titulo personalizada, splash de inicio mais limpo, drawers de aprovacao mais largos, estados de carregamento centralizados e fixes nos controles de janela do Linux',

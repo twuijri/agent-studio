@@ -2067,6 +2067,16 @@ export default {
 
   // Changelog
   changelog: {
+    new_0_6_15_1: 'Chat sidebars were redesigned and history loading controls were tuned for clearer navigation through long conversations',
+    new_0_6_15_2: 'The skill command picker makes it faster to discover and insert available skill commands from chat input',
+    new_0_6_15_3: 'Claude and Gemini OAuth providers are available, Gemini model IDs are normalized correctly, and model selectors can refresh config.yaml changes on demand',
+    new_0_6_15_4: 'Thinking states received a refreshed indicator and toolbar layout so reasoning progress is easier to read without disrupting the message flow',
+    new_0_6_15_5: 'Dark theme input and select borders are visible again across form controls',
+    new_0_6_15_6: 'Runtime setup now checks the local runtime before showing download-source choices and keeps the check state visible while startup continues',
+    new_0_6_15_7: 'Desktop self-updates no longer block installation on stale app processes, and Windows gateway cleanup is more complete during shutdown',
+    new_0_6_15_8: 'Managed gateways are stopped on app shutdown, while unexpectedly exited gateways can still respawn during managed runtime sessions',
+    new_0_6_15_9: 'The desktop server now shuts down more gracefully on quit to reduce orphaned backend, bridge, and gateway processes',
+    new_0_6_15_10: 'The README and website showcase now use one animated walkthrough GIF, with the website hero using a dedicated static preview image',
     new_0_6_14_1: 'Website and documentation were refreshed with a redesigned landing page, forced light-theme presentation, and a new Hermes Studio client manual',
     new_0_6_14_2: 'Completion notifications can now surface finished runs from the desktop shell and supported browsers',
     new_0_6_14_3: 'Desktop now has a custom title bar, a cleaner startup splash, wider approval drawers, centered loading states, and fixes for Linux window controls',

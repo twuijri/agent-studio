@@ -1806,6 +1806,16 @@ jobTriggered: 'Job declenche',
 
   // Journal des modifications
   changelog: {
+    new_0_6_15_1: 'Les barres laterales du chat ont ete repensees, et les controles de chargement de l historique rendent les longues conversations plus faciles a parcourir',
+    new_0_6_15_2: 'Le selecteur de commandes skill permet de trouver et inserer plus vite les commandes disponibles depuis la saisie du chat',
+    new_0_6_15_3: 'Les fournisseurs OAuth Claude et Gemini sont disponibles, les IDs de modele Gemini sont normalises correctement et les selecteurs de modele peuvent rafraichir config.yaml a la demande',
+    new_0_6_15_4: 'Les etats thinking ont un indicateur rafraichi et une barre d outils plus lisible pour suivre le reasoning sans perturber le fil des messages',
+    new_0_6_15_5: 'Les bordures des inputs et selects sont de nouveau visibles en theme sombre',
+    new_0_6_15_6: 'La configuration runtime verifie maintenant le runtime local avant d afficher les sources de telechargement et garde l etat de verification visible pendant le demarrage',
+    new_0_6_15_7: 'Les auto-mises a jour desktop ne sont plus bloquees par d anciens processus, et le nettoyage des gateways Windows a la fermeture est plus complet',
+    new_0_6_15_8: 'Les gateways geres sont arretes a la fermeture de l app, tandis que les gateways termines de facon inattendue peuvent toujours redemarrer dans les sessions gerees',
+    new_0_6_15_9: 'Le serveur desktop se ferme plus proprement au quit afin de reduire les processus orphelins backend, bridge et gateway',
+    new_0_6_15_10: 'Le README et le showcase du site utilisent maintenant un GIF anime unique, avec une image statique dediee pour le hero du site',
     new_0_6_14_1: 'Le site et la documentation ont ete rafraichis avec une landing page remaniee, un theme clair force et un nouveau manuel client Hermes Studio',
     new_0_6_14_2: 'Les notifications de fin peuvent maintenant signaler les executions terminees depuis le shell desktop et les navigateurs compatibles',
     new_0_6_14_3: 'Le desktop ajoute une barre de titre personnalisee, un splash de demarrage plus propre, des drawers d approbation plus larges, des chargements centres et des corrections pour les controles de fenetre Linux',

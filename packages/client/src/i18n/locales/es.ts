@@ -1806,6 +1806,16 @@ jobTriggered: 'Job ejecutado',
 
   // Registro de cambios
   changelog: {
+    new_0_6_15_1: 'Las barras laterales del chat se redisenaron y los controles de carga del historial facilitan navegar conversaciones largas',
+    new_0_6_15_2: 'El selector de comandos de skills permite descubrir e insertar comandos disponibles mas rapido desde la entrada del chat',
+    new_0_6_15_3: 'Los proveedores OAuth de Claude y Gemini estan disponibles, los ID de modelo de Gemini se normalizan correctamente y los selectores de modelo pueden refrescar cambios de config.yaml',
+    new_0_6_15_4: 'Los estados de thinking tienen indicador renovado y una barra de herramientas mas clara para seguir el progreso de reasoning sin interrumpir el flujo',
+    new_0_6_15_5: 'Los bordes de inputs y selects vuelven a ser visibles en el tema oscuro',
+    new_0_6_15_6: 'La configuracion de runtime ahora comprueba el runtime local antes de mostrar fuentes de descarga y mantiene visible el estado de comprobacion durante el inicio',
+    new_0_6_15_7: 'Las autoactualizaciones de escritorio ya no se bloquean por procesos antiguos, y la limpieza de gateways en Windows al salir es mas completa',
+    new_0_6_15_8: 'Los gateways gestionados se detienen al cerrar la app, mientras que los gateways que salen inesperadamente aun pueden reiniciarse en sesiones gestionadas',
+    new_0_6_15_9: 'El servidor de escritorio se cierra de forma mas ordenada al salir para reducir procesos huerfanos de backend, bridge y gateway',
+    new_0_6_15_10: 'README y el showcase del sitio ahora usan un unico GIF animado, y el hero del sitio usa una imagen estatica dedicada',
     new_0_6_14_1: 'El sitio web y la documentacion se renovaron con una landing redisenada, tema claro forzado y un nuevo manual del cliente Hermes Studio',
     new_0_6_14_2: 'Las notificaciones de finalizacion ahora avisan de ejecuciones completadas desde el shell de escritorio y navegadores compatibles',
     new_0_6_14_3: 'El escritorio suma barra de titulo personalizada, splash de inicio mas limpio, drawers de aprobacion mas anchos, estados de carga centrados y fixes para controles de ventana en Linux',
