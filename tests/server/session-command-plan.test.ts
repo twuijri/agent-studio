@@ -122,6 +122,36 @@ describe('plan session command', () => {
     expect(namespaceEmit).not.toHaveBeenCalledWith('session.command', expect.anything())
   })
 
+  it('creates a new slash-command session with a command-derived title', async () => {
+    getSessionMock.mockReturnValueOnce(null)
+    const state = { messages: [], isWorking: false, events: [], queue: [] }
+    const { bridge, nsp, runQueuedItem, sessionMap, socket } = makeContext(state, {
+      handled: true,
+      type: 'goal',
+      action: 'set',
+      message: 'Goal set.',
+      kickoff_prompt: 'build a todo app',
+    })
+    const { handleSessionCommand, parseSessionCommand } = await import('../../packages/server/src/services/hermes/run-chat/session-command')
+    const command = parseSessionCommand('/goal build a todo app')!
+
+    await handleSessionCommand('session-1', command, {
+      nsp: nsp as any,
+      socket: socket as any,
+      sessionMap,
+      bridge: bridge as any,
+      profile: 'default',
+      runQueuedItem,
+    })
+
+    expect(createSessionMock).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'session-1',
+      profile: 'default',
+      source: 'cli',
+      title: '[goal] build a todo app',
+    }))
+  })
+
   it('starts an idle /skill command with expanded storage and visible command display', async () => {
     const state = { messages: [], isWorking: false, events: [], queue: [] }
     const { bridge, namespaceEmit, nsp, runQueuedItem, sessionMap, socket } = makeContext(state, {

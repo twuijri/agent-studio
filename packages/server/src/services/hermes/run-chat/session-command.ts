@@ -88,7 +88,7 @@ export async function handleSessionCommand(
 ): Promise<void> {
   const state = getOrCreateSession(ctx.sessionMap, sessionId)
   ctx.socket.join(`session:${sessionId}`)
-  ensureCommandSession(sessionId, ctx)
+  ensureCommandSession(sessionId, command, ctx)
   const isKnownCommand = Boolean(COMMAND_ALIASES[command.rawName])
   if (command.name !== 'plan' && command.name !== 'skill' && isKnownCommand) {
     persistCommandMessage(sessionId, state, `/${command.rawName}${command.args ? ` ${command.args}` : ''}`)
@@ -827,15 +827,21 @@ function formatReloadSkillItem(item: unknown): string {
   return description ? `${name}: ${description}` : name
 }
 
-function ensureCommandSession(sessionId: string, ctx: SessionCommandContext) {
+function ensureCommandSession(sessionId: string, command: ParsedSessionCommand, ctx: SessionCommandContext) {
   if (getSession(sessionId)) return
   createSession({
     id: sessionId,
     profile: ctx.profile,
     source: 'cli',
     model: ctx.model,
-    title: 'Bridge command',
+    title: buildCommandSessionTitle(command),
   })
+}
+
+function buildCommandSessionTitle(command: ParsedSessionCommand): string {
+  const prefix = `[${command.rawName}]`
+  const args = command.args.replace(/\s+/g, ' ').trim()
+  return args ? `${prefix} ${args}`.slice(0, 120) : prefix
 }
 
 function persistCommandMessage(sessionId: string, state: SessionState, content: string) {
