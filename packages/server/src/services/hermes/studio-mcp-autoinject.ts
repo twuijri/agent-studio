@@ -74,18 +74,14 @@ function bundledMcpScriptPath(): string | null {
   return candidateBundledMcpScripts().find(candidate => existsSync(candidate)) || null
 }
 
-function bundledMcpNodePath(): string {
-  return process.env.HERMES_WEB_UI_MCP_NODE?.trim() || process.env.HERMES_AGENT_NODE?.trim() || process.execPath
-}
-
 function managedCommandConfig(): Record<string, unknown> {
-  const bundledScript = bundledMcpScriptPath()
-  if (bundledScript) {
-    return { command: bundledMcpNodePath(), args: [bundledScript] }
-  }
-
   if (isDesktopRuntime()) {
     return { command: 'hermes-studio-mcp' }
+  }
+
+  const bundledScript = bundledMcpScriptPath()
+  if (bundledScript) {
+    return { command: process.execPath, args: [bundledScript] }
   }
 
   logger.warn({ candidates: candidateBundledMcpScripts() }, '[mcp-autoinject] bundled MCP script not found; falling back to PATH command')

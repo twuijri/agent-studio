@@ -35,7 +35,6 @@ vi.mock('child_process', () => ({
     child.kill = vi.fn(() => {
       child.killed = true
     })
-    child.stdin = { end: vi.fn() }
     testState.spawnCalls.push({ command, args, options, child })
     return child
   }),
@@ -89,12 +88,11 @@ describe('coding agent Windows process launch', () => {
     })
     expect(testState.spawnCalls[0].args[3]).toContain('C:\\Users\\Administrator\\AppData\\Roaming\\npm\\claude.cmd')
     expect(testState.spawnCalls[0].args[3]).toContain('^"--settings^"')
-    expect(testState.spawnCalls[0].args[3]).not.toContain('^"--append-system-prompt^"')
-    expect(testState.spawnCalls[0].args[3]).not.toContain('^"system^ prompt^"')
-    expect(testState.spawnCalls[0].args[3]).not.toContain('^"test^"')
-    expect(testState.spawnCalls[0].child.stdin.end).toHaveBeenCalledWith('test')
+    expect(testState.spawnCalls[0].args[3]).toContain('^"--append-system-prompt^"')
+    expect(testState.spawnCalls[0].args[3]).toContain('^"system^ prompt^"')
+    expect(testState.spawnCalls[0].args[3]).toContain('^"test^"')
     expect(testState.spawnCalls[0].options).toMatchObject({
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
       windowsVerbatimArguments: true,
       windowsHide: true,
     })

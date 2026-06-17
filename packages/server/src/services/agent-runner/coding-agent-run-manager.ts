@@ -224,16 +224,14 @@ function decodeChildChunk(chunk: Buffer): string {
 function spawnCodingAgentChild(command: string, args: string[], options: {
   cwd: string
   env: NodeJS.ProcessEnv
-  stdin?: 'ignore' | 'pipe'
 }): ChildProcess {
   const normalizedCommand = process.platform === 'win32' ? normalizeWindowsCommandPath(command) : command
-  const stdio: ['ignore' | 'pipe', 'pipe', 'pipe'] = [options.stdin || 'ignore', 'pipe', 'pipe']
   if (process.platform === 'win32' && windowsCommandNeedsShell(command)) {
     const execution = windowsCmdShimExecution(normalizedCommand, args)
     return spawn(execution.command, execution.args, {
       cwd: options.cwd,
       env: options.env,
-      stdio,
+      stdio: ['ignore', 'pipe', 'pipe'],
       windowsVerbatimArguments: execution.windowsVerbatimArguments,
       windowsHide: true,
     })
@@ -242,7 +240,7 @@ function spawnCodingAgentChild(command: string, args: string[], options: {
   return spawn(normalizedCommand, args, {
     cwd: options.cwd,
     env: options.env,
-    stdio,
+    stdio: ['ignore', 'pipe', 'pipe'],
     detached: process.platform !== 'win32',
     windowsHide: process.platform === 'win32',
   })
@@ -736,12 +734,13 @@ export class CodingAgentRunManager {
     const args = [
       ...run.launch.args,
       ...nativeSessionArgs,
-      ...(systemPrompt && process.platform !== 'win32' ? ['--append-system-prompt', systemPrompt] : []),
+      ...(systemPrompt ? ['--append-system-prompt', systemPrompt] : []),
       '-p',
       '--output-format',
       'stream-json',
       '--include-partial-messages',
       '--verbose',
+      input,
     ]
     const child = spawnCodingAgentChild(run.launch.command, args, {
       cwd: existsSync(run.launch.workspaceDir) ? run.launch.workspaceDir : homedir(),
@@ -749,10 +748,8 @@ export class CodingAgentRunManager {
         ...process.env,
         ...(run.launch.env || {}),
       },
-      stdin: 'pipe',
     })
     run.currentChild = child
-    child.stdin?.end(input)
 
     let stdoutBuffer = ''
     child.stdout?.on('data', (chunk: Buffer) => {
