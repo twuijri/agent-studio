@@ -31,7 +31,19 @@ const WINDOWS_LAUNCHER_FILE = 'launch.ps1'
 const CODING_AGENT_SCOPED_AUTH_PROVIDERS = new Set(['openai-codex', 'copilot', 'xai-oauth', 'nous', 'google-gemini-cli', 'claude-oauth'])
 const CLAUDE_CODE_SKIP_PERMISSIONS_ARGS = ['--dangerously-skip-permissions']
 const CLAUDE_CODE_ROOT_PERMISSION_ARGS = ['--permission-mode', 'auto']
-const HERMES_MCP_SERVER_NAME = 'hermes-studio'
+const HERMES_MCP_SERVERS = [
+  { name: 'hermes-studio-api', toolset: 'api' },
+  { name: 'hermes-studio-devices', toolset: 'devices' },
+  { name: 'hermes-studio-use', toolset: 'use' },
+] as const
+const HERMES_MCP_SERVER_NAMES: Set<string> = new Set(HERMES_MCP_SERVERS.map(server => server.name))
+const LEGACY_HERMES_MCP_SERVER_NAMES = new Set(['hermes-studio', 'hermes-studio-mcp', 'hermes-web-ui-mcp'])
+const LEGACY_HERMES_MCP_COMMANDS = new Set([
+  'hermes-lan-peer-mcp',
+  'hermes-devices-mcp',
+  'hermes-web-ui-mcp',
+  'hermes-studio-mcp',
+])
 const HERMES_MCP_MANAGED_ENV_KEY = 'HERMES_WEB_UI_MANAGED_MCP'
 const HERMES_PROMPT_BLOCK_BEGIN = '<!-- BEGIN HERMES WEB UI PROMPT -->'
 const HERMES_PROMPT_BLOCK_END = '<!-- END HERMES WEB UI PROMPT -->'
@@ -764,43 +776,74 @@ function bundledMcpScriptPath(): string | null {
   return candidateBundledMcpScripts().find(candidate => existsSync(candidate)) || null
 }
 
-function hermesMcpCommandConfig(): { command: string; args?: string[] } {
-  if (isDesktopRuntime()) return { command: 'hermes-studio-mcp' }
+function hermesMcpCommandConfig(toolset: string): { command: string; args?: string[] } {
+  if (isDesktopRuntime()) return { command: 'hermes-studio-mcp', args: [toolset] }
   const script = bundledMcpScriptPath()
-  if (script) return { command: process.execPath, args: [script] }
-  return { command: 'hermes-web-ui-mcp' }
+  if (script) return { command: process.execPath, args: [script, toolset] }
+  return { command: 'hermes-studio-mcp', args: [toolset] }
 }
 
-function hermesMcpServerConfig(profile: string): { command: string; args?: string[]; env: Record<string, string> } {
+function hermesMcpServerConfig(profile: string, serverName: string, toolset: string): { command: string; args?: string[]; env: Record<string, string> } {
   const appHome = getWebUiHome()
   return {
-    ...hermesMcpCommandConfig(),
+    ...hermesMcpCommandConfig(toolset),
     env: {
       HERMES_WEB_UI_URL: `http://127.0.0.1:${process.env.PORT || '8648'}`,
       HERMES_WEB_UI_HOME: appHome,
       HERMES_WEBUI_STATE_DIR: appHome,
       HERMES_WEB_UI_PROFILE: profile,
-      HERMES_MCP_SERVER_NAME: 'hermes-studio-mcp',
+      HERMES_MCP_SERVER_NAME: serverName,
+      HERMES_MCP_TOOLSET: toolset,
       [HERMES_MCP_MANAGED_ENV_KEY]: '1',
     },
   }
 }
 
-function claudeMcpConfigJson(profile: string): string {
-  return `${JSON.stringify({ mcpServers: { [HERMES_MCP_SERVER_NAME]: hermesMcpServerConfig(profile) } }, null, 2)}\n`
+function isManagedHermesMcpServer(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const server = value as Record<string, any>
+  if (server.env && typeof server.env === 'object' && server.env[HERMES_MCP_MANAGED_ENV_KEY] === '1') return true
+  return typeof server.command === 'string' && LEGACY_HERMES_MCP_COMMANDS.has(server.command)
+}
+
+function parseClaudeMcpServers(existingContent: string | null | undefined = ''): Record<string, unknown> {
+  if (!existingContent?.trim()) return {}
+  try {
+    const parsed = JSON.parse(existingContent)
+    if (!parsed?.mcpServers || typeof parsed.mcpServers !== 'object' || Array.isArray(parsed.mcpServers)) return {}
+    return Object.fromEntries(Object.entries(parsed.mcpServers).filter(([name, server]) => {
+      if (HERMES_MCP_SERVER_NAMES.has(name)) return false
+      if (LEGACY_HERMES_MCP_SERVER_NAMES.has(name)) return false
+      return !isManagedHermesMcpServer(server)
+    }))
+  } catch {
+    return {}
+  }
+}
+
+function claudeMcpConfigJson(profile: string, existingContent: string | null | undefined = ''): string {
+  const mcpServers = parseClaudeMcpServers(existingContent)
+  for (const server of HERMES_MCP_SERVERS) {
+    mcpServers[server.name] = hermesMcpServerConfig(profile, server.name, server.toolset)
+  }
+  return `${JSON.stringify({ mcpServers }, null, 2)}\n`
 }
 
 function codexMcpConfigToml(profile: string): string {
-  const server = hermesMcpServerConfig(profile)
-  const lines = [
-    `[mcp_servers.${HERMES_MCP_SERVER_NAME}]`,
-    `command = ${tomlString(server.command)}`,
-  ]
-  if (server.args?.length) lines.push(`args = ${tomlStringArray(server.args)}`)
-  lines.push('startup_timeout_sec = 120')
-  lines.push(`env = ${tomlInlineStringTable(server.env)}`)
-  lines.push('')
-  return lines.join('\n')
+  const blocks: string[] = []
+  for (const item of HERMES_MCP_SERVERS) {
+    const server = hermesMcpServerConfig(profile, item.name, item.toolset)
+    const lines = [
+      `[mcp_servers.${item.name}]`,
+      `command = ${tomlString(server.command)}`,
+    ]
+    if (server.args?.length) lines.push(`args = ${tomlStringArray(server.args)}`)
+    lines.push('startup_timeout_sec = 120')
+    lines.push(`env = ${tomlInlineStringTable(server.env)}`)
+    lines.push('')
+    blocks.push(lines.join('\n'))
+  }
+  return blocks.join('\n')
 }
 
 function buildLaunchShellCommand(input: {
@@ -1530,7 +1573,9 @@ export async function prepareCodingAgentLaunch(id: string, input: CodingAgentLau
     }
     env = settings.env
     await writeScopedFile('settings', `${JSON.stringify(settings, null, 2)}\n`)
-    await writeScopedFile('mcp', claudeMcpConfigJson(scope.profile))
+    const existingMcpPath = getScopedConfigFileDefinition(tool.id, 'mcp', scope)?.absolutePath
+    const existingMcpConfig = existingMcpPath ? await safeReadFile(existingMcpPath) : ''
+    await writeScopedFile('mcp', claudeMcpConfigJson(scope.profile, existingMcpConfig))
     await writeScopedFile('prompt', hermesPromptDocument())
 
     const settingsPath = join(rootDir, 'settings.json')

@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url'
 
 const DEFAULT_PORT = process.env.HERMES_WEB_UI_PORT || process.env.PORT || '8648'
 const DEFAULT_BASE_URL = `http://127.0.0.1:${DEFAULT_PORT}`
-const SERVER_NAME = process.env.HERMES_MCP_SERVER_NAME || 'hermes-web-ui-mcp'
+const DISPLAY_COMMAND = 'hermes-studio-mcp'
+const SERVER_NAME = process.env.HERMES_MCP_SERVER_NAME || DISPLAY_COMMAND
+const TOOLSETS = new Set(['api', 'devices', 'use'])
 const ALLOWED_PUBLIC_REQUEST_HEADERS = new Set([
   'accept',
   'accept-language',
@@ -37,14 +39,14 @@ function readPackageVersion() {
 const VERSION = readPackageVersion()
 
 function printHelp() {
-  process.stdout.write(`hermes-web-ui-mcp v${VERSION}
+  process.stdout.write(`${DISPLAY_COMMAND} v${VERSION}
 
-Hermes Web UI MCP stdio server.
+Hermes Studio MCP stdio server.
 
 Usage:
-  hermes-web-ui-mcp
-  hermes-web-ui-mcp --help
-  hermes-web-ui-mcp --version
+  ${DISPLAY_COMMAND} [api|devices|use]
+  ${DISPLAY_COMMAND} --help
+  ${DISPLAY_COMMAND} --version
 
 Environment:
   HERMES_WEB_UI_URL       Web UI base URL. Default: ${DEFAULT_BASE_URL}
@@ -53,10 +55,15 @@ Environment:
   HERMES_WEB_UI_PROFILE   Default Hermes profile when a tool call omits profile.
   HERMES_WEB_UI_TOKEN     Optional explicit API token.
   AUTH_TOKEN              Optional explicit API token fallback.
+  HERMES_MCP_TOOLSET      Tool category to expose: api, devices, or use. Default: api.
 
 When run without options, this process waits for MCP JSON-RPC messages on stdin.
 `)
 }
+
+const positionalArgs = process.argv.slice(2).filter(arg => !arg.startsWith('-'))
+const requestedToolset = String(positionalArgs[0] || process.env.HERMES_MCP_TOOLSET || 'api').trim().toLowerCase()
+const ACTIVE_TOOLSET = TOOLSETS.has(requestedToolset) ? requestedToolset : 'api'
 
 if (process.argv.includes('-h') || process.argv.includes('--help')) {
   printHelp()
@@ -523,8 +530,8 @@ function compactOpenApiDocument(openapi, args = {}) {
     title: openapi?.info?.title || 'Hermes Studio API',
     version: openapi?.info?.version || '',
     usage: hasFilters
-      ? 'Use the selected operation details to call hermes_api_request with method, path, query, and body. Auth and profile are handled by the MCP server.'
-      : 'This catalog is large. First read module purpose and keywords to choose the right module, then call hermes_api_openapi_get again with tag, path, or method filters to fetch endpoint details on demand.',
+      ? 'Use the selected operation details to call hermes_studio_api_request with method, path, query, and body. Auth and profile are handled by the MCP server.'
+      : 'This catalog is large. First read module purpose and keywords to choose the right module, then call hermes_studio_api_openapi_get again with tag, path, or method filters to fetch endpoint details on demand.',
     moduleCount: modules.length,
     modules,
     ...(Object.keys(filters).length ? { filters } : {}),
@@ -561,10 +568,80 @@ function withAuthArgs(args, options = {}) {
   }
 }
 
+function pickDefined(source, keys) {
+  const picked = {}
+  for (const key of keys) {
+    if (source[key] !== undefined) picked[key] = source[key]
+  }
+  return picked
+}
+
+function availableModelGroups(payload) {
+  const groups = Array.isArray(payload?.groups)
+    ? payload.groups
+    : Array.isArray(payload?.providers)
+      ? payload.providers
+      : []
+  return groups
+    .map(group => ({
+      provider: String(group?.provider || group?.id || '').trim(),
+      label: String(group?.label || group?.name || group?.provider || group?.id || '').trim(),
+      models: Array.isArray(group?.models) ? group.models.map(model => String(model || '').trim()).filter(Boolean) : [],
+      model_meta: group?.model_meta && typeof group.model_meta === 'object' && !Array.isArray(group.model_meta)
+        ? group.model_meta
+        : {},
+    }))
+    .filter(group => group.provider && group.models.length > 0)
+}
+
+function findProvidersForModel(payload, model) {
+  const target = String(model || '').trim()
+  if (!target) return { model: target, found: false, provider: null, providers: [], ambiguous: false }
+  const targetLower = target.toLowerCase()
+  const matches = []
+  for (const group of availableModelGroups(payload)) {
+    for (const candidate of group.models) {
+      const alias = typeof group.model_meta?.[candidate]?.alias === 'string'
+        ? group.model_meta[candidate].alias.trim()
+        : ''
+      const matchType = candidate === target
+        ? 'exact'
+        : candidate.toLowerCase() === targetLower
+          ? 'case_insensitive'
+          : alias && alias === target
+            ? 'alias'
+            : alias && alias.toLowerCase() === targetLower
+              ? 'alias_case_insensitive'
+              : ''
+      if (!matchType) continue
+      matches.push({
+        provider: group.provider,
+        label: group.label || group.provider,
+        model: candidate,
+        match: matchType,
+        ...(alias ? { alias } : {}),
+      })
+    }
+  }
+  const defaultProvider = String(payload?.default_provider || '').trim()
+  const defaultModel = String(payload?.default || '').trim()
+  const preferred = matches.find(match => match.provider === defaultProvider && match.model === defaultModel) ||
+    matches.find(match => match.match === 'exact') ||
+    matches[0]
+  return {
+    model: target,
+    found: matches.length > 0,
+    provider: preferred?.provider || null,
+    providers: matches,
+    ambiguous: matches.length > 1,
+  }
+}
+
 const tools = [
   {
-    name: 'hermes_api_openapi_get',
-    description: 'Return Hermes Studio API documentation as compact JSON. When the user asks to read/check the operation manual, API docs, endpoint docs, 接口文档, 接口手册, or 操作手册, call this tool without filters first to get the outline/module index. Without filters, returns only module purpose, keywords, and operation counts because the full API catalog is large. For endpoint details, call again with tag, path, or method filters, then use hermes_api_request.',
+    name: 'hermes_studio_api_openapi_get',
+    toolset: 'api',
+    description: 'Return Hermes Studio API documentation as compact JSON. When the user asks to read/check the operation manual, API docs, endpoint docs, 接口文档, 接口手册, or 操作手册, call this tool without filters first to get the outline/module index. Without filters, returns only module purpose, keywords, and operation counts because the full API catalog is large. For endpoint details, call again with tag, path, or method filters, then use hermes_studio_api_request.',
     inputSchema: inputSchema({
         path: {
           type: 'string',
@@ -586,8 +663,9 @@ const tools = [
       }),
   },
   {
-    name: 'hermes_api_request',
-    description: 'Execute a Hermes Studio operation by calling an endpoint path. Use hermes_api_openapi_get first as the operation manual to inspect method, parameters, requestBody, and responses.',
+    name: 'hermes_studio_api_request',
+    toolset: 'api',
+    description: 'Execute a Hermes Studio operation by calling an endpoint path. Use hermes_studio_api_openapi_get first as the operation manual to inspect method, parameters, requestBody, and responses.',
     inputSchema: inputSchema({
         method: {
           type: 'string',
@@ -617,32 +695,228 @@ const tools = [
       }, ['path']),
   },
   {
-    name: 'hermes_lan_devices_list',
+    name: 'hermes_studio_use_chat_run',
+    toolset: 'use',
+    description: 'Start one Hermes Studio chat or coding-agent run through the HTTP bridge and wait for completion.',
+    inputSchema: inputSchema({
+        input: {
+          oneOf: [
+            { type: 'string' },
+            { type: 'array', items: { type: 'object', additionalProperties: true } },
+          ],
+          description: 'User message text or content blocks.',
+        },
+        session_id: {
+          type: 'string',
+          description: 'Optional existing session id. Omit to create a new session.',
+        },
+        provider: {
+          type: 'string',
+          description: 'Optional model provider key, for example openai, anthropic, or deepseek.',
+        },
+        model: {
+          type: 'string',
+          description: 'Optional model id for this run.',
+        },
+        model_groups: {
+          type: 'array',
+          description: 'Optional provider/model fallback groups.',
+          items: { type: 'object', additionalProperties: true },
+        },
+        source: {
+          type: 'string',
+          enum: ['cli', 'coding_agent', 'global_agent'],
+          description: 'Optional run backend source.',
+        },
+        session_source: {
+          type: 'string',
+          enum: ['global_agent'],
+          description: 'Optional session source marker.',
+        },
+        instructions: {
+          type: 'string',
+          description: 'Optional extra run instructions.',
+        },
+        workspace: {
+          type: ['string', 'null'],
+          description: 'Optional working directory for the run.',
+        },
+        reasoning_effort: {
+          type: 'string',
+          description: 'Optional per-run reasoning effort override.',
+        },
+        coding_agent_id: {
+          type: 'string',
+          enum: ['claude-code', 'codex'],
+          description: 'Coding agent id when source is coding_agent.',
+        },
+        agent_id: {
+          type: 'string',
+          enum: ['claude-code', 'codex'],
+          description: 'Alias for coding_agent_id.',
+        },
+        mode: {
+          type: 'string',
+          enum: ['scoped', 'global'],
+          description: 'Coding-agent launch mode.',
+        },
+        baseUrl: {
+          type: 'string',
+          description: 'Optional provider base URL for coding-agent runs.',
+        },
+        apiKey: {
+          type: 'string',
+          description: 'Optional provider API key for coding-agent runs.',
+        },
+        apiMode: {
+          type: 'string',
+          enum: ['chat_completions', 'codex_responses', 'anthropic_messages'],
+          description: 'Optional provider wire API mode for coding-agent runs.',
+        },
+        timeout_ms: {
+          type: 'number',
+          description: 'Maximum time to wait for a terminal run event.',
+        },
+        include_events: {
+          type: 'boolean',
+          description: 'Include recorded run events in the response.',
+        },
+      }, ['input']),
+  },
+  {
+    name: 'hermes_studio_use_sessions_list',
+    toolset: 'use',
+    description: 'List Hermes Studio chat sessions.',
+    inputSchema: inputSchema({
+        limit: {
+          type: 'number',
+          description: 'Optional maximum number of sessions.',
+        },
+        source: {
+          type: 'string',
+          description: 'Optional session source filter.',
+        },
+      }),
+  },
+  {
+    name: 'hermes_studio_use_sessions_count',
+    toolset: 'use',
+    description: 'Count Hermes Studio chat sessions without returning the session list.',
+    inputSchema: inputSchema({
+        source: {
+          type: 'string',
+          description: 'Optional session source filter.',
+        },
+      }),
+  },
+  {
+    name: 'hermes_studio_use_session_get',
+    toolset: 'use',
+    description: 'Get one Hermes Studio session by id.',
+    inputSchema: inputSchema({
+        session_id: {
+          type: 'string',
+          description: 'Session id.',
+        },
+      }, ['session_id']),
+  },
+  {
+    name: 'hermes_studio_use_session_messages',
+    toolset: 'use',
+    description: 'Get messages for one Hermes Studio conversation. By default returns user and assistant messages only.',
+    inputSchema: inputSchema({
+        session_id: {
+          type: 'string',
+          description: 'Conversation/session id.',
+        },
+        include_internal: {
+          type: 'boolean',
+          description: 'Set true to include internal/non-user-visible message roles.',
+        },
+      }, ['session_id']),
+  },
+  {
+    name: 'hermes_studio_use_session_delete',
+    toolset: 'use',
+    description: 'Delete one Hermes Studio session by id.',
+    inputSchema: inputSchema({
+        session_id: {
+          type: 'string',
+          description: 'Session id to delete.',
+        },
+      }, ['session_id']),
+  },
+  {
+    name: 'hermes_studio_use_session_rename',
+    toolset: 'use',
+    description: 'Rename one Hermes Studio session title.',
+    inputSchema: inputSchema({
+        session_id: {
+          type: 'string',
+          description: 'Session id to rename.',
+        },
+        title: {
+          type: 'string',
+          description: 'New session title.',
+        },
+      }, ['session_id', 'title']),
+  },
+  {
+    name: 'hermes_studio_use_profiles_list',
+    toolset: 'use',
+    description: 'List Hermes Studio profiles.',
+    inputSchema: inputSchema(),
+  },
+  {
+    name: 'hermes_studio_use_available_models',
+    toolset: 'use',
+    description: 'List available Hermes Studio models for the selected profile.',
+    inputSchema: inputSchema(),
+  },
+  {
+    name: 'hermes_studio_use_model_provider_get',
+    toolset: 'use',
+    description: 'Find provider candidates for a model id from the selected profile available-models catalog.',
+    inputSchema: inputSchema({
+        model: {
+          type: 'string',
+          description: 'Model id or visible model alias to look up.',
+        },
+      }, ['model']),
+  },
+  {
+    name: 'hermes_studio_lan_devices_list',
+    toolset: 'devices',
     description: 'List known LAN and remote devices from Hermes Web UI, including pairing and online status.',
     inputSchema: inputSchema(),
   },
   {
-    name: 'hermes_lan_devices_scan',
+    name: 'hermes_studio_lan_devices_scan',
+    toolset: 'devices',
     description: 'Refresh LAN device discovery cache and return known devices with pairing and online status.',
     inputSchema: inputSchema(),
   },
   {
-    name: 'hermes_lan_peer_connect',
+    name: 'hermes_studio_lan_peer_connect',
+    toolset: 'devices',
     description: 'Connect to a paired LAN device by device id.',
     inputSchema: inputSchema({ device_id: { type: 'string' } }, ['device_id']),
   },
   {
-    name: 'hermes_lan_peer_connections',
+    name: 'hermes_studio_lan_peer_connections',
+    toolset: 'devices',
     description: 'List active LAN peer socket connections.',
     inputSchema: inputSchema(),
   },
   {
-    name: 'hermes_lan_peer_disconnect',
+    name: 'hermes_studio_lan_peer_disconnect',
+    toolset: 'devices',
     description: 'Disconnect an active LAN peer socket connection.',
     inputSchema: inputSchema({ connection_id: { type: 'string' } }, ['connection_id']),
   },
   {
-    name: 'hermes_lan_terminal_create',
+    name: 'hermes_studio_lan_terminal_create',
+    toolset: 'devices',
     description: 'Create an interactive terminal on a connected LAN peer.',
     inputSchema: inputSchema({
         connection_id: { type: 'string' },
@@ -652,14 +926,16 @@ const tools = [
       }, ['connection_id']),
   },
   {
-    name: 'hermes_lan_terminal_list',
+    name: 'hermes_studio_lan_terminal_list',
+    toolset: 'devices',
     description: 'List interactive terminals tracked for a connected LAN peer, including IDs that can be read or closed.',
     inputSchema: inputSchema({
         connection_id: { type: 'string' },
       }, ['connection_id']),
   },
   {
-    name: 'hermes_lan_terminal_input',
+    name: 'hermes_studio_lan_terminal_input',
+    toolset: 'devices',
     description: 'Write input to an interactive terminal on a connected LAN peer.',
     inputSchema: inputSchema({
         connection_id: { type: 'string' },
@@ -668,7 +944,8 @@ const tools = [
       }, ['connection_id', 'terminal_id', 'data']),
   },
   {
-    name: 'hermes_lan_terminal_read',
+    name: 'hermes_studio_lan_terminal_read',
+    toolset: 'devices',
     description: 'Read buffered terminal output from an interactive terminal.',
     inputSchema: inputSchema({
         connection_id: { type: 'string' },
@@ -676,7 +953,8 @@ const tools = [
       }, ['connection_id', 'terminal_id']),
   },
   {
-    name: 'hermes_lan_terminal_resize',
+    name: 'hermes_studio_lan_terminal_resize',
+    toolset: 'devices',
     description: 'Resize an interactive terminal on a connected LAN peer.',
     inputSchema: inputSchema({
         connection_id: { type: 'string' },
@@ -686,7 +964,8 @@ const tools = [
       }, ['connection_id', 'terminal_id', 'cols', 'rows']),
   },
   {
-    name: 'hermes_lan_terminal_close',
+    name: 'hermes_studio_lan_terminal_close',
+    toolset: 'devices',
     description: 'Close an interactive terminal on a connected LAN peer.',
     inputSchema: inputSchema({
         connection_id: { type: 'string' },
@@ -694,7 +973,8 @@ const tools = [
       }, ['connection_id', 'terminal_id']),
   },
   {
-    name: 'hermes_lan_command_exec',
+    name: 'hermes_studio_lan_command_exec',
+    toolset: 'devices',
     description: 'Run a command on a connected LAN peer using command plus args, without shell string execution.',
     inputSchema: inputSchema({
         connection_id: { type: 'string' },
@@ -705,7 +985,8 @@ const tools = [
       }, ['connection_id', 'command']),
   },
   {
-    name: 'hermes_lan_file_download',
+    name: 'hermes_studio_lan_file_download',
+    toolset: 'devices',
     description: 'Download a file from a connected LAN peer remote path to a local path on this machine.',
     inputSchema: inputSchema({
         connection_id: { type: 'string' },
@@ -715,7 +996,8 @@ const tools = [
       }, ['connection_id', 'remote_path', 'local_path']),
   },
   {
-    name: 'hermes_lan_file_upload',
+    name: 'hermes_studio_lan_file_upload',
+    toolset: 'devices',
     description: 'Upload a local file path from this machine to a connected LAN peer remote path.',
     inputSchema: inputSchema({
         connection_id: { type: 'string' },
@@ -726,17 +1008,52 @@ const tools = [
   },
 ]
 
+const TOOL_ALIASES = new Map([
+  ['hermes_api_openapi_get', 'hermes_studio_api_openapi_get'],
+  ['hermes_api_request', 'hermes_studio_api_request'],
+  ['hermes_lan_devices_list', 'hermes_studio_lan_devices_list'],
+  ['hermes_lan_devices_scan', 'hermes_studio_lan_devices_scan'],
+  ['hermes_lan_peer_connect', 'hermes_studio_lan_peer_connect'],
+  ['hermes_lan_peer_connections', 'hermes_studio_lan_peer_connections'],
+  ['hermes_lan_peer_disconnect', 'hermes_studio_lan_peer_disconnect'],
+  ['hermes_lan_terminal_create', 'hermes_studio_lan_terminal_create'],
+  ['hermes_lan_terminal_list', 'hermes_studio_lan_terminal_list'],
+  ['hermes_lan_terminal_input', 'hermes_studio_lan_terminal_input'],
+  ['hermes_lan_terminal_read', 'hermes_studio_lan_terminal_read'],
+  ['hermes_lan_terminal_resize', 'hermes_studio_lan_terminal_resize'],
+  ['hermes_lan_terminal_close', 'hermes_studio_lan_terminal_close'],
+  ['hermes_lan_command_exec', 'hermes_studio_lan_command_exec'],
+  ['hermes_lan_file_download', 'hermes_studio_lan_file_download'],
+  ['hermes_lan_file_upload', 'hermes_studio_lan_file_upload'],
+])
+
+function resolveToolName(name) {
+  return TOOL_ALIASES.get(name) || name
+}
+
+function visibleTools() {
+  const visible = tools.filter(tool => tool.toolset === ACTIVE_TOOLSET)
+  return visible.map(({ toolset, ...tool }) => tool)
+}
+
+function isToolVisible(name) {
+  return visibleTools().some(tool => tool.name === resolveToolName(name))
+}
+
 async function callTool(name, args = {}) {
-  switch (name) {
-    case 'hermes_api_openapi_get':
+  if (!isToolVisible(name)) {
+    return errorText(`Tool is not available in the active '${ACTIVE_TOOLSET}' MCP toolset: ${name}`)
+  }
+  switch (resolveToolName(name)) {
+    case 'hermes_studio_api_openapi_get':
       return jsonText(compactOpenApiDocument(await openApiDocument(withAuthArgs(args)), args))
-    case 'hermes_api_request': {
+    case 'hermes_studio_api_request': {
       const method = normalizeApiMethod(args.method)
       const path = normalizeApiPath(args.path)
       if (!method) return errorText('Invalid method. Allowed: GET, POST, PUT, PATCH, DELETE, HEAD.')
-      if (!path) return errorText('Invalid path. Use a relative /api/... or /health path from hermes_api_openapi_get; full URLs are not allowed.')
+      if (!path) return errorText('Invalid path. Use a relative /api/... or /health path from hermes_studio_api_openapi_get; full URLs are not allowed.')
       const validationError = await validateApiRequest(method, path, args)
-      if (validationError) return errorText(`Invalid API request for ${method} ${pathWithoutQuery(path)}: ${validationError}. Use hermes_api_openapi_get to inspect required parameters and requestBody.`)
+      if (validationError) return errorText(`Invalid API request for ${method} ${pathWithoutQuery(path)}: ${validationError}. Use hermes_studio_api_openapi_get to inspect required parameters and requestBody.`)
       const options = withAuthArgs(args, {
         method,
         query: args.query,
@@ -745,48 +1062,104 @@ async function callTool(name, args = {}) {
       })
       return jsonText(await requestEnvelope(path, options))
     }
-    case 'hermes_lan_devices_list':
+    case 'hermes_studio_use_chat_run':
+      return jsonText(await request('/api/chat-run/runs', withAuthArgs(args, {
+        method: 'POST',
+        body: pickDefined(args, [
+          'input',
+          'session_id',
+          'provider',
+          'model',
+          'model_groups',
+          'source',
+          'session_source',
+          'instructions',
+          'workspace',
+          'reasoning_effort',
+          'coding_agent_id',
+          'agent_id',
+          'mode',
+          'baseUrl',
+          'apiKey',
+          'apiMode',
+          'timeout_ms',
+          'include_events',
+        ]),
+      })))
+    case 'hermes_studio_use_sessions_list':
+      return jsonText(await request('/api/hermes/sessions', withAuthArgs(args, {
+        query: pickDefined(args, ['limit', 'source']),
+      })))
+    case 'hermes_studio_use_sessions_count':
+      return jsonText(await request('/api/hermes/sessions/count', withAuthArgs(args, {
+        query: pickDefined(args, ['source']),
+      })))
+    case 'hermes_studio_use_session_get':
+      return jsonText(await request(`/api/hermes/sessions/${encodeURIComponent(args.session_id)}`, withAuthArgs(args)))
+    case 'hermes_studio_use_session_messages':
+      return jsonText(await request(`/api/hermes/sessions/conversations/${encodeURIComponent(args.session_id)}/messages`, withAuthArgs(args, {
+        query: args.include_internal ? { humanOnly: '0' } : undefined,
+      })))
+    case 'hermes_studio_use_session_delete':
+      return jsonText(await request(`/api/hermes/sessions/${encodeURIComponent(args.session_id)}`, withAuthArgs(args, {
+        method: 'DELETE',
+      })))
+    case 'hermes_studio_use_session_rename':
+      return jsonText(await request(`/api/hermes/sessions/${encodeURIComponent(args.session_id)}/rename`, withAuthArgs(args, {
+        method: 'POST',
+        body: { title: args.title },
+      })))
+    case 'hermes_studio_use_profiles_list':
+      return jsonText(await request('/api/hermes/profiles', withAuthArgs(args)))
+    case 'hermes_studio_use_available_models':
+      return jsonText(await request('/api/hermes/available-models', withAuthArgs(args)))
+    case 'hermes_studio_use_model_provider_get':
+      return jsonText(findProvidersForModel(
+        await request('/api/hermes/available-models', withAuthArgs(args)),
+        args.model,
+      ))
+    case 'hermes_studio_lan_devices_list':
       return jsonText(await request('/api/devices', withAuthArgs(args)))
-    case 'hermes_lan_devices_scan':
+    case 'hermes_studio_lan_devices_scan':
       return jsonText(await request('/api/devices/scan', withAuthArgs(args, { method: 'POST' })))
-    case 'hermes_lan_peer_connect':
+    case 'hermes_studio_lan_peer_connect':
       return jsonText(await request(`/api/devices/${encodeURIComponent(args.device_id)}/connect`, withAuthArgs(args, { method: 'POST' })))
-    case 'hermes_lan_peer_connections':
+    case 'hermes_studio_lan_peer_connections':
       return jsonText(await request('/api/devices/peer-connections', withAuthArgs(args)))
-    case 'hermes_lan_peer_disconnect':
+    case 'hermes_studio_lan_peer_disconnect':
       return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/disconnect`, withAuthArgs(args, { method: 'POST' })))
-    case 'hermes_lan_terminal_create':
+    case 'hermes_studio_lan_terminal_create':
       return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/terminal`, withAuthArgs(args, {
         method: 'POST',
         body: { shell: args.shell, cols: args.cols, rows: args.rows },
       })))
-    case 'hermes_lan_terminal_list':
+    case 'hermes_studio_lan_terminal_list':
       return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/terminals`, withAuthArgs(args)))
-    case 'hermes_lan_terminal_input':
+    case 'hermes_studio_lan_terminal_input':
       return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/terminal/${encodeURIComponent(args.terminal_id)}/input`, withAuthArgs(args, {
         method: 'POST',
         body: { data: args.data },
       })))
-    case 'hermes_lan_terminal_read':
+    case 'hermes_studio_lan_terminal_read':
       return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/terminal/${encodeURIComponent(args.terminal_id)}/read`, withAuthArgs(args)))
-    case 'hermes_lan_terminal_resize':
+    case 'hermes_studio_lan_terminal_resize':
       return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/terminal/${encodeURIComponent(args.terminal_id)}/resize`, withAuthArgs(args, {
         method: 'POST',
         body: { cols: args.cols, rows: args.rows },
       })))
-    case 'hermes_lan_terminal_close':
+    case 'hermes_studio_lan_terminal_close':
       return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/terminal/${encodeURIComponent(args.terminal_id)}/close`, withAuthArgs(args, { method: 'POST' })))
-    case 'hermes_lan_command_exec':
+    case 'hermes_studio_lan_command_exec':
       return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/exec`, withAuthArgs(args, {
         method: 'POST',
         body: { command: args.command, args: args.args || [], cwd: args.cwd, timeout_ms: args.timeout_ms },
       })))
-    case 'hermes_lan_file_download':
+    case 'hermes_studio_lan_file_download':
       return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/download`, withAuthArgs(args, {
         method: 'POST',
         body: { remote_path: args.remote_path, local_path: args.local_path, timeout_ms: args.timeout_ms },
       })))
-    case 'hermes_lan_file_upload':
+    case 'hermes_studio_lan_file_upload':
       return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/upload`, withAuthArgs(args, {
         method: 'POST',
         body: { local_path: args.local_path, remote_path: args.remote_path, timeout_ms: args.timeout_ms },
@@ -808,11 +1181,11 @@ async function handle(message) {
           result: {
             protocolVersion: message.params?.protocolVersion || '2024-11-05',
             capabilities: { tools: {} },
-            serverInfo: { name: SERVER_NAME, version: VERSION },
+            serverInfo: { name: SERVER_NAME, version: VERSION, toolset: ACTIVE_TOOLSET },
           },
         }
       case 'tools/list':
-        return { jsonrpc: '2.0', id: message.id, result: { tools } }
+        return { jsonrpc: '2.0', id: message.id, result: { tools: visibleTools() } }
       case 'tools/call':
         return {
           jsonrpc: '2.0',

@@ -150,7 +150,7 @@ describe('hermes-web-ui MCP server', () => {
     writeRpc(child, 1, 'initialize', {})
     writeRpc(child, 2, 'tools/list')
     writeRpc(child, 3, 'tools/call', {
-      name: 'hermes_api_request',
+      name: 'hermes_studio_api_request',
       arguments: {
         method: 'POST',
         path: '/api/test-public-requester',
@@ -160,7 +160,7 @@ describe('hermes-web-ui MCP server', () => {
     })
     writeRpc(child, 4, 'resources/list')
     writeRpc(child, 5, 'tools/call', {
-      name: 'hermes_api_request',
+      name: 'hermes_studio_api_request',
       arguments: {
         method: 'POST',
         path: '/api/chat-run/runs',
@@ -168,26 +168,35 @@ describe('hermes-web-ui MCP server', () => {
       },
     })
     writeRpc(child, 7, 'tools/call', {
-      name: 'hermes_api_openapi_get',
+      name: 'hermes_studio_api_openapi_get',
       arguments: {
         path: '/api/chat-run/runs',
         method: 'POST',
       },
     })
     writeRpc(child, 9, 'tools/call', {
-      name: 'hermes_api_openapi_get',
+      name: 'hermes_studio_api_openapi_get',
       arguments: {},
+    })
+    writeRpc(child, 10, 'tools/call', {
+      name: 'hermes_api_request',
+      arguments: {
+        method: 'POST',
+        path: '/api/test-public-requester',
+        body: { legacy: true },
+      },
     })
 
     const initialized = await waitForRpc(responses, 1)
     expect(initialized.result.serverInfo).toMatchObject({
-      name: 'hermes-web-ui-mcp',
+      name: 'hermes-studio-mcp',
       version: pkg.version,
     })
     expect(initialized.result.capabilities).toEqual({ tools: {} })
 
     const list = await waitForRpc(responses, 2)
-    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_api_request')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_api_request')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_lan_devices_list')).toBe(false)
 
     const response = await waitForRpc(responses, 3)
     const payload = JSON.parse(response.result.content[0].text)
@@ -199,8 +208,12 @@ describe('hermes-web-ui MCP server', () => {
       profile: 'research',
       authorization: 'Bearer profile-token',
     })
+    const legacyResponse = await waitForRpc(responses, 10)
+    const legacyPayload = JSON.parse(legacyResponse.result.content[0].text)
+    expect(legacyPayload.status).toBe(200)
+    expect(legacyPayload.body.body).toEqual({ legacy: true })
     writeRpc(child, 8, 'tools/call', {
-      name: 'hermes_api_openapi_get',
+      name: 'hermes_studio_api_openapi_get',
       arguments: {
         path: '/api/test-public-requester',
         method: 'POST',
@@ -263,7 +276,7 @@ describe('hermes-web-ui MCP server', () => {
     })
 
     writeRpc(child, 6, 'tools/call', {
-      name: 'hermes_api_request',
+      name: 'hermes_studio_api_request',
       arguments: {
         method: 'POST',
         path: '/api/chat-run/runs',
@@ -289,6 +302,242 @@ describe('hermes-web-ui MCP server', () => {
     const code = await new Promise<number | null>(resolve => child.on('close', resolve))
 
     expect(code).toBe(0)
-    expect(stdout.trim()).toBe(`hermes-web-ui-mcp v${pkg.version}`)
+    expect(stdout.trim()).toBe(`hermes-studio-mcp v${pkg.version}`)
+  })
+
+  it('exposes curated Hermes Studio use tools in the use toolset', async () => {
+    const server = createServer((req, res) => {
+      res.setHeader('content-type', 'application/json')
+      if (req.url === '/api/chat-run/runs') {
+        let raw = ''
+        req.on('data', chunk => { raw += chunk })
+        req.on('end', () => {
+          res.end(JSON.stringify({
+            ok: true,
+            session_id: 'session-1',
+            body: raw ? JSON.parse(raw) : null,
+          }))
+        })
+        return
+      }
+      if (req.url === '/api/hermes/sessions?limit=2&source=coding_agent') {
+        res.end(JSON.stringify({ sessions: [{ id: 'session-1' }] }))
+        return
+      }
+      if (req.url === '/api/hermes/sessions/count?source=coding_agent') {
+        res.end(JSON.stringify({ count: 7 }))
+        return
+      }
+      if (req.url === '/api/hermes/sessions/session-1' && req.method === 'GET') {
+        res.end(JSON.stringify({ id: 'session-1', title: 'Session 1' }))
+        return
+      }
+      if (req.url === '/api/hermes/sessions/session-1' && req.method === 'DELETE') {
+        res.end(JSON.stringify({ ok: true, deleted: true }))
+        return
+      }
+      if (req.url === '/api/hermes/sessions/conversations/session-1/messages?humanOnly=0') {
+        res.end(JSON.stringify({ messages: [{ role: 'system', content: 'internal' }] }))
+        return
+      }
+      if (req.url === '/api/hermes/sessions/session-1/rename' && req.method === 'POST') {
+        let raw = ''
+        req.on('data', chunk => { raw += chunk })
+        req.on('end', () => {
+          res.end(JSON.stringify({ ok: true, body: raw ? JSON.parse(raw) : null }))
+        })
+        return
+      }
+      if (req.url === '/api/hermes/profiles') {
+        res.end(JSON.stringify({ profiles: ['default'] }))
+        return
+      }
+      if (req.url === '/api/hermes/available-models') {
+        res.end(JSON.stringify({
+          default: 'gpt-5.1',
+          default_provider: 'openai',
+          providers: [
+            { id: 'openai', label: 'OpenAI', models: ['gpt-5.1'] },
+            { id: 'openrouter', label: 'OpenRouter', models: ['gpt-5.1', 'claude-sonnet'], model_meta: { 'claude-sonnet': { alias: 'Claude Sonnet' } } },
+          ],
+        }))
+        return
+      }
+      res.statusCode = 404
+      res.end('{}')
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('expected TCP server address')
+
+    const responses = new Map<number, any>()
+    child = spawn(process.execPath, ['bin/hermes-web-ui-mcp.mjs', 'use'], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        HERMES_WEB_UI_URL: `http://127.0.0.1:${address.port}`,
+      },
+    })
+    child.stdout.on('data', (chunk) => {
+      for (const line of String(chunk).trim().split('\n')) {
+        if (!line) continue
+        const message = JSON.parse(line)
+        responses.set(message.id, message)
+      }
+    })
+
+    writeRpc(child, 1, 'initialize', {})
+    writeRpc(child, 2, 'tools/list')
+    writeRpc(child, 3, 'tools/call', {
+      name: 'hermes_studio_use_chat_run',
+      arguments: { input: 'hello', session_id: 'session-1', include_events: true },
+    })
+    writeRpc(child, 4, 'tools/call', {
+      name: 'hermes_studio_use_sessions_list',
+      arguments: { limit: 2, source: 'coding_agent' },
+    })
+    writeRpc(child, 5, 'tools/call', {
+      name: 'hermes_studio_use_session_get',
+      arguments: { session_id: 'session-1' },
+    })
+    writeRpc(child, 10, 'tools/call', {
+      name: 'hermes_studio_use_sessions_count',
+      arguments: { source: 'coding_agent' },
+    })
+    writeRpc(child, 6, 'tools/call', {
+      name: 'hermes_studio_use_session_messages',
+      arguments: { session_id: 'session-1', include_internal: true },
+    })
+    writeRpc(child, 11, 'tools/call', {
+      name: 'hermes_studio_use_session_rename',
+      arguments: { session_id: 'session-1', title: 'Renamed session' },
+    })
+    writeRpc(child, 12, 'tools/call', {
+      name: 'hermes_studio_use_session_delete',
+      arguments: { session_id: 'session-1' },
+    })
+    writeRpc(child, 7, 'tools/call', {
+      name: 'hermes_studio_use_profiles_list',
+      arguments: {},
+    })
+    writeRpc(child, 8, 'tools/call', {
+      name: 'hermes_studio_use_available_models',
+      arguments: {},
+    })
+    writeRpc(child, 13, 'tools/call', {
+      name: 'hermes_studio_use_model_provider_get',
+      arguments: { model: 'gpt-5.1' },
+    })
+    writeRpc(child, 14, 'tools/call', {
+      name: 'hermes_studio_use_model_provider_get',
+      arguments: { model: 'Claude Sonnet' },
+    })
+
+    const initialized = await waitForRpc(responses, 1)
+    expect(initialized.result.serverInfo).toMatchObject({ toolset: 'use' })
+
+    const list = await waitForRpc(responses, 2)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_chat_run')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_sessions_count')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_session_delete')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_session_rename')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_model_provider_get')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_api_request')).toBe(false)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_lan_devices_list')).toBe(false)
+
+    const chatRun = JSON.parse((await waitForRpc(responses, 3)).result.content[0].text)
+    expect(chatRun.body).toMatchObject({ input: 'hello', session_id: 'session-1', include_events: true })
+    const sessions = JSON.parse((await waitForRpc(responses, 4)).result.content[0].text)
+    expect(sessions.sessions[0].id).toBe('session-1')
+    const sessionCount = JSON.parse((await waitForRpc(responses, 10)).result.content[0].text)
+    expect(sessionCount.count).toBe(7)
+    const session = JSON.parse((await waitForRpc(responses, 5)).result.content[0].text)
+    expect(session.title).toBe('Session 1')
+    const messages = JSON.parse((await waitForRpc(responses, 6)).result.content[0].text)
+    expect(messages.messages[0].role).toBe('system')
+    const renamed = JSON.parse((await waitForRpc(responses, 11)).result.content[0].text)
+    expect(renamed).toEqual({ ok: true, body: { title: 'Renamed session' } })
+    const deleted = JSON.parse((await waitForRpc(responses, 12)).result.content[0].text)
+    expect(deleted).toEqual({ ok: true, deleted: true })
+    const profiles = JSON.parse((await waitForRpc(responses, 7)).result.content[0].text)
+    expect(profiles.profiles).toEqual(['default'])
+    const models = JSON.parse((await waitForRpc(responses, 8)).result.content[0].text)
+    expect(models.providers[0].models).toEqual(['gpt-5.1'])
+    const modelProvider = JSON.parse((await waitForRpc(responses, 13)).result.content[0].text)
+    expect(modelProvider).toMatchObject({
+      model: 'gpt-5.1',
+      found: true,
+      provider: 'openai',
+      ambiguous: true,
+    })
+    expect(modelProvider.providers.map((entry: any) => entry.provider)).toEqual(['openai', 'openrouter'])
+    const aliasProvider = JSON.parse((await waitForRpc(responses, 14)).result.content[0].text)
+    expect(aliasProvider).toMatchObject({
+      model: 'Claude Sonnet',
+      found: true,
+      provider: 'openrouter',
+      ambiguous: false,
+    })
+
+    await new Promise<void>(resolve => server.close(() => resolve()))
+  })
+
+  it('filters exposed tools by MCP toolset argument', async () => {
+    const server = createServer((req, res) => {
+      if (req.url === '/api/devices') {
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ devices: [{ id: 'device-1' }] }))
+        return
+      }
+      res.statusCode = 404
+      res.end('{}')
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('expected TCP server address')
+
+    const responses = new Map<number, any>()
+    child = spawn(process.execPath, ['bin/hermes-web-ui-mcp.mjs', 'devices'], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        HERMES_WEB_UI_URL: `http://127.0.0.1:${address.port}`,
+      },
+    })
+    child.stdout.on('data', (chunk) => {
+      for (const line of String(chunk).trim().split('\n')) {
+        if (!line) continue
+        const message = JSON.parse(line)
+        responses.set(message.id, message)
+      }
+    })
+
+    writeRpc(child, 1, 'initialize', {})
+    writeRpc(child, 2, 'tools/list')
+    writeRpc(child, 3, 'tools/call', {
+      name: 'hermes_studio_api_request',
+      arguments: { path: '/health' },
+    })
+    writeRpc(child, 4, 'tools/call', {
+      name: 'hermes_lan_devices_list',
+      arguments: {},
+    })
+
+    const initialized = await waitForRpc(responses, 1)
+    expect(initialized.result.serverInfo).toMatchObject({ toolset: 'devices' })
+
+    const list = await waitForRpc(responses, 2)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_lan_devices_list')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_api_request')).toBe(false)
+
+    const hiddenCall = await waitForRpc(responses, 3)
+    expect(hiddenCall.result.isError).toBe(true)
+    expect(hiddenCall.result.content[0].text).toContain("active 'devices' MCP toolset")
+
+    const legacyDevicesCall = await waitForRpc(responses, 4)
+    const legacyDevicesPayload = JSON.parse(legacyDevicesCall.result.content[0].text)
+    expect(legacyDevicesPayload.devices[0].id).toBe('device-1')
+
+    await new Promise<void>(resolve => server.close(() => resolve()))
   })
 })

@@ -82,7 +82,9 @@ describe('Hermes Studio CLI shim', () => {
     expect(content).toContain('if [ -n "${HERMES_DESKTOP_PORT:-}" ]; then')
     expect(content).toContain('HERMES_WEB_UI_URL="http://127.0.0.1:${HERMES_DESKTOP_PORT}"')
     expect(content).toContain("HERMES_WEB_UI_URL='http://127.0.0.1:8748'")
-    expect(content).toContain('export HERMES_MCP_SERVER_NAME=hermes-studio-mcp')
+    expect(content).toContain('if [ -z "${HERMES_MCP_SERVER_NAME:-}" ]; then')
+    expect(content).toContain('HERMES_MCP_SERVER_NAME=hermes-studio-mcp')
+    expect(content).toContain('export HERMES_MCP_SERVER_NAME')
   })
 
   it('sets the desktop MCP URL from HERMES_DESKTOP_PORT in Windows shims', () => {
@@ -91,7 +93,7 @@ describe('Hermes Studio CLI shim', () => {
     expect(content).toContain('if "%HERMES_DESKTOP_PORT%"=="" (')
     expect(content).toContain('set "HERMES_WEB_UI_URL=http://127.0.0.1:8748"')
     expect(content).toContain('set "HERMES_WEB_UI_URL=http://127.0.0.1:%HERMES_DESKTOP_PORT%"')
-    expect(content).toContain('set "HERMES_MCP_SERVER_NAME=hermes-studio-mcp"')
+    expect(content).toContain('if "%HERMES_MCP_SERVER_NAME%"=="" set "HERMES_MCP_SERVER_NAME=hermes-studio-mcp"')
   })
 
   it('detects user bin paths with platform-specific separators', () => {

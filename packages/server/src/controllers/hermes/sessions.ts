@@ -376,6 +376,18 @@ export async function list(ctx: any) {
   }
 }
 
+export async function count(ctx: any) {
+  const source = (ctx.query.source as string) || undefined
+  const profile = explicitProfileFilter(ctx)
+  const allSessions = localListSessions(profile, source, 2147483647)
+  const knownProfiles = profile ? null : new Set(listProfileNamesFromDisk())
+  const sessions = filterPendingDeletedSessions(filterByAllowedProfiles(ctx, allSessions).filter(s =>
+    isRequestedSessionSource(source, s.source) &&
+    (!knownProfiles || knownProfiles.has(s.profile || 'default')),
+  ))
+  ctx.body = { count: sessions.length }
+}
+
 /**
  * List Hermes sessions only (exclude api_server source)
  * GET /api/hermes/sessions/hermes?source=&limit=
