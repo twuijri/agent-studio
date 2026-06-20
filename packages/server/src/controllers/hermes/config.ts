@@ -1,7 +1,7 @@
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { getActiveProfileName, getProfileDir } from '../../services/hermes/hermes-profile'
-import { restartGatewayForProfile } from '../../services/hermes/gateway-autostart'
+import { gatewayAutostartDisabledByEnv, reconcileGatewayManagementTransition, restartGatewayForProfile } from '../../services/hermes/gateway-autostart'
 import { readAppConfig, writeAppConfig, normalizeGatewayAutoStartConfig } from '../../services/app-config'
 import { saveEnvValueForProfile } from '../../services/config-helpers'
 import { logger } from '../../services/logger'
@@ -185,12 +185,58 @@ async function readConfig(profile: string): Promise<Record<string, any>> {
   return safeFileStore.readYaml(configPath(profile))
 }
 
+function configTruthy(value: unknown): boolean {
+  if (value === true) return true
+  const normalized = String(value || '').trim().toLowerCase()
+  return ['1', 'true', 'yes', 'on'].includes(normalized)
+}
+
+function gatewayManagementFromHermesConfig(config: Record<string, any>): 'per_profile' | 'unified' {
+  return configTruthy(config.multiplex_profiles) || configTruthy(config.gateway?.multiplex_profiles)
+    ? 'unified'
+    : 'per_profile'
+}
+
+async function readGatewayAutoStartForResponse(): Promise<ReturnType<typeof normalizeGatewayAutoStartConfig>> {
+  const appConfig = await readAppConfig()
+  const gatewayAutoStart = normalizeGatewayAutoStartConfig(appConfig.gatewayAutoStart)
+  const defaultConfig = await readConfig('default')
+  gatewayAutoStart.management = gatewayManagementFromHermesConfig(defaultConfig)
+  return gatewayAutoStart
+}
+
+async function writeHermesGatewayManagement(mode: unknown): Promise<'per_profile' | 'unified' | null> {
+  if (mode !== 'per_profile' && mode !== 'unified') return null
+  await safeFileStore.updateYaml(configPath('default'), (config) => {
+    if (mode === 'unified') {
+      config.multiplex_profiles = true
+    } else {
+      delete config.multiplex_profiles
+    }
+    if (config.gateway && typeof config.gateway === 'object' && !Array.isArray(config.gateway)) {
+      delete config.gateway.multiplex_profiles
+      if (Object.keys(config.gateway).length === 0) delete config.gateway
+    }
+    return config
+  }, {
+    backup: true,
+    dumpOptions: {
+      forceQuotes: true,
+    },
+  })
+  return mode
+}
+
+async function gatewayAutoRestartAllowed(): Promise<boolean> {
+  if (gatewayAutostartDisabledByEnv()) return false
+  return normalizeGatewayAutoStartConfig((await readAppConfig()).gatewayAutoStart).enabled !== false
+}
+
 export async function getConfig(ctx: any) {
   try {
     const profile = requestedProfile(ctx)
     const config = await readConfig(profile)
-    const appConfig = await readAppConfig()
-    const gatewayAutoStart = normalizeGatewayAutoStartConfig(appConfig.gatewayAutoStart)
+    const gatewayAutoStart = await readGatewayAutoStartForResponse()
     const envPlatforms = await readEnvPlatforms(profile)
     if (Object.keys(envPlatforms).length > 0) {
       const existing = config.platforms || {}
@@ -232,13 +278,23 @@ export async function updateConfig(ctx: any) {
     if (APP_CONFIG_SECTIONS.has(section)) {
       if (section === 'gatewayAutoStart') {
         const appConfig = await readAppConfig()
+        const previousGatewayAutoStart = await readGatewayAutoStartForResponse()
         const next: Record<string, any> = { ...(appConfig.gatewayAutoStart || {}), ...values }
         if ('include' in values && !Array.isArray(values.include)) delete next.include
         if ('exclude' in values && !Array.isArray(values.exclude)) delete next.exclude
         if ('enabled' in values && typeof values.enabled !== 'boolean') delete next.enabled
+        delete next.management
         const gatewayAutoStart = normalizeGatewayAutoStartConfig(next)
         await writeAppConfig({ gatewayAutoStart })
-        ctx.body = { success: true, gatewayAutoStart }
+        const writtenManagement = await writeHermesGatewayManagement(values.management)
+        if (writtenManagement) gatewayAutoStart.management = writtenManagement
+        else gatewayAutoStart.management = previousGatewayAutoStart.management
+        const body: Record<string, any> = { success: true, gatewayAutoStart }
+        if ('management' in values && gatewayAutoStart.enabled !== false && !gatewayAutostartDisabledByEnv()) {
+          const gatewayManagement = await reconcileGatewayManagementTransition(previousGatewayAutoStart, gatewayAutoStart)
+          if (gatewayManagement.changed) body.gatewayManagement = gatewayManagement
+        }
+        ctx.body = body
         return
       }
     }
@@ -256,7 +312,10 @@ export async function updateConfig(ctx: any) {
 
     // Platform adapters run through Hermes gateway; restart it so channel
     // config changes (Feishu/Weixin/etc.) are applied.
-    if (restart !== false && PLATFORM_SECTIONS.has(section)) {
+    const shouldRestartGateway = restart !== false &&
+      PLATFORM_SECTIONS.has(section) &&
+      await gatewayAutoRestartAllowed()
+    if (shouldRestartGateway) {
       try {
         const restartResult = await restartGatewayForProfile(profile)
         logger.info('[config] gateway restarted after config update section=%s profile=%s result=%j', section, profile, restartResult)
@@ -387,14 +446,16 @@ export async function updateCredentials(ctx: any) {
 
     // Platform adapters run through Hermes gateway; restart it so channel
     // credentials are applied.
-    try {
-      const restartResult = await restartGatewayForProfile(profile)
-      logger.info('[config] gateway restarted after credentials update platform=%s profile=%s result=%j', platform, profile, restartResult)
-    } catch (err) {
-      logger.error(err, 'Gateway restart failed')
-      ctx.status = 500
-      ctx.body = { error: err instanceof Error ? err.message : 'Gateway restart failed' }
-      return
+    if (await gatewayAutoRestartAllowed()) {
+      try {
+        const restartResult = await restartGatewayForProfile(profile)
+        logger.info('[config] gateway restarted after credentials update platform=%s profile=%s result=%j', platform, profile, restartResult)
+      } catch (err) {
+        logger.error(err, 'Gateway restart failed')
+        ctx.status = 500
+        ctx.body = { error: err instanceof Error ? err.message : 'Gateway restart failed' }
+        return
+      }
     }
 
     ctx.body = { success: true }
