@@ -77,6 +77,10 @@ const NON_STREAMING_SUPPRESSED_EVENTS = new Set([
   'reasoning.available',
 ])
 const MCU_TTS_SAMPLE_RATE = 16_000
+const MCU_TTS_OPTIONS = {
+  mcuPlayback: true,
+  sampleRate: MCU_TTS_SAMPLE_RATE,
+} as const
 const MCU_TTS_FAILED_PROMPT_TEXT = '当前文字转语音失败了，请配置下文字转语音再使用哦'
 const MCU_TTS_FAILED_PROMPT_PCM_URL =
   'https://ekko-hermes-studio.oss-cn-beijing.aliyuncs.com/tts-synthesize-failed-xiaohe.s16le.pcm'
@@ -829,7 +833,7 @@ class PlainWebSocketRelayClient {
       body: JSON.stringify({
         ...(provider ? { provider } : {}),
         text,
-        options: {},
+        options: MCU_TTS_OPTIONS,
       }),
     })
 
@@ -883,7 +887,7 @@ class PlainWebSocketRelayClient {
           body: JSON.stringify({
             provider: 'edge',
             text,
-            options: {},
+            options: MCU_TTS_OPTIONS,
           }),
         })
         if (!fallback.ok) {

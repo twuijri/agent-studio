@@ -486,7 +486,7 @@ describe('GlobalAgentServer', () => {
     expect(audio.url).toMatch(/^\/api\/hermes\/mcu\/audio\/[a-f0-9-]+\.pcm$/)
   })
 
-  it('does not force provider PCM output for MCU speech synthesis', async () => {
+  it('marks TTS requests as MCU playback without forcing every provider to PCM', async () => {
     authMocks.authenticateUserToken.mockResolvedValue({ id: 7, username: 'ada', role: 'user' })
     authMocks.userCanAccessProfile.mockReturnValue(true)
     const fetchImpl = vi.fn(async () => new Response(Buffer.from('pcm-audio'), {
@@ -507,7 +507,10 @@ describe('GlobalAgentServer', () => {
 
     expect(JSON.parse(String(fetchImpl.mock.calls[0][1]?.body))).toMatchObject({
       text: 'hello',
-      options: {},
+      options: {
+        mcuPlayback: true,
+        sampleRate: 16000,
+      },
     })
   })
 
@@ -544,7 +547,10 @@ describe('GlobalAgentServer', () => {
     expect(JSON.parse(String(fetchImpl.mock.calls[1][1]?.body))).toMatchObject({
       provider: 'edge',
       text: 'hello',
-      options: {},
+      options: {
+        mcuPlayback: true,
+        sampleRate: 16000,
+      },
     })
   })
 
@@ -581,7 +587,10 @@ describe('GlobalAgentServer', () => {
     expect(JSON.parse(String(fetchImpl.mock.calls[1][1]?.body))).toMatchObject({
       provider: 'edge',
       text: 'hello',
-      options: {},
+      options: {
+        mcuPlayback: true,
+        sampleRate: 16000,
+      },
     })
   })
 
