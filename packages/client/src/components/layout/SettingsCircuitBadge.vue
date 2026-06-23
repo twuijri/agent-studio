@@ -1,3 +1,7 @@
+<script setup lang="ts">
+import { NTooltip } from 'naive-ui'
+</script>
+
 <template>
   <!-- Style 1: chip badge
   <svg class="settings-circuit-badge settings-circuit-badge--chip" viewBox="0 0 34 22" fill="none" aria-hidden="true">
@@ -26,25 +30,32 @@
     <circle class="settings-circuit-node" cx="27" cy="16" r="0.9" />
   </svg>
   -->
-  <svg class="settings-circuit-badge settings-circuit-badge--pcb" viewBox="0 0 36 22" fill="none" aria-hidden="true">
-    <rect class="settings-pcb-board" x="3" y="3" width="30" height="16" rx="3" />
-    <path class="settings-pcb-copper" d="M7 7h6v4h7v-3h9" />
-    <path class="settings-pcb-copper" d="M7 15h5v-3h5v4h12" />
-    <path class="settings-pcb-copper" d="M12 7v-2h8" />
-    <path class="settings-pcb-copper" d="M24 15v2h5" />
-    <path class="settings-pcb-current settings-pcb-current-main" d="M7 7h6v4h7v-3h9" pathLength="1" />
-    <path class="settings-pcb-current settings-pcb-current-main settings-pcb-current-late" d="M7 15h5v-3h5v4h12" pathLength="1" />
-    <path class="settings-pcb-current settings-pcb-current-branch" d="M12 7v-2h8" pathLength="1" />
-    <path class="settings-pcb-current settings-pcb-current-branch settings-pcb-current-late" d="M24 15v2h5" pathLength="1" />
-    <circle class="settings-pcb-pad settings-pcb-pad-live" cx="7" cy="7" r="1.2" />
-    <circle class="settings-pcb-pad" cx="13" cy="11" r="1" />
-    <circle class="settings-pcb-pad settings-pcb-pad-live" cx="20" cy="11" r="1.2" />
-    <circle class="settings-pcb-pad" cx="29" cy="8" r="1" />
-    <circle class="settings-pcb-pad settings-pcb-pad-live settings-pcb-pad-late" cx="17" cy="12" r="1.2" />
-    <circle class="settings-pcb-pad" cx="29" cy="15" r="1" />
-    <circle class="settings-pcb-via" cx="20" cy="5" r="0.8" />
-    <circle class="settings-pcb-via" cx="29" cy="17" r="0.8" />
-  </svg>
+  <NTooltip trigger="hover" placement="top">
+    <template #trigger>
+      <a class="settings-circuit-link" href="https://hermes-studio.ai/docs/hermes-esp32-intro/index.html" target="_blank" rel="noopener noreferrer" aria-label="小方盒" @click.stop>
+        <svg class="settings-circuit-badge settings-circuit-badge--pcb" viewBox="0 0 36 22" fill="none" aria-hidden="true">
+          <rect class="settings-pcb-board" x="3" y="3" width="30" height="16" rx="3" />
+          <path class="settings-pcb-copper" d="M7 7h6v4h7v-3h9" />
+          <path class="settings-pcb-copper" d="M7 15h5v-3h5v4h12" />
+          <path class="settings-pcb-copper" d="M12 7v-2h8" />
+          <path class="settings-pcb-copper" d="M24 15v2h5" />
+          <path class="settings-pcb-current settings-pcb-current-main" d="M7 7h6v4h7v-3h9" pathLength="1" />
+          <path class="settings-pcb-current settings-pcb-current-main settings-pcb-current-late" d="M7 15h5v-3h5v4h12" pathLength="1" />
+          <path class="settings-pcb-current settings-pcb-current-branch" d="M12 7v-2h8" pathLength="1" />
+          <path class="settings-pcb-current settings-pcb-current-branch settings-pcb-current-late" d="M24 15v2h5" pathLength="1" />
+          <circle class="settings-pcb-pad settings-pcb-pad-live" cx="7" cy="7" r="1.2" />
+          <circle class="settings-pcb-pad" cx="13" cy="11" r="1" />
+          <circle class="settings-pcb-pad settings-pcb-pad-live" cx="20" cy="11" r="1.2" />
+          <circle class="settings-pcb-pad" cx="29" cy="8" r="1" />
+          <circle class="settings-pcb-pad settings-pcb-pad-live settings-pcb-pad-late" cx="17" cy="12" r="1.2" />
+          <circle class="settings-pcb-pad" cx="29" cy="15" r="1" />
+          <circle class="settings-pcb-via" cx="20" cy="5" r="0.8" />
+          <circle class="settings-pcb-via" cx="29" cy="17" r="0.8" />
+        </svg>
+      </a>
+    </template>
+    小方盒
+  </NTooltip>
   <!-- Style 3: current scan line
   <svg class="settings-circuit-badge settings-circuit-badge--scan" viewBox="0 0 36 20" fill="none" aria-hidden="true">
     <path class="settings-scan-track" d="M3 10h6l3-5h7l3 10h5l3-5h3" />
@@ -66,10 +77,17 @@
   flex: 0 0 auto;
   width: 34px;
   height: 20px;
-  margin-left: auto;
   color: #d6a019;
   overflow: visible;
   filter: drop-shadow(0 0 4px rgba(214, 160, 25, 0.45));
+}
+
+.settings-circuit-link {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  color: inherit;
+  text-decoration: none;
 }
 
 .settings-circuit-badge--scan {
@@ -147,15 +165,15 @@
 .settings-pcb-current {
   stroke-width: 1.75;
   stroke-dasharray: 0.18 0.82;
-  /* animation: settings-circuit-flow 1.35s linear infinite; */
+  animation: settings-circuit-flow 1.35s linear infinite;
 }
 
 .settings-pcb-current-branch {
-  /* animation-duration: 1.8s; */
+  animation-duration: 1.8s;
 }
 
 .settings-pcb-current-late {
-  /* animation-delay: -0.65s; */
+  animation-delay: -0.65s;
 }
 
 .settings-pcb-pad,
@@ -171,11 +189,11 @@
 
 .settings-pcb-pad-live {
   fill: currentColor;
-  /* animation: settings-circuit-node 1.35s ease-in-out infinite; */
+  animation: settings-circuit-node 1.35s ease-in-out infinite;
 }
 
 .settings-pcb-pad-late {
-  /* animation-delay: -0.65s; */
+  animation-delay: -0.65s;
 }
 
 .settings-circuit-badge-shell {

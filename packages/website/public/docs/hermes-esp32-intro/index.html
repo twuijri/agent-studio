@@ -204,6 +204,28 @@
       font-size: clamp(17px, 2vw, 22px);
     }
 
+    .price-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 12px;
+      margin-top: 18px;
+      font-weight: 900;
+    }
+
+    .price-original {
+      color: var(--soft);
+      font-size: 16px;
+      text-decoration: line-through;
+      text-decoration-thickness: 2px;
+    }
+
+    .price-presale {
+      color: var(--warn);
+      font-size: clamp(24px, 3vw, 34px);
+      line-height: 1.1;
+    }
+
     .hero-actions {
       display: flex;
       flex-wrap: wrap;
@@ -782,9 +804,14 @@
           <span class="label">ESP32-C3 + Hermes Studio</span>
           <h1>桌面 AI 对话小方盒</h1>
           <p>带小屏、麦克风、扬声器和实体按键，通过局域网连接电脑端 Hermes Studio。</p>
+          <div class="price-row" aria-label="价格">
+            <span class="price-original">原价 99</span>
+            <span class="price-presale">预订价 88</span>
+          </div>
           <div class="hero-actions">
             <a class="btn btn-primary" href="#tutorial">查看使用教程</a>
-            <a class="btn btn-secondary" href="#notice">购买前须知</a>
+            <a class="btn btn-secondary" href="https://m.tb.cn/h.RJXBNRb?tk=mOCHgSTIunn" target="_blank" rel="noopener noreferrer">闲鱼购买</a>
+            <a class="btn btn-secondary" href="https://www.xiaohongshu.com/discovery/item/6a392766000000000603388a?source=webshare&amp;xhsshare=pc_web&amp;xsec_token=CBIdoSWLtVJK2hb23fBG8KsuTMVKROk6O6NR-ornGx584=&amp;xsec_source=pc_share" target="_blank" rel="noopener noreferrer">小红书购买</a>
           </div>
         </div>
 

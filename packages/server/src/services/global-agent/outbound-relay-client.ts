@@ -81,6 +81,7 @@ const MCU_TTS_OPTIONS = {
   mcuPlayback: true,
   sampleRate: MCU_TTS_SAMPLE_RATE,
 } as const
+const MCU_INTERRUPT_DEBOUNCE_MS = 280
 const MCU_TTS_FAILED_PROMPT_TEXT = '当前文字转语音失败了，请配置下文字转语音再使用哦'
 const MCU_TTS_FAILED_PROMPT_PCM_URL =
   'https://ekko-hermes-studio.oss-cn-beijing.aliyuncs.com/tts-synthesize-failed-xiaohe.s16le.pcm'
@@ -206,6 +207,7 @@ class PlainWebSocketRelayClient {
   private readonly sessionRuns = new Map<string, { interactionId: string; socket: Socket }>()
   private readonly interruptedInteractions = new Set<string>()
   private readonly recentlyInterruptedSessions = new Map<string, number>()
+  private readonly pendingInterrupts = new Map<string, { profile: string; interactionId: string; timer: NodeJS.Timeout }>()
 
   constructor(private readonly options: OutboundRelayClientOptions) {}
 
@@ -223,6 +225,7 @@ class PlainWebSocketRelayClient {
     }
     this.socket?.close()
     this.socket = null
+    this.cancelPendingInterrupts()
     this.rejectAudioWaiters(new Error('MCU websocket stopped'))
   }
 
@@ -381,7 +384,7 @@ class PlainWebSocketRelayClient {
     if (event.type === 'mcu.interrupt') {
       const interactionId = typeof event.interactionId === 'string' ? event.interactionId.trim() : ''
       const profile = typeof event.profile === 'string' && event.profile.trim() ? event.profile.trim() : 'default'
-      this.interruptMcuSession(profile, interactionId)
+      this.scheduleMcuInterrupt(profile, interactionId)
       this.sendJson({ type: 'mcu.interrupt.ack', interactionId, profile })
       return
     }
@@ -737,6 +740,47 @@ class PlainWebSocketRelayClient {
     this.sessionRuns.delete(active.sessionId)
   }
 
+  private scheduleMcuInterrupt(profile: string, interactionId: string): void {
+    const sessionId = this.mcuSessionId(profile)
+    this.cancelPendingInterrupt(sessionId)
+    const timer = setTimeout(() => {
+      this.pendingInterrupts.delete(sessionId)
+      this.interruptMcuSession(profile, interactionId)
+    }, MCU_INTERRUPT_DEBOUNCE_MS)
+    this.pendingInterrupts.set(sessionId, { profile, interactionId, timer })
+  }
+
+  private cancelPendingInterrupt(sessionId: string): void {
+    const pending = this.pendingInterrupts.get(sessionId)
+    if (!pending) return
+    clearTimeout(pending.timer)
+    this.pendingInterrupts.delete(sessionId)
+  }
+
+  private cancelPendingInterrupts(): void {
+    for (const pending of this.pendingInterrupts.values()) {
+      clearTimeout(pending.timer)
+    }
+    this.pendingInterrupts.clear()
+  }
+
+  private forgetMcuSessionRun(sessionId: string, interactionId?: string): void {
+    const sessionRun = this.sessionRuns.get(sessionId)
+    if (sessionRun) {
+      this.interruptedInteractions.add(sessionRun.interactionId)
+      this.activeRuns.delete(sessionRun.interactionId)
+      this.sessionRuns.delete(sessionId)
+    }
+    if (interactionId) {
+      this.interruptedInteractions.add(interactionId)
+      const active = this.activeRuns.get(interactionId)
+      if (active?.sessionId === sessionId) {
+        this.activeRuns.delete(interactionId)
+        this.sessionRuns.delete(sessionId)
+      }
+    }
+  }
+
   private interruptMcuSession(profile: string, interactionId?: string): void {
     const sessionId = this.mcuSessionId(profile)
     this.recentlyInterruptedSessions.set(sessionId, Date.now())
@@ -758,7 +802,8 @@ class PlainWebSocketRelayClient {
 
   private clearMcuSession(profile: string, interactionId?: string): void {
     const sessionId = this.mcuSessionId(profile)
-    this.interruptMcuSession(profile, interactionId)
+    this.cancelPendingInterrupt(sessionId)
+    this.forgetMcuSessionRun(sessionId, interactionId)
     const cleared = getChatRunServer()?.clearSessionHistory(sessionId)
     const deleted = cleared?.deleted ?? clearSessionMessages(sessionId)
     const memoryCleared = cleared?.hadMemoryState ?? false

@@ -104,6 +104,7 @@ bool es8311Ready = false;
 bool bootWasPressed = false;
 bool bootLongPressHandled = false;
 bool bootClickPending = false;
+bool bootSecondClickStarted = false;
 bool bootInputArmed = false;
 uint32_t lastOledAtMs = 0;
 uint32_t restartAtMs = 0;
@@ -146,6 +147,7 @@ bool mcuInteractionActive = false;
 bool mcuAudioPlaying = false;
 bool mcuVoiceAfterAudioInterrupt = false;
 bool mcuAudioStopOnlyAfterInterrupt = false;
+bool mcuSessionClearAfterAudioInterrupt = false;
 bool voiceRecordHeardSpeech = false;
 uint32_t mcuInteractionUpdatedAtMs = 0;
 uint32_t mcuAudioStartedAtMs = 0;
@@ -177,6 +179,7 @@ void triggerBootVoiceTurn();
 bool broadcastMcuInterrupt(const String &interactionId, const String &reason);
 void clearMcuAudioQueue();
 void finishMcuAudio(bool interrupted);
+void clearMcuSessionByButton();
 void disconnectMcuSocketClient();
 void connectMcuSocketClient();
 void mcuSocketLoop();
@@ -1098,28 +1101,58 @@ bool shouldInterruptAudioForVoice() {
   bool pressed = digitalRead(kPinBoot) == LOW;
   uint32_t now = millis();
   if (!bootInputArmed) return false;
-  if (!pressed) {
-    if (audioInterruptPressStartedAtMs != 0 &&
-        now - audioInterruptPressStartedAtMs >= kBootDebounceMs &&
-        now - audioInterruptPressStartedAtMs < kBootLongPressMs) {
-      mcuAudioStopOnlyAfterInterrupt = true;
-      lastBootButtonAtMs = now;
-      audioInterruptPressStartedAtMs = 0;
-      return true;
+
+  if (pressed) {
+    if (audioInterruptPressStartedAtMs == 0) {
+      if (bootClickPending && now - bootClickPendingAtMs <= kBootDoubleClickMs) {
+        bootSecondClickStarted = true;
+      }
+      audioInterruptPressStartedAtMs = now;
+      return false;
     }
+    if (now - audioInterruptPressStartedAtMs < kBootLongPressMs) return false;
+
+    bootClickPending = false;
+    bootSecondClickStarted = false;
+    mcuVoiceAfterAudioInterrupt = true;
+    mcuAudioStopOnlyAfterInterrupt = false;
+    mcuSessionClearAfterAudioInterrupt = false;
+    lastBootButtonAtMs = now;
     audioInterruptPressStartedAtMs = 0;
-    return false;
+    return true;
   }
-  if (audioInterruptPressStartedAtMs == 0) {
-    audioInterruptPressStartedAtMs = now;
-    return false;
+
+  if (audioInterruptPressStartedAtMs != 0) {
+    uint32_t heldMs = now - audioInterruptPressStartedAtMs;
+    audioInterruptPressStartedAtMs = 0;
+    if (heldMs >= kBootDebounceMs && heldMs < kBootLongPressMs) {
+      if (bootClickPending && (bootSecondClickStarted || now - bootClickPendingAtMs <= kBootDoubleClickMs)) {
+        bootClickPending = false;
+        bootSecondClickStarted = false;
+        mcuAudioStopOnlyAfterInterrupt = false;
+        mcuSessionClearAfterAudioInterrupt = true;
+        lastBootButtonAtMs = now;
+        return true;
+      }
+      bootClickPending = true;
+      bootSecondClickStarted = false;
+      bootClickPendingAtMs = now;
+    }
   }
-  if (now - audioInterruptPressStartedAtMs < kBootLongPressMs) return false;
-  mcuVoiceAfterAudioInterrupt = true;
-  mcuAudioStopOnlyAfterInterrupt = false;
-  lastBootButtonAtMs = now;
-  audioInterruptPressStartedAtMs = 0;
-  return true;
+
+  if (bootClickPending && !bootSecondClickStarted && now - bootClickPendingAtMs > kBootDoubleClickMs) {
+    bootClickPending = false;
+    mcuAudioStopOnlyAfterInterrupt = true;
+    mcuSessionClearAfterAudioInterrupt = false;
+    lastBootButtonAtMs = now;
+    return true;
+  }
+
+  if (!bootClickPending) {
+    bootSecondClickStarted = false;
+  }
+
+  return false;
 }
 
 void initAudioHardware() {
@@ -2841,6 +2874,14 @@ void startNextMcuAudio() {
     String interruptedInteractionId = mcuCurrentAudio.interactionId;
     bool completionManagedByServer = mcuCurrentAudio.completionManagedByServer;
     finishMcuAudio(!played);
+    if (mcuSessionClearAfterAudioInterrupt) {
+      mcuSessionClearAfterAudioInterrupt = false;
+      mcuAudioStopOnlyAfterInterrupt = false;
+      mcuVoiceAfterAudioInterrupt = false;
+      clearMcuAudioQueue();
+      clearMcuSessionByButton();
+      return;
+    }
     if (mcuVoiceAfterAudioInterrupt) {
       mcuVoiceAfterAudioInterrupt = false;
       broadcastMcuInterrupt(interruptedInteractionId, F("listen"));
@@ -2932,6 +2973,7 @@ void stopMcuAudioQueueByButton() {
   clearMcuAudioQueue();
   mcuVoiceAfterAudioInterrupt = false;
   mcuAudioStopOnlyAfterInterrupt = false;
+  mcuSessionClearAfterAudioInterrupt = false;
   broadcastMcuInterrupt(interactionId, F("button"));
   markMcuInteraction(interactionId, F("aborted"), F(""));
   broadcastMcuStatus();
@@ -2968,6 +3010,7 @@ void clearMcuSessionByButton() {
   clearMcuAudioQueue();
   mcuVoiceAfterAudioInterrupt = false;
   mcuAudioStopOnlyAfterInterrupt = false;
+  mcuSessionClearAfterAudioInterrupt = false;
   broadcastMcuInterrupt(interactionId, F("session_clear"));
   if (!broadcastMcuSessionClear(interactionId)) {
     markMcuInteraction(interactionId, F("failed"), F("SOCKET OFF"));
@@ -3680,6 +3723,7 @@ void handleBootButton() {
     bootWasPressed = false;
     bootLongPressHandled = false;
     bootClickPending = false;
+    bootSecondClickStarted = false;
     audioInterruptPressStartedAtMs = 0;
     if (now < kBootInputArmDelayMs || bootPressed) {
       bootReleaseStartedAtMs = 0;
@@ -3697,6 +3741,16 @@ void handleBootButton() {
   }
 
   if (bootPressed && !bootWasPressed && now - lastBootButtonAtMs > kBootDebounceMs) {
+    if (bootClickPending && now - bootClickPendingAtMs > kBootDoubleClickMs) {
+      bootClickPending = false;
+      bootSecondClickStarted = false;
+      lastBootButtonAtMs = now;
+      stopMcuAudioQueueByButton();
+      return;
+    }
+    if (bootClickPending && now - bootClickPendingAtMs <= kBootDoubleClickMs) {
+      bootSecondClickStarted = true;
+    }
     bootWasPressed = true;
     bootLongPressHandled = false;
     bootPressedAtMs = now;
@@ -3707,6 +3761,7 @@ void handleBootButton() {
       now - bootPressedAtMs >= kBootLongPressMs) {
     bootLongPressHandled = true;
     bootClickPending = false;
+    bootSecondClickStarted = false;
     lastBootButtonAtMs = now;
     triggerBootVoiceTurn();
     return;
@@ -3716,19 +3771,22 @@ void handleBootButton() {
     bootWasPressed = false;
     uint32_t heldMs = now - bootPressedAtMs;
     if (!bootLongPressHandled && heldMs >= kBootDebounceMs) {
-      if (bootClickPending && now - bootClickPendingAtMs <= kBootDoubleClickMs) {
+      if (bootClickPending && (bootSecondClickStarted || now - bootClickPendingAtMs <= kBootDoubleClickMs)) {
         bootClickPending = false;
+        bootSecondClickStarted = false;
         lastBootButtonAtMs = now;
         clearMcuSessionByButton();
       } else {
         bootClickPending = true;
+        bootSecondClickStarted = false;
         bootClickPendingAtMs = now;
       }
     }
   }
 
-  if (bootClickPending && now - bootClickPendingAtMs > kBootDoubleClickMs) {
+  if (!bootWasPressed && bootClickPending && now - bootClickPendingAtMs > kBootDoubleClickMs) {
     bootClickPending = false;
+    bootSecondClickStarted = false;
     lastBootButtonAtMs = now;
     stopMcuAudioQueueByButton();
   }

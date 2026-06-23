@@ -841,6 +841,56 @@ describe('GlobalAgentServer', () => {
     })
   })
 
+  it('cancels a pending MCU interrupt when session clear arrives in the double-click window', async () => {
+    vi.useFakeTimers()
+    try {
+      authMocks.authenticateUserToken.mockResolvedValue({ id: 7, username: 'ada', role: 'user' })
+      authMocks.userCanAccessProfile.mockReturnValue(true)
+      const nsp = createMockNamespace()
+      const io = { of: vi.fn(() => nsp) }
+      const { GlobalAgentServer } = await import('../../packages/server/src/services/global-agent/server')
+
+      const server = new GlobalAgentServer(io as any)
+      server.init()
+
+      const agentSocket = createMockSocket('agent-socket', { token: server.getAuthToken(), instanceId: 'device-1' })
+      await new Promise<void>((resolve, reject) => {
+        nsp.__middleware[0](agentSocket, (err?: Error) => err ? reject(err) : resolve())
+      })
+      nsp.__handlers.get('connection')?.(agentSocket)
+
+      const runSocket = { emit: vi.fn() }
+      ;(server as any).mcuSessionRuns.set('mcu-device-1-research', {
+        interactionId: 'run-1',
+        socket: runSocket,
+      })
+
+      agentSocket.__handlers.get('mcu.interrupt')?.({
+        interactionId: 'run-1',
+        profile: 'research',
+      })
+      expect(runSocket.emit).not.toHaveBeenCalled()
+
+      agentSocket.__handlers.get('mcu.session.clear')?.({
+        interactionId: 'clear-1',
+        profile: 'research',
+      })
+
+      await vi.advanceTimersByTimeAsync(300)
+
+      expect(runSocket.emit).not.toHaveBeenCalled()
+      expect(chatRunMocks.clearSessionHistory).toHaveBeenCalledWith('mcu-device-1-research')
+      expect(agentSocket.emit).toHaveBeenCalledWith('mcu.session.cleared', expect.objectContaining({
+        type: 'mcu.session.cleared',
+        interactionId: 'clear-1',
+        profile: 'research',
+        sessionId: 'mcu-device-1-research',
+      }))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('does not silently clear only the database when chat-run memory is unavailable', async () => {
     chatRunMocks.getChatRunServer.mockReturnValue(null)
     authMocks.authenticateUserToken.mockResolvedValue({ id: 7, username: 'ada', role: 'user' })
