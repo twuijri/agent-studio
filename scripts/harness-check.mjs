@@ -390,6 +390,9 @@ if (!desktopRuntimeAssetName.includes('hermes-runtime-hermes-agent-')) {
 for (const phrase of [
   'websockets',
   'agent-browser@^0.26.0',
+  'HERMES_WINDOWS_CHROME_FOR_TESTING_VERSION',
+  '149.0.7827.55',
+  'pinWindowsChromeForTestingBundle',
   'AGENT_BROWSER_HOME',
   'AGENT_BROWSER_EXECUTABLE_PATH',
   'PLAYWRIGHT_BROWSERS_PATH',
