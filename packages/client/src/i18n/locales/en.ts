@@ -1369,6 +1369,7 @@ export default {
     export: 'Export',
     rename: 'Rename',
     delete: 'Delete',
+    editConfig: 'Edit Config',
     switchTo: 'Switch Hermes Profile',
     switchConfirm: 'This will run `hermes profile use {name}` and change the active Hermes CLI profile. Continue?',
     switchSuccess: 'Hermes active profile switched to "{name}"',
