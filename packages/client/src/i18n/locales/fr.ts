@@ -1,7 +1,7 @@
 export default {
   // Login
   login: {
-    title: 'Hermes Web UI',
+    title: 'Hermes Studio',
     description: 'Entrez votre nom d\'utilisateur et votre mot de passe pour continuer.',
     placeholder: 'Jeton d\'acces',
     submit: 'Connexion',
@@ -18,6 +18,7 @@ export default {
     tooManyAttempts: 'Trop de tentatives echouees, veuillez reessayer plus tard',
     lockResetHint: 'Si c est votre serveur, supprimez le verrouillage de connexion avec :',
     defaultLoginResetHint: 'Pour reinitialiser le mot de passe admin par defaut, executez :',
+    desktopLockResetHint: 'Too many failed login attempts. Open the system tray menu and choose Reset Login to reset the password.',
     sessionExpired: 'La session a expire. Veuillez vous reconnecter.',
     accessDenied: 'Vous n\'avez pas l\'autorisation d\'acceder a cette ressource.',
     passwordMismatch: 'Les mots de passe ne correspondent pas',

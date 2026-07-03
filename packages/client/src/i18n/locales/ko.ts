@@ -1,7 +1,7 @@
 export default {
   // 로그인
   login: {
-    title: 'Hermes Web UI',
+    title: 'Hermes Studio',
     description: '계속하려면 사용자 이름과 비밀번호를 입력하세요.',
     placeholder: '액세스 토큰',
     submit: '로그인',
@@ -18,6 +18,7 @@ export default {
     tooManyAttempts: '로그인 시도 횟수가 너무 많습니다. 잠시 후 다시 시도해 주세요',
     lockResetHint: '본인 서버라면 다음 명령으로 로그인 잠금을 해제할 수 있습니다:',
     defaultLoginResetHint: '기본 admin 비밀번호를 재설정하려면 다음을 실행하세요:',
+    desktopLockResetHint: 'Too many failed login attempts. Open the system tray menu and choose Reset Login to reset the password.',
     sessionExpired: '로그인이 만료되었습니다. 다시 로그인해 주세요.',
     accessDenied: '이 리소스에 접근할 권한이 없습니다.',
     passwordMismatch: '비밀번호가 일치하지 않습니다',

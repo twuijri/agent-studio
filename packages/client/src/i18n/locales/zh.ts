@@ -1,7 +1,7 @@
 export default {
   // 登录
   login: {
-    title: 'Hermes Web UI',
+    title: 'Hermes Studio',
     description: '输入用户名和密码以继续。',
     placeholder: '访问令牌',
     submit: '登录',
@@ -18,6 +18,7 @@ export default {
     tooManyAttempts: '登录失败次数过多，请稍后重试',
     lockResetHint: '如果这是你的服务器，可以执行以下命令清除登录锁定：',
     defaultLoginResetHint: '如需重置默认 admin 密码，可以执行：',
+    desktopLockResetHint: '登录失败次数过多。请打开系统托盘菜单，选择“重置登录”来重置密码。',
     sessionExpired: '登录已过期，请重新登录',
     accessDenied: '你没有权限访问该资源',
     passwordMismatch: '两次密码不一致',

@@ -1,7 +1,7 @@
 export default {
 
   login: {
-    title: 'Hermes Web UI',
+    title: 'Hermes Studio',
     description: 'Введите имя пользователя и пароль для продолжения.',
     placeholder: 'Токен доступа',
     submit: 'Войти',
@@ -16,6 +16,7 @@ export default {
     credentialsRequired: 'Введите имя пользователя и пароль',
     invalidCredentials: 'Неверное имя пользователя или пароль',
     tooManyAttempts: 'Слишком много неудачных попыток входа, повторите попытку позже',
+    desktopLockResetHint: 'Too many failed login attempts. Open the system tray menu and choose Reset Login to reset the password.',
     sessionExpired: 'Сеанс истёк, войдите снова',
     accessDenied: 'У вас нет прав доступа к этому ресурсу',
     passwordMismatch: 'Пароли не совпадают',

@@ -1,7 +1,7 @@
 export default {
   // Login
   login: {
-    title: 'Hermes Web UI',
+    title: 'Hermes Studio',
     description: 'Introduce tu nombre de usuario y contrasena para continuar.',
     placeholder: 'Token de acceso',
     submit: 'Iniciar sesion',
@@ -18,6 +18,7 @@ export default {
     tooManyAttempts: 'Demasiados intentos fallidos, por favor intente mas tarde',
     lockResetHint: 'Si este es su servidor, borre el bloqueo de inicio de sesion con:',
     defaultLoginResetHint: 'Para restablecer la contrasena admin predeterminada, ejecute:',
+    desktopLockResetHint: 'Too many failed login attempts. Open the system tray menu and choose Reset Login to reset the password.',
     sessionExpired: 'La sesion expiro. Inicia sesion de nuevo.',
     accessDenied: 'No tienes permiso para acceder a este recurso.',
     passwordMismatch: 'Las contrasenas no coinciden',

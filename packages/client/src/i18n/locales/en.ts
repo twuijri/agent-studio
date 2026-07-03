@@ -1,7 +1,7 @@
 export default {
   // Login
   login: {
-    title: 'Hermes Web UI',
+    title: 'Hermes Studio',
     description: 'Enter your username and password to continue.',
     placeholder: 'Access token',
     submit: 'Login',
@@ -18,6 +18,7 @@ export default {
     tooManyAttempts: 'Too many failed attempts, please try again later',
     lockResetHint: 'If this is your server, clear the login lock with:',
     defaultLoginResetHint: 'To reset the default admin password, run:',
+    desktopLockResetHint: 'Too many failed login attempts. Open the system tray menu and choose Reset Login to reset the password.',
     sessionExpired: 'Login expired. Please sign in again.',
     accessDenied: 'You do not have permission to access this resource.',
     passwordMismatch: 'Passwords do not match',

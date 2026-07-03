@@ -184,13 +184,19 @@ async function ensureDesktopAuth(): Promise<void> {
   }
 }
 
+function isDesktopShell(): boolean {
+  return (window as typeof window & {
+    hermesDesktop?: { isDesktop?: boolean }
+  }).hermesDesktop?.isDesktop === true
+}
+
 router.beforeEach(async (to, _from, next) => {
   await ensureDesktopAuth()
 
   // Public pages don't need auth
   if (to.meta.public) {
     // Already has key, skip login
-    if (to.name === 'login' && hasApiKey()) {
+    if (to.name === 'login' && hasApiKey() && !isDesktopShell()) {
       next({ path: '/hermes/chat' })
       return
     }
