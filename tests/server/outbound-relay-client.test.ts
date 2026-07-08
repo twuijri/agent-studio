@@ -324,7 +324,7 @@ describe('outbound relay client', () => {
       interactionId: 'voice-stream-1',
       offset: 0,
       bytes: 4,
-      data: Buffer.from([1, 2, 3, 4]).toString('base64'),
+      data: Buffer.from([1, 2, 3, 4]),
     }))
     expect(localGlobalAgentSocket.emit).toHaveBeenCalledWith('voice.stream.end', expect.objectContaining({
       type: 'voice.stream.end',
@@ -345,6 +345,101 @@ describe('outbound relay client', () => {
         status: 'thinking',
       }))
     })
+  })
+
+  it('preserves local MCU audio enqueue order while uploading audio to the relay', async () => {
+    let uploadCount = 0
+    let releaseFirstUpload: (() => void) | undefined
+    const firstUploadStarted = new Promise<void>((resolve) => {
+      const fetchImpl = vi.fn(async (url: string) => {
+        if (url.includes('/api/hermes/mcu/audio/slow.pcm')) {
+          return new Response(new Uint8Array([1, 2, 3]), {
+            status: 200,
+            headers: { 'content-type': 'audio/x-pcm' },
+          })
+        }
+        if (url.includes('/api/hermes/mcu/audio/fast.pcm')) {
+          return new Response(new Uint8Array([4, 5, 6]), {
+            status: 200,
+            headers: { 'content-type': 'audio/x-pcm' },
+          })
+        }
+        if (url === 'http://device.local:8787/global-agent/audio') {
+          uploadCount += 1
+          const uploadIndex = uploadCount
+          if (uploadIndex === 1) {
+            resolve()
+            await new Promise<void>((release) => {
+              releaseFirstUpload = release
+            })
+          }
+          return new Response(JSON.stringify({
+            ok: true,
+            url: `http://device.local:8787/global-agent/audio/audio-${uploadIndex}?token=download-token`,
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        }
+        return new Response('not found', { status: 404 })
+      })
+
+      void import('../../packages/server/src/services/global-agent/outbound-relay-client').then(({ startOutboundRelayClient }) => {
+        startOutboundRelayClient({
+          relayUrl: 'http://device.local:8787',
+          relayProtocol: 'mcu-socket.io',
+          userToken: 'user-jwt',
+          instanceId: 'mcu-1',
+          deviceCode: 'device-code-1',
+          localBaseUrl: 'http://127.0.0.1:8648',
+          fetchImpl: fetchImpl as any,
+        })
+      })
+    })
+
+    await vi.waitFor(() => {
+      expect(sockets.length).toBeGreaterThan(0)
+    })
+    const remoteSocket = connectRemoteSocket()
+    emitRemote(remoteSocket, 'mcu.auth.ok', {
+      type: 'mcu.auth.ok',
+      audioUpload: {
+        url: '/global-agent/audio',
+        token: 'upload-token',
+      },
+    })
+    emitRemote(remoteSocket, 'voice.stream.start', {
+      type: 'voice.stream.start',
+      interactionId: 'voice-order',
+      profile: 'default',
+    })
+    const localGlobalAgentSocket = sockets.at(-1)
+
+    localGlobalAgentSocket.__anyHandlers[0]('audio.enqueue', {
+      type: 'audio.enqueue',
+      interactionId: 'voice-order',
+      segmentId: 'voice-order-tts-1',
+      url: '/api/hermes/mcu/audio/slow.pcm',
+    })
+    localGlobalAgentSocket.__anyHandlers[0]('audio.enqueue', {
+      type: 'audio.enqueue',
+      interactionId: 'voice-order',
+      segmentId: 'voice-order-tts-2',
+      url: '/api/hermes/mcu/audio/fast.pcm',
+    })
+
+    await firstUploadStarted
+    expect(remoteSocket.emit).not.toHaveBeenCalledWith('audio.enqueue', expect.any(Object))
+    releaseFirstUpload?.()
+
+    await vi.waitFor(() => {
+      const enqueues = remoteSocket.emit.mock.calls.filter(([event]: [string]) => event === 'audio.enqueue')
+      expect(enqueues).toHaveLength(2)
+    })
+    const segmentIds = remoteSocket.emit.mock.calls
+      .filter(([event]: [string]) => event === 'audio.enqueue')
+      .map(([, payload]: [string, { segmentId: string }]) => payload.segmentId)
+    expect(segmentIds).toEqual(['voice-order-tts-1', 'voice-order-tts-2'])
   })
 
   it('uploads Socket.IO MCU TTS audio to the remote relay before enqueueing playback', async () => {
@@ -423,13 +518,13 @@ describe('outbound relay client', () => {
     expect(uploadCall).toBeTruthy()
     expect(uploadCall?.[1].headers).toMatchObject({
       Authorization: 'Bearer upload-token',
-      'Content-Type': 'audio/x-pcm',
+      'Content-Type': 'audio/x-ima-adpcm',
       'X-Device-Code': 'device-code-1',
       'X-Audio-Sample-Rate': '24000',
       'X-Audio-Channels': '1',
     })
     expect(uploadCall?.[1].body).toBeInstanceOf(Uint8Array)
-    expect(Buffer.from(uploadCall?.[1].body as Uint8Array)).toEqual(pcm)
+    expect(Buffer.from(uploadCall?.[1].body as Uint8Array).subarray(0, 4).toString('ascii')).toBe('HADP')
   })
 
   it('queues the hosted TTS-failed prompt when Socket.IO MCU speech synthesis fails', async () => {
