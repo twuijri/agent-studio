@@ -987,6 +987,10 @@ export default {
     promptPlaceholder: 'The prompt to execute',
     skills: 'Skills',
     skillsPlaceholder: 'Select skills...',
+    provider: 'Provider',
+    model: 'Model',
+    defaultProvider: 'Default provider',
+    defaultModel: 'Default model',
     deliverTarget: 'Deliver Target',
     origin: 'Origin',
     local: 'Local',
@@ -1011,6 +1015,7 @@ export default {
     },
     info: {
       model: 'Model',
+      provider: 'Provider',
       schedule: 'Schedule',
       lastRun: 'Last Run',
       nextRun: 'Next Run',
