@@ -17,6 +17,7 @@ import { getGlobalEkkoAgent } from '../../ekko-agent/manager'
 import { resolveEkkoMcpServers } from '../../ekko-agent/mcp'
 import { createSession, addMessage, getSession, updateSession, updateSessionStats } from '../../../db/hermes/session-store'
 import { logger } from '../../logger'
+import { recordSessionUsage } from '../../usage-recorder'
 import { getProfileDir } from '../hermes-profile'
 import { observeRunChatPetEvent } from '../pet-state-socket'
 import { contentBlocksToString, extractTextForPreview } from './content-blocks'
@@ -514,7 +515,7 @@ export async function handleEkkoAgentRun(
   let runId = ''
   let usageInput = 0
   let usageOutput = 0
-  let sawStreamUsage = false
+  let usageCallIndex = 0
   let contextEstimate: any
   const handleRuntimeEvent = (event: AgentRuntimeEvent) => {
     if ('runId' in event) runId = event.runId
@@ -551,10 +552,6 @@ export async function handleEkkoAgentRun(
           })
         }
       }
-      if (event.message.usage && !sawStreamUsage) {
-        usageInput += event.message.usage.inputTokens || 0
-        usageOutput += event.message.usage.outputTokens || 0
-      }
     } else if (event.type === 'model.delta') {
       assistantText += event.text
       emit('message.delta', {
@@ -563,9 +560,22 @@ export async function handleEkkoAgentRun(
         delta: event.text,
       })
     } else if (event.type === 'model.usage') {
-      sawStreamUsage = true
       usageInput += event.usage.inputTokens || 0
       usageOutput += event.usage.outputTokens || 0
+      usageCallIndex += 1
+      recordSessionUsage({
+        sessionId,
+        runId: `${event.runId}:step:${event.step}:call:${usageCallIndex}`,
+        source: 'ekko_agent',
+        agent: 'ekko_agent',
+        usageScope: 'model_call',
+        apiCalls: 1,
+        usage: event.usage,
+        profile,
+        model: modelConfig.model,
+        provider: modelConfig.provider,
+        isEstimated: false,
+      })
     } else if (event.type === 'model.context') {
       emit('context.updated', {
         event: 'context.updated',

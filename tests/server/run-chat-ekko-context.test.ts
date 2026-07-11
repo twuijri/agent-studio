@@ -7,6 +7,7 @@ const updateSessionMock = vi.hoisted(() => vi.fn())
 const updateSessionStatsMock = vi.hoisted(() => vi.fn())
 const resolveBridgeRunModelConfigMock = vi.hoisted(() => vi.fn())
 const agentRunMock = vi.hoisted(() => vi.fn())
+const recordSessionUsageMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../../packages/server/src/db/hermes/session-store', () => ({
   getSession: getSessionMock,
@@ -61,6 +62,10 @@ vi.mock('../../packages/server/src/services/hermes/pet-state-socket', () => ({
 
 vi.mock('../../packages/server/src/services/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}))
+
+vi.mock('../../packages/server/src/services/usage-recorder', () => ({
+  recordSessionUsage: recordSessionUsageMock,
 }))
 
 function makeHarness() {
@@ -139,6 +144,17 @@ describe('ekko-agent context usage events', () => {
           toolCount: 5,
         },
       })
+      input.onEvent({
+        type: 'model.usage',
+        runId: 'run-1',
+        step: 2,
+        usage: {
+          inputTokens: 3,
+          outputTokens: 2,
+          cacheReadTokens: 1,
+          reasoningTokens: 1,
+        },
+      })
       return {
         runId: 'run-1',
         output: { role: 'assistant', content: 'done', usage: { inputTokens: 3, outputTokens: 2 } },
@@ -171,6 +187,24 @@ describe('ekko-agent context usage events', () => {
       contextTokens: 30_000,
     }))
     expect(state.contextTokens).toBe(30_000)
+    expect(recordSessionUsageMock).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      runId: 'run-1:step:2:call:1',
+      source: 'ekko_agent',
+      agent: 'ekko_agent',
+      usageScope: 'model_call',
+      apiCalls: 1,
+      usage: {
+        inputTokens: 3,
+        outputTokens: 2,
+        cacheReadTokens: 1,
+        reasoningTokens: 1,
+      },
+      profile: 'default',
+      model: 'ekko-test-model',
+      provider: 'test-provider',
+      isEstimated: false,
+    })
     expect(updateSessionMock).toHaveBeenCalledWith('session-1', expect.objectContaining({
       ended_at: null,
       end_reason: null,
