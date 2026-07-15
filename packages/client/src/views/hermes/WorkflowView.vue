@@ -12,7 +12,19 @@ import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import { useI18n } from 'vue-i18n'
+import { buildWorkflowEvidenceRows, latestWorkflowNodeSession, type WorkflowEvidenceRow } from '@/utils/workflow-history'
+import {
+  inferWorkflowConditionValueType,
+  parseWorkflowConditionValue,
+  requiredWorkflowConditionValueType,
+  serializeWorkflowConditionValueForType,
+  workflowConditionNeedsValue,
+  type WorkflowConditionValueType,
+} from '@/utils/workflow-edge-condition'
+import { workflowImportConfirmationText } from '@/utils/workflow-import'
+import { createConnectedAgentTransaction, type CanvasTransaction } from '@/utils/workflow-canvas'
 import WorkflowAgentNode from '@/components/hermes/workflow/WorkflowAgentNode.vue'
+import WorkflowFieldHelp from '@/components/hermes/workflow/WorkflowFieldHelp.vue'
 import FolderPicker from '@/components/hermes/chat/FolderPicker.vue'
 import ChatInput from '@/components/hermes/chat/ChatInput.vue'
 import MessageList from '@/components/hermes/chat/MessageList.vue'
@@ -27,9 +39,14 @@ import {
   approveWorkflowNode,
   batchDeleteWorkflows,
   createWorkflow as createWorkflowApi,
+  cancelWorkflowImport,
+  confirmWorkflowImport,
   deleteWorkflowRun,
   deleteWorkflow as deleteWorkflowApi,
+  exportWorkflow,
+  fetchWorkflowRun,
   listWorkflowRuns,
+  previewWorkflowImport,
   listWorkflows as listWorkflowsApi,
   rerunWorkflowRunFromNode,
   runWorkflowNow,
@@ -42,6 +59,7 @@ import {
 import {
   disconnectWorkflowSocket,
   listWorkflowsSocket,
+  onWorkflowStatusError,
   onWorkflowStatusUpdated,
   subscribeWorkflowStatuses,
   type WorkflowRuntimeState,
@@ -69,15 +87,25 @@ const appStore = useAppStore()
 const chatStore = useChatStore()
 const profilesStore = useProfilesStore()
 const message = useMessage()
-const { screenToFlowCoordinate, getViewport, setViewport } = useVueFlow('hermes-workflow')
+const {
+  screenToFlowCoordinate, getViewport, setViewport, setNodes, setEdges, updateNodeInternals,
+  findNode, addSelectedNodes, removeSelectedElements,
+} = useVueFlow('hermes-workflow')
 const defaultViewport: WorkflowViewport = { x: 80, y: 80, zoom: 0.75 }
 const workflowBodyRef = ref<HTMLElement | null>(null)
 const workflowCanvasRef = ref<HTMLElement | null>(null)
+const workflowImportInputRef = ref<HTMLInputElement | null>(null)
+const workflowImportConfirmVisible = ref(false)
+const workflowImportPreview = ref<Awaited<ReturnType<typeof previewWorkflowImport>> | null>(null)
+const workflowImportProfile = ref('default')
+const workflowImportConfirming = ref(false)
 const WORKFLOW_CHAT_PANEL_MIN_WIDTH = 360
 const WORKFLOW_CHAT_PANEL_DEFAULT_WIDTH = 560
 const WORKFLOW_CANVAS_MIN_WIDTH = 360
 const WORKFLOW_RUNS_PANEL_WIDTH = 280
 const WORKFLOW_CHAT_PANEL_STORAGE_KEY = 'hermes.workflow.chatPanelWidth'
+const WORKFLOW_NODE_DEFAULT_WIDTH = 300
+const WORKFLOW_NODE_DEFAULT_HEIGHT = 550
 
 interface WorkflowNode {
   id: string
@@ -86,6 +114,12 @@ interface WorkflowNode {
   dragHandle: string
   style: { width: string; height: string }
   data: WorkflowAgentNodeData
+}
+
+interface WorkflowEdgeOrchestration {
+  route: 'success' | 'failure' | 'always'
+  condition?: { path: string; operator: string; value?: unknown }
+  feedback?: { maxIterations: number; loopId?: string }
 }
 
 interface WorkflowEdge {
@@ -97,6 +131,7 @@ interface WorkflowEdge {
   type: 'smoothstep'
   animated?: boolean
   markerEnd?: MarkerType
+  data?: { orchestration?: WorkflowEdgeOrchestration }
 }
 
 interface WorkflowDocument {
@@ -117,6 +152,84 @@ const contextMenuX = ref(0)
 const contextMenuY = ref(0)
 const contextMenuOpenedAt = ref(0)
 const contextMenuTarget = ref<{ type: 'node' | 'edge'; id: string } | null>(null)
+const edgeEditorVisible = ref(false)
+const edgeEditorId = ref('')
+const edgeEditorRoute = ref<'success' | 'failure' | 'always'>('success')
+const edgeEditorConditionPath = ref('')
+const edgeEditorConditionPathPreset = ref<'route-only' | 'output' | 'error' | 'custom'>('route-only')
+const edgeEditorConditionOperator = ref('equals')
+const edgeEditorConditionValueType = ref<WorkflowConditionValueType>('string')
+const edgeEditorConditionValue = ref('')
+const edgeEditorFeedback = ref(false)
+const edgeEditorMaxIterations = ref('3')
+const edgeEditorLoopId = ref('')
+const LOOP_ID_AUTOMATIC = '__automatic__'
+const workflowEdgeRouteOptions = computed(() => (['success', 'failure', 'always'] as const).map(value => ({
+  value,
+  label: t(`workflow.edgeEditor.routes.${value}`),
+})))
+const workflowEdgeOperatorValues = [
+  'equals', 'not_equals', 'contains', 'not_contains', 'exists', 'not_exists',
+  'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'in', 'not_in',
+] as const
+const workflowEdgeOperatorOptions = computed(() => workflowEdgeOperatorValues.map(value => ({
+  value,
+  label: t(`workflow.edgeEditor.operators.${value}`),
+})))
+const workflowEdgeOperatorHelp = computed(() => t(`workflow.edgeEditor.operatorHelp.${edgeEditorConditionOperator.value}`))
+const workflowConditionValueTypeValues: WorkflowConditionValueType[] = ['string', 'number', 'boolean', 'null', 'array', 'object']
+const workflowConditionValueTypeOptions = computed(() => workflowConditionValueTypeValues.map(value => ({
+  value,
+  label: t(`workflow.edgeEditor.valueTypes.${value}`),
+})))
+const requiredConditionValueType = computed(() => requiredWorkflowConditionValueType(edgeEditorConditionOperator.value))
+const workflowConditionValueTypeDisabled = computed(() => requiredConditionValueType.value !== null)
+const workflowConditionValuePlaceholder = computed(() => t(`workflow.edgeEditor.conditionValuePlaceholders.${edgeEditorConditionValueType.value}`))
+const workflowConditionValueError = computed(() => {
+  if (edgeEditorConditionPathPreset.value === 'route-only' || !workflowConditionNeedsValue(edgeEditorConditionOperator.value)) return ''
+  try {
+    parseWorkflowConditionValue(
+      edgeEditorConditionValue.value,
+      edgeEditorConditionOperator.value,
+      edgeEditorConditionValueType.value,
+    )
+    return ''
+  } catch {
+    return t(`workflow.edgeEditor.invalidValueTypes.${edgeEditorConditionValueType.value}`)
+  }
+})
+const workflowConditionPathOptions = computed(() => {
+  const options = [{ label: t('workflow.edgeEditor.conditionPathOptions.routeOnly'), value: 'route-only' }]
+  if (edgeEditorRoute.value !== 'failure') {
+    options.push({
+      label: t(edgeEditorRoute.value === 'success'
+        ? 'workflow.edgeEditor.conditionPathOptions.outputRecommended'
+        : 'workflow.edgeEditor.conditionPathOptions.output'),
+      value: 'output',
+    })
+  }
+  if (edgeEditorRoute.value !== 'success') {
+    options.push({
+      label: t(edgeEditorRoute.value === 'failure'
+        ? 'workflow.edgeEditor.conditionPathOptions.errorRecommended'
+        : 'workflow.edgeEditor.conditionPathOptions.error'),
+      value: 'error',
+    })
+  }
+  options.push({ label: t('workflow.edgeEditor.conditionPathOptions.custom'), value: 'custom' })
+  return options
+})
+const automaticLoopId = computed(() => `loop:${edgeEditorId.value || 'edge'}`)
+const workflowLoopIdOptions = computed(() => [
+  { label: t('workflow.edgeEditor.loopIdAutomatic', { id: automaticLoopId.value }), value: LOOP_ID_AUTOMATIC },
+  ...(edgeEditorLoopId.value ? [{ label: edgeEditorLoopId.value, value: edgeEditorLoopId.value }] : []),
+])
+const edgeEditorLoopIdSelection = computed({
+  get: () => edgeEditorLoopId.value || LOOP_ID_AUTOMATIC,
+  set: (value: string) => { edgeEditorLoopId.value = value === LOOP_ID_AUTOMATIC ? '' : value },
+})
+const connectionStartNodeId = ref<string | null>(null)
+const lastCanvasTransaction = ref<CanvasTransaction<WorkflowNode, WorkflowEdge> | null>(null)
 const workflowRunContextMenuVisible = ref(false)
 const workflowRunContextMenuX = ref(0)
 const workflowRunContextMenuY = ref(0)
@@ -149,6 +262,7 @@ const workflowRunsLoading = ref(false)
 const rerunningWorkflowNodeId = ref<string | null>(null)
 const showWorkflowRunsPanel = ref(true)
 const selectedWorkflowRunId = ref<string | null>(null)
+const workflowEvidenceExpanded = ref(false)
 const manuallyDeselectedWorkflowRunIds = ref<Set<string>>(new Set())
 const autoSelectRunningWorkflowIds = ref<Set<string>>(new Set())
 const workflowChatPanelVisible = ref(false)
@@ -156,6 +270,7 @@ const workflowChatPanelLoading = ref(false)
 const workflowChatPanelTitle = ref('')
 const workflowChatPanelNodeId = ref<string | null>(null)
 const workflowChatPanelSessionId = ref<string | null>(null)
+const workflowChatPanelExecutionId = ref<string | null>(null)
 const workflowApprovalSubmitting = ref(false)
 const workflowChatPanelWidth = ref(loadWorkflowChatPanelWidth())
 const workflowChatResizeStart = ref<{ x: number; width: number } | null>(null)
@@ -164,6 +279,7 @@ const skillOptionsLoadingByKey = ref<Record<string, boolean>>({})
 const skillOptionRequests = new Map<string, Promise<void>>()
 const runtimeStatusByWorkflowId = ref<Record<string, WorkflowRuntimeStatus>>({})
 let removeWorkflowStatusListener: (() => void) | null = null
+let removeWorkflowStatusErrorListener: (() => void) | null = null
 let mobileQuery: MediaQueryList | null = null
 let applyingWorkflow = false
 let workflowRunsLoadSeq = 0
@@ -257,7 +373,10 @@ const contextMenuOptions = computed<DropdownOption[]>(() => {
     return options
   }
   if (target?.type === 'edge') {
-    return [{ key: 'delete-edge', label: t('workflow.actions.deleteEdge') }]
+    return [
+      { key: 'edit-edge', label: t('workflow.actions.editEdge') },
+      { key: 'delete-edge', label: t('workflow.actions.deleteEdge') },
+    ]
   }
   return [{ key: 'delete-node', label: t('workflow.actions.deleteNode') }]
 })
@@ -352,17 +471,19 @@ function makeNode(
     type: 'agent',
     position,
     dragHandle: '.node-header',
-    style: { width: '280px', height: '420px' },
+    style: { width: `${WORKFLOW_NODE_DEFAULT_WIDTH}px`, height: `${WORKFLOW_NODE_DEFAULT_HEIGHT}px` },
     data: {
       title,
       agent: data.agent || agentOptions.value[0]?.value || 'hermes',
       provider: data.provider || defaultModelSelection.value.provider,
       model: data.model || defaultModelSelection.value.model,
       apiMode: data.apiMode || defaultApiMode(data.provider || defaultModelSelection.value.provider),
+      reasoningEffort: data.reasoningEffort || 'default',
       input: data.input || '',
       skills: data.skills || [],
       images: data.images || [],
       approvalRequired: data.approvalRequired === true,
+      orchestration: { join: data.orchestration?.join === 'any' ? 'any' : 'all' },
       status: data.status || 'idle',
       agentOptions: agentOptions.value,
       skillOptions: skillOptionsForAgent(data.agent || agentOptions.value[0]?.value || 'hermes'),
@@ -397,6 +518,11 @@ const selectedWorkflowRun = computed(() =>
     ? workflowRuns.value.find(run => run.id === selectedWorkflowRunId.value) || null
     : null,
 )
+const selectedWorkflowEvidenceRows = computed(() => selectedWorkflowRun.value ? buildWorkflowEvidenceRows(selectedWorkflowRun.value) : [])
+
+watch(selectedWorkflowRunId, () => {
+  workflowEvidenceExpanded.value = false
+})
 
 const workflowChatPanelPendingApproval = computed(() => {
   const run = selectedWorkflowRun.value
@@ -427,6 +553,7 @@ onMounted(() => {
   mobileQuery.addEventListener('change', handleMobileChange)
   window.addEventListener('hermes:open-page-sidebar', openPageSidebar)
   window.addEventListener('resize', handleWorkflowChatPanelViewportResize)
+  window.addEventListener('keydown', handleWorkflowUndoShortcut)
   handleWorkflowChatPanelViewportResize()
   void initializeWorkflowPage()
 })
@@ -435,9 +562,12 @@ onUnmounted(() => {
   mobileQuery?.removeEventListener('change', handleMobileChange)
   window.removeEventListener('hermes:open-page-sidebar', openPageSidebar)
   window.removeEventListener('resize', handleWorkflowChatPanelViewportResize)
+  window.removeEventListener('keydown', handleWorkflowUndoShortcut)
   stopWorkflowChatResize()
   removeWorkflowStatusListener?.()
   removeWorkflowStatusListener = null
+  removeWorkflowStatusErrorListener?.()
+  removeWorkflowStatusErrorListener = null
   disconnectWorkflowSocket()
 })
 
@@ -513,6 +643,7 @@ function closeWorkflowChatPanel() {
   workflowChatPanelVisible.value = false
   workflowChatPanelNodeId.value = null
   workflowChatPanelSessionId.value = null
+  workflowChatPanelExecutionId.value = null
   workflowChatPanelTitle.value = ''
 }
 
@@ -579,10 +710,12 @@ function serializeWorkflowNodes(source: WorkflowNode[]): unknown[] {
       provider: node.data.provider,
       model: node.data.model,
       apiMode: node.data.apiMode,
+      reasoningEffort: node.data.reasoningEffort,
       input: node.data.input,
       skills: [...node.data.skills],
       images: [...node.data.images],
       approvalRequired: node.data.approvalRequired === true,
+      orchestration: { join: node.data.orchestration?.join === 'any' ? 'any' : 'all' },
     },
   }))
 }
@@ -610,12 +743,13 @@ function currentWorkflowViewport(): WorkflowViewport {
 function normalizeStoredNode(raw: unknown, index: number): WorkflowNode {
   const record = raw && typeof raw === 'object' ? raw as Record<string, any> : {}
   const data = record.data && typeof record.data === 'object' ? record.data as Partial<WorkflowAgentNodeData> : {}
-  const position = record.position && typeof record.position === 'object'
-    ? {
-        x: Number((record.position as any).x || 80 + index * 320),
-        y: Number((record.position as any).y || 120),
-      }
-    : { x: 80 + index * 320, y: 120 }
+  const rawPosition = record.position && typeof record.position === 'object' ? record.position as Record<string, unknown> : {}
+  const rawX = Number(rawPosition.x)
+  const rawY = Number(rawPosition.y)
+  const position = {
+    x: Number.isFinite(rawX) ? rawX : 80 + index * 320,
+    y: Number.isFinite(rawY) ? rawY : 120,
+  }
   const node = makeNode(
     typeof record.id === 'string' && record.id ? record.id : `agent-${index + 1}`,
     typeof data.title === 'string' && data.title ? data.title : t('workflow.newNodeTitle', { count: index + 1 }),
@@ -625,10 +759,12 @@ function normalizeStoredNode(raw: unknown, index: number): WorkflowNode {
       provider: data.provider,
       model: data.model,
       apiMode: data.apiMode,
+      reasoningEffort: typeof data.reasoningEffort === 'string' ? data.reasoningEffort : 'default',
       input: data.input,
       skills: Array.isArray(data.skills) ? data.skills.filter(item => typeof item === 'string') : [],
       images: Array.isArray(data.images) ? data.images.filter(item => typeof item === 'string') : [],
       approvalRequired: data.approvalRequired === true,
+      orchestration: { join: data.orchestration?.join === 'any' ? 'any' : 'all' },
       status: 'idle',
     },
   )
@@ -654,6 +790,7 @@ function normalizeStoredEdge(raw: unknown): WorkflowEdge | null {
     type: 'smoothstep',
     animated: Boolean(record.animated),
     markerEnd: MarkerType.ArrowClosed,
+    data: record.data && typeof record.data === 'object' ? { ...record.data } : undefined,
   }
 }
 
@@ -685,9 +822,14 @@ async function initializeWorkflowPage() {
   await profilesStore.fetchProfiles()
   createWorkflowProfile.value = defaultWorkflowProfile.value
   removeWorkflowStatusListener = onWorkflowStatusUpdated(handleWorkflowRuntimeStatus)
+  removeWorkflowStatusErrorListener = onWorkflowStatusError((error) => {
+    console.error('Workflow execution evidence read failed:', error)
+    message.error(error.error || t('workflow.evidence.loadFailed'))
+  })
   await loadWorkflows()
   void subscribeWorkflowStatuses().then(applyWorkflowRuntimeStatuses).catch((err) => {
     console.error('Failed to subscribe workflow statuses:', err)
+    message.error(err?.message || t('workflow.evidence.loadFailed'))
   })
 }
 
@@ -696,10 +838,10 @@ async function loadWorkflows() {
   try {
     let records: WorkflowRecord[]
     try {
-      records = await listWorkflowsSocket()
-    } catch (socketErr) {
-      console.warn('Failed to load workflows from socket, falling back to HTTP:', socketErr)
       records = await listWorkflowsApi()
+    } catch (httpErr) {
+      console.warn('Failed to load workflows from HTTP, falling back to socket:', httpErr)
+      records = await listWorkflowsSocket()
     }
     const docs = records.map(workflowDocumentFromRecord)
     const previousActiveId = activeWorkflowId.value
@@ -737,6 +879,7 @@ function workflowNodeStatusFromRuntime(status?: WorkflowRuntimeStatus, nodeId?: 
     case 'running':
     case 'pending_approval':
     case 'completed':
+    case 'skipped':
     case 'failed':
     case 'approval_rejected':
     case 'canceled':
@@ -773,6 +916,54 @@ function workflowRunStatusLabel(status: string): string {
   return t(`workflow.status.${key}`)
 }
 
+function workflowEvidenceTitle(row: WorkflowEvidenceRow): string {
+  if (row.kind === 'edge') {
+    return t('workflow.evidence.pathTitle', { source: row.sourceTitle || row.technicalId, target: row.targetTitle || row.technicalId })
+  }
+  if (row.kind === 'loop') return t('workflow.evidence.loopPass', { count: (row.iteration ?? 0) + 1 })
+  return row.nodeTitle || row.technicalId
+}
+
+function workflowEvidenceStatusLabel(row: WorkflowEvidenceRow): string {
+  if (row.kind === 'edge') {
+    if (row.status === 'taken') return t('workflow.evidence.statuses.taken')
+    if (row.status === 'not_taken') return t('workflow.evidence.statuses.notTaken')
+    return t('workflow.evidence.statuses.evaluationFailed')
+  }
+  if (row.status === 'timed_out') return t('workflow.evidence.statuses.timedOut')
+  if (row.status === 'blocked') return t('workflow.evidence.statuses.blocked')
+  return workflowRunStatusLabel(row.status)
+}
+
+function workflowEvidenceDescription(row: WorkflowEvidenceRow): string {
+  if (row.kind === 'edge') {
+    if (row.status === 'taken') {
+      const route = row.route === 'failure' ? 'failure' : row.route === 'always' ? 'always' : 'success'
+      return t(`workflow.evidence.routes.${route}`)
+    }
+    if (row.status === 'error') return t('workflow.evidence.reasons.evaluationFailed')
+    const reason = row.reason === 'condition_not_matched'
+      ? 'conditionNotMatched'
+      : row.reason === 'iteration_limit_reached'
+        ? 'iterationLimitReached'
+        : 'routeNotMatched'
+    return t(`workflow.evidence.reasons.${reason}`)
+  }
+  if (row.kind === 'loop') {
+    const exit = row.exitReason === 'feedback_taken'
+      ? 'continued'
+      : row.exitReason === 'iteration_limit_reached'
+        ? 'iterationLimitReached'
+        : row.exitReason === 'condition_not_matched'
+          ? 'conditionNotMatched'
+          : row.exitReason === 'route_not_matched' || row.exitReason === 'feedback_not_taken'
+            ? 'finished'
+            : null
+    return exit ? t(`workflow.evidence.loopOutcomes.${exit}`) : row.exitReason || workflowEvidenceStatusLabel(row)
+  }
+  return row.error || t('workflow.evidence.exceptionalNode')
+}
+
 function formatWorkflowRunTime(timestamp: number | null): string {
   if (!timestamp) return '-'
   return new Date(timestamp).toLocaleString()
@@ -799,7 +990,7 @@ function workflowNodeStatusFromRun(run: WorkflowRunRecord, nodeId: string): Work
   const runtimeStatus = runtimeStatusByWorkflowId.value[run.workflow_id]
   if (runtimeStatus?.runId === run.id) return workflowNodeStatusFromRuntime(runtimeStatus, nodeId)
 
-  const nodeSession = run.node_sessions?.find(session => session.node_id === nodeId)
+  const nodeSession = latestWorkflowNodeSession(run.node_sessions, nodeId)
   switch (nodeSession?.status) {
     case 'queued':
     case 'running':
@@ -818,7 +1009,7 @@ function workflowNodeStatusFromRun(run: WorkflowRunRecord, nodeId: string): Work
 function workflowNodeErrorFromRun(run: WorkflowRunRecord, nodeId: string): string | null {
   const runtimeStatus = runtimeStatusByWorkflowId.value[run.workflow_id]
   if (runtimeStatus?.runId === run.id) return workflowNodeErrorFromRuntime(runtimeStatus, nodeId)
-  const nodeSession = run.node_sessions?.find(session => session.node_id === nodeId)
+  const nodeSession = latestWorkflowNodeSession(run.node_sessions, nodeId)
   if (nodeSession?.status === 'failed' || nodeSession?.status === 'blocked') return nodeSession.error || run.error || null
   return null
 }
@@ -827,7 +1018,7 @@ async function openWorkflowNodeSession(nodeId: string) {
   const run = selectedWorkflowRun.value
   if (!run) return
   const node = nodes.value.find(item => item.id === nodeId)
-  const nodeSession = run.node_sessions?.find(session => session.node_id === nodeId)
+  const nodeSession = latestWorkflowNodeSession(run.node_sessions, nodeId)
   if (!nodeSession?.session_id) {
     message.warning(t('workflow.runs.noNodeSession'))
     return
@@ -836,6 +1027,7 @@ async function openWorkflowNodeSession(nodeId: string) {
   workflowChatPanelTitle.value = t('workflow.runs.nodeSessionTitle', { node: node?.data.title || nodeId })
   workflowChatPanelNodeId.value = nodeId
   workflowChatPanelSessionId.value = nodeSession.session_id
+  workflowChatPanelExecutionId.value = nodeSession.execution_id || nodeId
   workflowChatPanelVisible.value = true
   workflowChatPanelLoading.value = true
   try {
@@ -861,7 +1053,7 @@ async function respondWorkflowNodeApproval(approved: boolean) {
   if (!workflowId || !runId || !nodeId || workflowApprovalSubmitting.value) return
   workflowApprovalSubmitting.value = true
   try {
-    await approveWorkflowNode(workflowId, runId, nodeId, approved)
+    await approveWorkflowNode(workflowId, runId, nodeId, approved, workflowChatPanelExecutionId.value || undefined)
   } catch (err: any) {
     message.error(err?.message || t('workflow.actions.executionFailed'))
   } finally {
@@ -886,8 +1078,13 @@ async function loadWorkflowRuns(
   try {
     const runs = await listWorkflowRuns(workflowId, 100)
     if (requestSeq !== workflowRunsLoadSeq) return
-    workflowRuns.value = runs
     const nextSelectedRunId = selectRunId || selectedWorkflowRunId.value
+    if (nextSelectedRunId) {
+      const selectedIndex = runs.findIndex(run => run.id === nextSelectedRunId)
+      if (selectedIndex >= 0) runs[selectedIndex] = await fetchWorkflowRun(workflowId, nextSelectedRunId)
+    }
+    if (requestSeq !== workflowRunsLoadSeq) return
+    workflowRuns.value = runs
     if (nextSelectedRunId) {
       const selectedRun = runs.find(run => run.id === nextSelectedRunId)
       if (selectedRun) {
@@ -910,7 +1107,18 @@ async function loadWorkflowRuns(
 
 async function applyWorkflowRunSnapshot(run: WorkflowRunRecord) {
   applyingWorkflow = true
-  nodes.value = run.snapshot_nodes.map(normalizeStoredNode).map<WorkflowNode>(node => ({
+  const workflow = workflows.value.find(item => item.id === run.workflow_id)
+  const currentNodePositions = new Map((workflow?.nodes || []).map(node => [node.id, { ...node.position }]))
+  nodes.value = run.snapshot_nodes.map((raw, index) => {
+    const record = raw && typeof raw === 'object' ? raw as Record<string, any> : {}
+    const rawPosition = record.position && typeof record.position === 'object' ? record.position as Record<string, unknown> : null
+    const hasSnapshotPosition = rawPosition && Number.isFinite(rawPosition.x) && Number.isFinite(rawPosition.y)
+    const fallbackPosition = typeof record.id === 'string' ? currentNodePositions.get(record.id) : undefined
+    return normalizeStoredNode(
+      !hasSnapshotPosition && fallbackPosition ? { ...record, position: fallbackPosition } : record,
+      index,
+    )
+  }).map<WorkflowNode>(node => ({
     ...node,
     data: withRuntimeNodeData({
       ...node.data,
@@ -1030,6 +1238,12 @@ function handleWorkflowRuntimeStatus(status: WorkflowRuntimeStatus) {
     [status.workflowId]: status,
   }
   if (status.workflowId !== activeWorkflowId.value) return
+  if (status.run) {
+    const existingIndex = workflowRuns.value.findIndex(run => run.id === status.run!.id)
+    workflowRuns.value = existingIndex >= 0
+      ? workflowRuns.value.map(run => run.id === status.run!.id ? status.run! : run)
+      : [status.run, ...workflowRuns.value]
+  }
   const isLive = status.status === 'running' || status.status === 'queued'
   if (!isLive) {
     const nextAutoSelect = new Set(autoSelectRunningWorkflowIds.value)
@@ -1224,6 +1438,76 @@ async function selectWorkflow(workflowId: string) {
   await applyWorkflow(workflow, true)
 }
 
+async function exportActiveWorkflow() {
+  if (!activeWorkflowId.value) return
+  try {
+    if (!await saveActiveWorkflow({ quiet: true })) return
+    const envelope = await exportWorkflow(activeWorkflowId.value)
+    const blob = new Blob([`${JSON.stringify(envelope, null, 2)}\n`], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${workflowName.value.trim().replace(/[^\w.-]+/g, '-') || 'workflow'}.workflow.json`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+    message.success(t('workflow.actions.exported'))
+  } catch (err: any) { message.error(err?.message || t('workflow.actions.exportFailed')) }
+}
+
+function openWorkflowImport() {
+  workflowImportInputRef.value?.click()
+}
+
+async function handleWorkflowImport(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  try {
+    const document = await file.text()
+    const profile = workflowProfileFilter.value || defaultWorkflowProfile.value
+    const preview = await previewWorkflowImport(document, profile)
+    workflowImportProfile.value = profile
+    workflowImportPreview.value = preview
+    workflowImportConfirmVisible.value = true
+  } catch (err: any) { message.error(err?.message || t('workflow.actions.importFailed')) }
+}
+
+async function dismissPendingWorkflowImport() {
+  const preview = workflowImportPreview.value
+  workflowImportConfirmVisible.value = false
+  workflowImportPreview.value = null
+  if (!preview) return
+  try { await cancelWorkflowImport(preview.token, workflowImportProfile.value) }
+  catch (err) { console.error('Failed to cancel workflow import preview:', err) }
+}
+
+async function confirmPendingWorkflowImport() {
+  const preview = workflowImportPreview.value
+  if (!preview || workflowImportConfirming.value) return
+  workflowImportConfirming.value = true
+  try {
+    const record = await confirmWorkflowImport(preview.token, workflowImportProfile.value)
+    const imported = workflowDocumentFromRecord(record)
+    workflows.value = [imported, ...workflows.value.filter(item => item.id !== imported.id)]
+    workflowImportConfirmVisible.value = false
+    workflowImportPreview.value = null
+    await applyWorkflow(imported, true)
+    void subscribeWorkflowStatuses(imported.id).then(applyWorkflowRuntimeStatuses).catch((err) => {
+      console.error('Failed to subscribe imported workflow status:', err)
+    })
+    message.success(t('workflow.actions.imported'))
+  } catch (err: any) {
+    workflowImportConfirmVisible.value = false
+    workflowImportPreview.value = null
+    message.error(err?.message || t('workflow.actions.importFailed'))
+  } finally {
+    workflowImportConfirming.value = false
+  }
+}
+
 function openCreateWorkflowDrawer() {
   createWorkflowName.value = `${t('workflow.title')} ${workflows.value.length + 1}`
   createWorkflowProfile.value = defaultWorkflowProfile.value
@@ -1272,7 +1556,7 @@ function hasWorkflowCycle(sourceNodes: WorkflowNode[], sourceEdges: WorkflowEdge
   const adjacency = new Map<string, string[]>()
   for (const node of sourceNodes) adjacency.set(node.id, [])
   for (const edge of sourceEdges) {
-    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) continue
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target) || edge.data?.orchestration?.feedback) continue
     adjacency.get(edge.source)?.push(edge.target)
   }
 
@@ -1533,9 +1817,9 @@ function updateNodeData(id: string, patch: Partial<WorkflowAgentNodeEditableData
 
 function expandNodeHeightForImages(style: WorkflowNode['style'], imageCount: number): WorkflowNode['style'] {
   if (imageCount <= 0) return style
-  const currentHeight = Number.parseFloat(style.height || '420')
+  const currentHeight = Number.parseFloat(style.height || String(WORKFLOW_NODE_DEFAULT_HEIGHT))
   const previewRows = Math.min(2, Math.ceil(imageCount / 3))
-  const requiredHeight = 420 + previewRows * 68
+  const requiredHeight = WORKFLOW_NODE_DEFAULT_HEIGHT + previewRows * 68
   if (currentHeight >= requiredHeight) return style
   return { ...style, height: `${requiredHeight}px` }
 }
@@ -1553,6 +1837,64 @@ function handleConnect(connection: Connection) {
     animated: true,
     markerEnd: MarkerType.ArrowClosed,
   }]
+}
+
+function handleConnectStart(payload: { nodeId?: string; handleType?: string }) {
+  connectionStartNodeId.value = payload.handleType === 'source' ? payload.nodeId || null : null
+}
+
+async function handleConnectEnd(event?: MouseEvent | TouchEvent) {
+  const source = connectionStartNodeId.value
+  connectionStartNodeId.value = null
+  if (!source || !event || selectedWorkflowRunId.value || !activeWorkflowId.value) return
+  const target = event.target as Element | null
+  if (target?.closest('.vue-flow__handle, .vue-flow__node')) return
+  const touch = 'changedTouches' in event ? event.changedTouches[0] : null
+  const clientX = touch?.clientX ?? ('clientX' in event ? event.clientX : 0)
+  const clientY = touch?.clientY ?? ('clientY' in event ? event.clientY : 0)
+  const nodeId = `agent-${nextNodeIndex.value}`
+  const position = screenToFlowCoordinate({ x: clientX, y: clientY })
+  const node = makeNode(nodeId, t('workflow.newNodeTitle', { count: nextNodeIndex.value }), position)
+  const transaction = createConnectedAgentTransaction<WorkflowNode, WorkflowEdge>(
+    { nodes: nodes.value, edges: edges.value },
+    { source, nodeId, title: node.data.title, position, nodeData: node.data },
+  )
+  transaction.after.edges[transaction.after.edges.length - 1] = {
+    ...transaction.after.edges[transaction.after.edges.length - 1], animated: true, markerEnd: MarkerType.ArrowClosed,
+  }
+  setNodes(transaction.after.nodes)
+  await nextTick()
+  updateNodeInternals([nodeId])
+  setEdges(transaction.after.edges)
+  await nextTick()
+  // Selection lives in Vue Flow's internal store, not in our definition
+  // array. Apply it after the release gesture has committed Node + Edge.
+  window.setTimeout(() => {
+    removeSelectedElements()
+    const createdNode = findNode(nodeId)
+    if (createdNode) addSelectedNodes([createdNode])
+  }, 0)
+  lastCanvasTransaction.value = transaction
+  nextNodeIndex.value += 1
+  ensureSkillOptionsForVisibleNodes()
+}
+
+function undoLastCanvasTransaction() {
+  const transaction = lastCanvasTransaction.value
+  if (!transaction || selectedWorkflowRunId.value) return
+  setNodes(transaction.before.nodes)
+  setEdges(transaction.before.edges)
+  nextNodeIndex.value = Math.max(1, nextNodeIndex.value - 1)
+  lastCanvasTransaction.value = null
+}
+
+function handleWorkflowUndoShortcut(event: KeyboardEvent) {
+  if (event.defaultPrevented || !event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'z') return
+  const target = event.target instanceof Element ? event.target : null
+  if (target?.closest('input, textarea, select, [contenteditable], [role="textbox"], [role="combobox"]')) return
+  if (!lastCanvasTransaction.value || selectedWorkflowRunId.value) return
+  event.preventDefault()
+  undoLastCanvasTransaction()
 }
 
 function deleteNode(nodeId: string) {
@@ -1588,6 +1930,98 @@ function handleNodeClick(payload: { node: { id: string } }) {
   void openWorkflowNodeSession(payload.node.id)
 }
 
+function setConditionPathPreset(preset: 'route-only' | 'output' | 'error' | 'custom') {
+  edgeEditorConditionPathPreset.value = preset
+  if (preset === 'route-only') edgeEditorConditionPath.value = ''
+  if (preset === 'output' || preset === 'error') edgeEditorConditionPath.value = preset
+}
+
+function handleEdgeEditorRouteChange(route: 'success' | 'failure' | 'always') {
+  edgeEditorRoute.value = route
+  if (route === 'success' && edgeEditorConditionPathPreset.value === 'error') setConditionPathPreset('output')
+  if (route === 'failure' && edgeEditorConditionPathPreset.value === 'output') setConditionPathPreset('error')
+}
+
+function handleEdgeEditorOperatorChange(operator: string) {
+  edgeEditorConditionOperator.value = operator
+  const requiredType = requiredWorkflowConditionValueType(operator)
+  if (requiredType) edgeEditorConditionValueType.value = requiredType
+}
+
+function handleEdgeEditorValueTypeChange(type: WorkflowConditionValueType) {
+  if (requiredConditionValueType.value) return
+  edgeEditorConditionValueType.value = type
+}
+
+function openEdgeEditor(edgeId: string) {
+  if (selectedWorkflowRunId.value) return
+  const edge = edges.value.find(item => item.id === edgeId)
+  if (!edge) return
+  const orchestration = edge.data?.orchestration
+  edgeEditorId.value = edgeId
+  edgeEditorRoute.value = orchestration?.route || 'success'
+  edgeEditorConditionPath.value = orchestration?.condition?.path || ''
+  edgeEditorConditionPathPreset.value = !edgeEditorConditionPath.value
+    ? 'route-only'
+    : edgeEditorConditionPath.value === 'output' || edgeEditorConditionPath.value === 'error'
+      ? edgeEditorConditionPath.value
+      : 'custom'
+  edgeEditorConditionOperator.value = orchestration?.condition?.operator || 'equals'
+  const conditionValue = orchestration?.condition?.value
+  edgeEditorConditionValueType.value = requiredWorkflowConditionValueType(edgeEditorConditionOperator.value)
+    || inferWorkflowConditionValueType(conditionValue)
+  edgeEditorConditionValue.value = serializeWorkflowConditionValueForType(conditionValue, edgeEditorConditionValueType.value)
+  edgeEditorFeedback.value = Boolean(orchestration?.feedback)
+  edgeEditorMaxIterations.value = String(orchestration?.feedback?.maxIterations || 3)
+  edgeEditorLoopId.value = orchestration?.feedback?.loopId || ''
+  edgeEditorVisible.value = true
+}
+
+function handleEdgeClick(payload: { edge: { id: string } }) {
+  openEdgeEditor(payload.edge.id)
+}
+
+function saveEdgeEditor() {
+  const maxIterations = Number(edgeEditorMaxIterations.value)
+  if (edgeEditorFeedback.value && (!Number.isInteger(maxIterations) || maxIterations < 1 || maxIterations > 100)) {
+    message.error(t('workflow.edgeEditor.invalidIterations'))
+    return
+  }
+  const conditionPath = edgeEditorConditionPath.value.trim()
+  const loopId = edgeEditorLoopId.value.trim()
+  if (edgeEditorFeedback.value && loopId && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(loopId)) {
+    message.error(t('workflow.edgeEditor.invalidLoopId'))
+    return
+  }
+  const orchestration: WorkflowEdgeOrchestration = { route: edgeEditorRoute.value }
+  if (conditionPath) {
+    if (workflowConditionValueError.value) {
+      message.error(workflowConditionValueError.value)
+      return
+    }
+    try {
+      const conditionValue = parseWorkflowConditionValue(
+        edgeEditorConditionValue.value,
+        edgeEditorConditionOperator.value,
+        edgeEditorConditionValueType.value,
+      )
+      orchestration.condition = {
+        path: conditionPath,
+        operator: edgeEditorConditionOperator.value,
+        ...(conditionValue !== undefined ? { value: conditionValue } : {}),
+      }
+    } catch (err: any) {
+      message.error(err?.message || t('workflow.edgeEditor.invalidConditionValue'))
+      return
+    }
+  }
+  if (edgeEditorFeedback.value) orchestration.feedback = { maxIterations, ...(loopId ? { loopId } : {}) }
+  edges.value = edges.value.map(edge => edge.id === edgeEditorId.value
+    ? { ...edge, data: { ...(edge.data || {}), orchestration } }
+    : edge)
+  edgeEditorVisible.value = false
+}
+
 function handleEdgeContextMenu(payload: { event: MouseEvent | TouchEvent; edge: { id: string } }) {
   openContextMenu(payload.event, { type: 'edge', id: payload.edge.id })
 }
@@ -1617,6 +2051,9 @@ function handleContextMenuSelect(key: string | number) {
   if (selectedWorkflowRunId.value) {
     closeContextMenu()
     return
+  }
+  if (key === 'edit-edge' && target?.type === 'edge') {
+    openEdgeEditor(target.id)
   }
   if (key === 'delete-node' && target?.type === 'node') {
     deleteNode(target.id)
@@ -1679,6 +2116,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   if (node.data.status === 'running') return '#2563eb'
   if (node.data.status === 'pending_approval') return '#d97706'
   if (node.data.status === 'completed') return '#16a34a'
+  if (node.data.status === 'skipped') return '#64748b'
   if (node.data.status === 'failed') return '#dc2626'
   if (node.data.status === 'approval_rejected') return '#b45309'
   if (node.data.status === 'canceled') return '#f97316'
@@ -1889,6 +2327,35 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
             </template>
             {{ showWorkflowRunsPanel ? t('workflow.runs.hide') : t('workflow.runs.show') }}
           </NTooltip>
+          <input ref="workflowImportInputRef" class="workflow-import-input" type="file" accept="application/json,.json" @change="handleWorkflowImport" />
+          <NTooltip v-if="!selectedWorkflowRunId" trigger="hover">
+            <template #trigger>
+              <NButton quaternary size="small" circle :aria-label="t('workflow.actions.importWorkflow')" @click="openWorkflowImport">
+                <template #icon>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 16V5" />
+                    <path d="m8 9 4-4 4 4" />
+                    <path d="M5 15v4h14v-4" />
+                  </svg>
+                </template>
+              </NButton>
+            </template>
+            {{ t('workflow.actions.importWorkflow') }}
+          </NTooltip>
+          <NTooltip v-if="!selectedWorkflowRunId" trigger="hover">
+            <template #trigger>
+              <NButton quaternary size="small" circle :disabled="!activeWorkflowId" :aria-label="t('workflow.actions.exportWorkflow')" @click="exportActiveWorkflow">
+                <template #icon>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 3v11" />
+                    <path d="m8 10 4 4 4-4" />
+                    <path d="M5 15v4h14v-4" />
+                  </svg>
+                </template>
+              </NButton>
+            </template>
+            {{ t('workflow.actions.exportWorkflow') }}
+          </NTooltip>
           <NTooltip v-if="!selectedWorkflowRunId" trigger="hover">
             <template #trigger>
               <NButton quaternary size="small" circle :aria-label="t('workflow.actions.addNode')" @click="addAgentNode">
@@ -2049,8 +2516,11 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
           :default-edge-options="{ type: 'smoothstep', markerEnd: MarkerType.ArrowClosed }"
           class="workflow-flow"
           @connect="handleConnect"
+          @connect-start="handleConnectStart"
+          @connect-end="handleConnectEnd"
           @node-click="handleNodeClick"
           @node-context-menu="handleNodeContextMenu"
+          @edge-click="handleEdgeClick"
           @edge-context-menu="handleEdgeContextMenu"
           @pane-click="closeContextMenu"
         >
@@ -2120,6 +2590,58 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
             <div v-if="run.error" class="workflow-run-error" :title="run.error">{{ run.error }}</div>
           </button>
         </div>
+        <section
+          v-if="selectedWorkflowRun"
+          class="workflow-evidence"
+          :class="{ expanded: workflowEvidenceExpanded }"
+          :aria-label="t('workflow.evidence.ariaLabel')"
+        >
+          <button
+            type="button"
+            class="workflow-evidence-toggle"
+            :aria-expanded="workflowEvidenceExpanded"
+            @click="workflowEvidenceExpanded = !workflowEvidenceExpanded"
+          >
+            <span class="workflow-evidence-title">
+              {{ t('workflow.evidence.title') }}
+              <span>{{ t('workflow.evidence.count', { count: selectedWorkflowEvidenceRows.length }) }}</span>
+            </span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path :d="workflowEvidenceExpanded ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'" />
+            </svg>
+          </button>
+          <template v-if="workflowEvidenceExpanded">
+            <p class="workflow-evidence-intro">{{ t('workflow.evidence.intro') }}</p>
+            <div v-if="selectedWorkflowEvidenceRows.length === 0" class="workflow-runs-empty">{{ t('workflow.evidence.empty') }}</div>
+            <div v-else class="workflow-evidence-list">
+              <article v-for="row in selectedWorkflowEvidenceRows" :key="`${row.kind}:${row.sequence}:${row.technicalId}`" class="workflow-evidence-row">
+                <div class="workflow-evidence-topline">
+                  <span class="workflow-evidence-kind">{{ t(`workflow.evidence.${row.kind}`) }}</span>
+                  <span class="workflow-evidence-status">{{ workflowEvidenceStatusLabel(row) }}</span>
+                </div>
+                <strong>{{ workflowEvidenceTitle(row) }}</strong>
+                <span class="workflow-evidence-description">{{ workflowEvidenceDescription(row) }}</span>
+                <details class="workflow-evidence-technical">
+                  <summary>{{ t('workflow.evidence.technical') }}</summary>
+                  <dl>
+                    <dt>{{ t('workflow.evidence.recordId') }}</dt><dd><code>{{ row.technicalId }}</code></dd>
+                    <dt>{{ t('workflow.evidence.sequence') }}</dt><dd>#{{ row.sequence }}</dd>
+                    <dt>{{ t('workflow.evidence.rawStatus') }}</dt><dd><code>{{ row.status }}</code></dd>
+                    <template v-if="row.route">
+                      <dt>{{ t('workflow.evidence.rawRoute') }}</dt><dd><code>{{ row.route }}</code></dd>
+                    </template>
+                    <template v-if="row.reason || row.exitReason">
+                      <dt>{{ t('workflow.evidence.rawReason') }}</dt><dd><code>{{ row.reason || row.exitReason }}</code></dd>
+                    </template>
+                    <template v-if="row.iterationPath !== '—'">
+                      <dt>{{ t('workflow.evidence.iterationPath') }}</dt><dd><code>{{ row.iterationPath }}</code></dd>
+                    </template>
+                  </dl>
+                </details>
+              </article>
+            </div>
+          </template>
+        </section>
         <NDropdown
           placement="bottom-start"
           trigger="manual"
@@ -2133,6 +2655,120 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
       </aside>
     </div>
     </main>
+
+    <NModal :show="workflowImportConfirmVisible" preset="card" :mask-closable="false" @esc="dismissPendingWorkflowImport" @close="dismissPendingWorkflowImport" :title="t('workflow.actions.importWorkflow')" style="width: min(520px, 92vw)">
+      <div v-if="workflowImportPreview" class="workflow-create-form">
+        <p data-testid="workflow-import-summary">{{ workflowImportConfirmationText(workflowImportPreview.summary, { nodes: t('workflow.stats.nodes').toLocaleLowerCase(), edges: t('workflow.stats.edges').toLocaleLowerCase() }) }}</p>
+        <NSpace justify="end"><NButton @click="dismissPendingWorkflowImport">{{ t('common.cancel') }}</NButton><NButton type="primary" :loading="workflowImportConfirming" data-testid="workflow-import-confirm" @click="confirmPendingWorkflowImport">{{ t('common.confirm') }}</NButton></NSpace>
+      </div>
+    </NModal>
+
+    <NModal v-model:show="edgeEditorVisible" preset="card" :title="t('workflow.edgeEditor.title')" style="width: min(680px, 94vw)">
+      <div class="workflow-create-form workflow-edge-editor-form">
+        <div class="workflow-edge-guide" data-testid="workflow-edge-guide">{{ t('workflow.edgeEditor.guideIntro') }}</div>
+        <div class="workflow-field">
+          <span class="workflow-field-label-row">
+            <span class="workflow-field-label">{{ t('workflow.edgeEditor.route') }}</span>
+            <WorkflowFieldHelp
+              :text="t('workflow.edgeEditor.routeHelp')"
+              :secondary-text="t('workflow.edgeEditor.routeExample')"
+              test-id="workflow-edge-route-help"
+            />
+          </span>
+          <NSelect :value="edgeEditorRoute" :options="workflowEdgeRouteOptions" @update:value="handleEdgeEditorRouteChange" />
+        </div>
+        <div class="workflow-field">
+          <span class="workflow-field-label-row">
+            <span class="workflow-field-label">{{ t('workflow.edgeEditor.conditionPath') }}</span>
+            <WorkflowFieldHelp
+              :text="t(`workflow.edgeEditor.conditionPathHelp.${edgeEditorRoute}`)"
+              test-id="workflow-edge-condition-path-help"
+            />
+          </span>
+          <NSelect
+            :value="edgeEditorConditionPathPreset"
+            :options="workflowConditionPathOptions"
+            data-testid="workflow-edge-condition-path-preset"
+            @update:value="setConditionPathPreset"
+          />
+          <NInput
+            v-if="edgeEditorConditionPathPreset === 'custom'"
+            v-model:value="edgeEditorConditionPath"
+            data-testid="workflow-edge-condition-path"
+            :placeholder="t('workflow.edgeEditor.conditionPathPlaceholder')"
+          />
+        </div>
+        <div v-if="edgeEditorConditionPathPreset !== 'route-only'" class="workflow-field">
+          <span class="workflow-field-label-row">
+            <span class="workflow-field-label">{{ t('workflow.edgeEditor.operator') }}</span>
+            <WorkflowFieldHelp :text="workflowEdgeOperatorHelp" test-id="workflow-edge-operator-help" />
+          </span>
+          <NSelect
+            :value="edgeEditorConditionOperator"
+            data-testid="workflow-edge-condition-operator"
+            :options="workflowEdgeOperatorOptions"
+            @update:value="handleEdgeEditorOperatorChange"
+          />
+        </div>
+        <template v-if="edgeEditorConditionPathPreset !== 'route-only' && workflowConditionNeedsValue(edgeEditorConditionOperator)">
+          <div class="workflow-field">
+            <span class="workflow-field-label-row">
+              <span class="workflow-field-label">{{ t('workflow.edgeEditor.valueType') }}</span>
+              <WorkflowFieldHelp :text="t('workflow.edgeEditor.valueTypeHelp')" test-id="workflow-edge-condition-value-type-help" />
+            </span>
+            <NSelect
+              :value="edgeEditorConditionValueType"
+              :options="workflowConditionValueTypeOptions"
+              :disabled="workflowConditionValueTypeDisabled"
+              data-testid="workflow-edge-condition-value-type"
+              @update:value="handleEdgeEditorValueTypeChange"
+            />
+          </div>
+          <div class="workflow-field">
+            <span class="workflow-field-label-row">
+              <span class="workflow-field-label">{{ t('workflow.edgeEditor.value') }}</span>
+              <WorkflowFieldHelp :text="t('workflow.edgeEditor.valueHelp')" test-id="workflow-edge-condition-value-help" />
+            </span>
+            <NInput
+              v-model:value="edgeEditorConditionValue"
+              data-testid="workflow-edge-condition-value"
+              :disabled="edgeEditorConditionValueType === 'null'"
+              :placeholder="workflowConditionValuePlaceholder"
+              :status="workflowConditionValueError ? 'error' : undefined"
+            />
+            <span v-if="workflowConditionValueError" class="workflow-field-error" data-testid="workflow-edge-condition-value-error">{{ workflowConditionValueError }}</span>
+          </div>
+        </template>
+        <div class="workflow-feedback-field">
+          <div class="workflow-feedback-heading">
+            <NCheckbox v-model:checked="edgeEditorFeedback">{{ t('workflow.edgeEditor.feedback') }}</NCheckbox>
+            <WorkflowFieldHelp :text="t('workflow.edgeEditor.feedbackHelp')" test-id="workflow-edge-feedback-help" />
+          </div>
+        </div>
+        <div v-if="edgeEditorFeedback" class="workflow-field">
+          <span class="workflow-field-label-row">
+            <span class="workflow-field-label">{{ t('workflow.edgeEditor.maxIterations') }}</span>
+            <WorkflowFieldHelp :text="t('workflow.edgeEditor.maxIterationsHelp')" test-id="workflow-edge-max-iterations-help" />
+          </span>
+          <NInput v-model:value="edgeEditorMaxIterations" inputmode="numeric" />
+        </div>
+        <div v-if="edgeEditorFeedback" class="workflow-field">
+          <span class="workflow-field-label-row">
+            <span class="workflow-field-label">{{ t('workflow.edgeEditor.loopId') }}</span>
+            <WorkflowFieldHelp :text="t('workflow.edgeEditor.loopIdHelp')" test-id="workflow-edge-loop-id-help" />
+          </span>
+          <NSelect
+            v-model:value="edgeEditorLoopIdSelection"
+            :options="workflowLoopIdOptions"
+            tag
+            filterable
+            data-testid="workflow-edge-loop-id"
+            :placeholder="t('workflow.edgeEditor.loopIdPlaceholder')"
+          />
+        </div>
+        <NSpace justify="end"><NButton @click="edgeEditorVisible = false">{{ t('common.cancel') }}</NButton><NButton type="primary" :disabled="Boolean(workflowConditionValueError)" @click="saveEdgeEditor">{{ t('common.save') }}</NButton></NSpace>
+      </div>
+    </NModal>
 
     <NDrawer v-model:show="createWorkflowDrawerVisible" placement="right" :width="420">
       <NDrawerContent :title="t('workflow.actions.newWorkflow')" closable>
@@ -2404,6 +3040,51 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   }
 }
 
+.workflow-evidence {
+  flex: 0 0 auto;
+  min-height: 0;
+  border-top: 1px solid var(--border-color);
+  background: $bg-card;
+}
+.workflow-evidence.expanded {
+  flex-basis: 45%;
+  max-height: 45%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.workflow-evidence-toggle {
+  width: 100%;
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+.workflow-evidence-toggle:hover { background: rgba(var(--accent-primary-rgb), 0.06); color: var(--text-primary); }
+.workflow-evidence-title { min-width: 0; font-size: 12px; font-weight: 600; }
+.workflow-evidence-title > span { margin-left: 4px; color: var(--text-muted); font-weight: 400; }
+.workflow-evidence-intro { flex: 0 0 auto; margin: 0; padding: 0 12px 8px; color: var(--text-muted); font-size: 11px; line-height: 16px; }
+.workflow-evidence-list { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+.workflow-evidence-row { flex: 0 0 auto; display: flex; flex-direction: column; gap: 3px; padding: 7px 8px; border-radius: 6px; background: rgba(var(--accent-primary-rgb), 0.05); font-size: 11px; color: var(--text-muted); }
+.workflow-evidence-row strong, .workflow-evidence-description { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workflow-evidence-row strong { color: var(--text-primary); font-size: 12px; }
+.workflow-evidence-topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.workflow-evidence-kind { font-weight: 600; }
+.workflow-evidence-status { color: var(--text-secondary); }
+.workflow-evidence-technical { margin-top: 2px; }
+.workflow-evidence-technical summary { width: fit-content; color: var(--text-muted); cursor: pointer; }
+.workflow-evidence-technical dl { margin: 6px 0 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 6px; }
+.workflow-evidence-technical dt { color: var(--text-muted); }
+.workflow-evidence-technical dd { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.workflow-evidence-technical code { color: var(--accent-primary); }
+
 .workflow-create-form {
   display: flex;
   flex-direction: column;
@@ -2422,6 +3103,42 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   font-weight: 500;
   line-height: 16px;
   color: $text-secondary;
+}
+
+.workflow-edge-editor-form {
+  max-height: min(720px, calc(100vh - 180px));
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.workflow-edge-guide {
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--accent-info-rgb), 0.28);
+  border-radius: 8px;
+  background: rgba(var(--accent-info-rgb), 0.08);
+  color: $text-secondary;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.workflow-field-label-row,
+.workflow-feedback-heading {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+}
+
+.workflow-field-error {
+  color: #dc2626;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.workflow-feedback-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .header-left {
@@ -2509,6 +3226,8 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   min-height: 0;
   display: flex;
 }
+
+.workflow-import-input { display: none; }
 
 .workflow-canvas {
   min-width: 0;
@@ -2726,6 +3445,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
 }
 
 .workflow-runs-list {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: 10px;
@@ -2937,15 +3657,12 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   }
 
   .header-workflow-title {
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: 52%;
-    line-height: 20px;
+    display: none;
   }
 
   .workspace-badge {
-    flex: 0 1 auto;
-    max-width: 42%;
+    flex: 1 1 auto;
+    max-width: none;
     padding: 2px 6px;
   }
 
