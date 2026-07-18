@@ -423,6 +423,7 @@ export async function handleBridgeRun(
   state.abortController = undefined
   state.bridgeOutput = ''
   state.bridgePendingAssistantContent = ''
+  state.bridgeAssistantMessageId = undefined
   state.bridgePendingReasoningContent = ''
   state.bridgePendingToolCallMarkup = ''
   state.bridgeToolCounter = 0
@@ -711,7 +712,7 @@ export async function handleBridgeRun(
     state.activeRunMarker = undefined
     state.events = []
     state.bridgePendingToolCallMarkup = undefined
-    flushBridgePendingToDb(state, session_id)
+    flushBridgePendingToDb(state, session_id, runMarker)
     updateSessionStats(session_id)
     const message = err instanceof Error ? err.message : String(err)
     const errUsage = await calcAndUpdateUsage(session_id, state, emit)
@@ -1510,7 +1511,7 @@ async function applyBridgeChunkAsync(
   }
 
   flushPendingToolMarkupToAssistant(state, runMarker, chunk.run_id, emit)
-  flushBridgePendingToDb(state, sessionId)
+  flushBridgePendingToDb(state, sessionId, runMarker)
   finalResponse = bridgeFinalResponse(chunk, state, useMoaFinalResponse)
   state.bridgePendingToolCallMarkup = undefined
   updateSessionStats(sessionId)
@@ -1543,6 +1544,7 @@ async function applyBridgeChunkAsync(
       sessionId,
       runId: chunk.run_id,
       workspace,
+      assistantMessageId: state.bridgeAssistantMessageId,
     })
     workspaceRunChange = change
     if (change) {
