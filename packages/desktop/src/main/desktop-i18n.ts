@@ -43,6 +43,7 @@ type TranslationKey =
   | 'runtime.downloadingPackage'
   | 'runtime.verifying'
   | 'runtime.extracting'
+  | 'runtime.migrating'
   | 'runtime.ready'
   | 'common.ok'
   | 'common.cancel'
@@ -99,6 +100,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'runtime.downloadingPackage': 'Downloading {name}...',
     'runtime.verifying': 'Verifying Hermes runtime...',
     'runtime.extracting': 'Extracting Hermes runtime...',
+    'runtime.migrating': 'Copying Runtime and downloaded Web UI versions to the selected storage directory...',
     'runtime.ready': 'Hermes runtime ready.',
     'common.ok': 'OK',
     'common.cancel': 'Cancel',
@@ -152,6 +154,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'runtime.downloadingPackage': '正在下载 {name}...',
     'runtime.verifying': '正在校验 Hermes 运行时...',
     'runtime.extracting': '正在解压 Hermes 运行时...',
+    'runtime.migrating': '正在将 Runtime 和已下载的 Web UI 版本迁移到所选存储目录...',
     'runtime.ready': 'Hermes 运行时已就绪。',
     'common.ok': '确定',
     'common.cancel': '取消',
@@ -205,6 +208,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'runtime.downloadingPackage': '正在下載 {name}...',
     'runtime.verifying': '正在校驗 Hermes 運行時...',
     'runtime.extracting': '正在解壓 Hermes 運行時...',
+    'runtime.migrating': '正在將 Runtime 和已下載的 Web UI 版本遷移至所選儲存目錄...',
     'runtime.ready': 'Hermes 運行時已就緒。',
     'common.ok': '確定',
     'common.cancel': '取消',
@@ -258,6 +262,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'runtime.downloadingPackage': '{name} をダウンロードしています...',
     'runtime.verifying': 'Hermes ランタイムを検証しています...',
     'runtime.extracting': 'Hermes ランタイムを展開しています...',
+    'runtime.migrating': 'Runtime とダウンロード済み Web UI を選択した保存先へ移行しています...',
     'runtime.ready': 'Hermes ランタイムの準備ができました。',
     'common.ok': 'OK',
     'common.cancel': 'Cancel',
@@ -311,6 +316,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'runtime.downloadingPackage': '{name} 다운로드 중...',
     'runtime.verifying': 'Hermes 런타임을 검증하는 중...',
     'runtime.extracting': 'Hermes 런타임을 압축 해제하는 중...',
+    'runtime.migrating': 'Runtime과 다운로드된 Web UI를 선택한 저장 디렉터리로 이동하는 중...',
     'runtime.ready': 'Hermes 런타임이 준비되었습니다.',
     'common.ok': '확인',
     'common.cancel': 'Cancel',
@@ -364,6 +370,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'runtime.downloadingPackage': 'Telechargement de {name}...',
     'runtime.verifying': 'Verification du runtime Hermes...',
     'runtime.extracting': 'Extraction du runtime Hermes...',
+    'runtime.migrating': 'Migration du Runtime et des versions Web UI vers le repertoire selectionne...',
     'runtime.ready': 'Runtime Hermes pret.',
     'common.ok': 'OK',
     'common.cancel': 'Cancel',
@@ -417,6 +424,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'runtime.downloadingPackage': 'Descargando {name}...',
     'runtime.verifying': 'Verificando runtime de Hermes...',
     'runtime.extracting': 'Extrayendo runtime de Hermes...',
+    'runtime.migrating': 'Moviendo Runtime y las versiones Web UI al directorio seleccionado...',
     'runtime.ready': 'Runtime de Hermes listo.',
     'common.ok': 'Aceptar',
     'common.cancel': 'Cancel',
@@ -470,6 +478,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'runtime.downloadingPackage': '{name} wird heruntergeladen...',
     'runtime.verifying': 'Hermes Runtime wird verifiziert...',
     'runtime.extracting': 'Hermes Runtime wird entpackt...',
+    'runtime.migrating': 'Runtime und Web-UI-Versionen werden in das ausgewahlte Speicherverzeichnis verschoben...',
     'runtime.ready': 'Hermes Runtime ist bereit.',
     'common.ok': 'OK',
     'common.cancel': 'Cancel',
@@ -523,6 +532,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'runtime.downloadingPackage': 'Baixando {name}...',
     'runtime.verifying': 'Verificando runtime Hermes...',
     'runtime.extracting': 'Extraindo runtime Hermes...',
+    'runtime.migrating': 'Movendo o Runtime e as versoes Web UI para o diretorio selecionado...',
     'runtime.ready': 'Runtime Hermes pronto.',
     'common.ok': 'OK',
     'common.cancel': 'Cancel',
