@@ -5,12 +5,12 @@
 
 import type { Server, Socket } from 'socket.io'
 import { getSystemPrompt } from '../../../lib/llm-prompt'
-import { getSession, getSessionDetail, createSession, addMessage, updateSession, updateSessionStats } from '../../../db/hermes/session-store'
+import { getFirstSessionMessageByRole, getSession, getSessionMessageCountByRole, createSession, addMessage, updateSession, updateSessionStats } from '../../../db/hermes/session-store'
 import { logger, bridgeLogger } from '../../logger'
 import { normalizeTokenUsage, recordSessionUsage } from '../../usage-recorder'
 import { AgentBridgeClient, type AgentBridgeContextEstimate, type AgentBridgeMessage, type AgentBridgeOutput } from '../agent-bridge'
 import { contentBlocksToString, convertContentBlocksForAgent, extractTextForPreview, isContentBlockArray } from './content-blocks'
-import { buildCompressedHistory, buildDbHistory, buildSnapshotAwareHistory, forceCompressBridgeHistory, pushState, replaceState } from './compression'
+import { buildCompressedHistory, buildDbSnapshotAwareHistory, forceCompressBridgeHistory, pushState, replaceState } from './compression'
 import {
   calcAndUpdateUsage,
   contextTokensWithCachedOverhead,
@@ -85,19 +85,19 @@ function fallbackTitleFromText(text: string, limit: number, ellipsis: boolean): 
 }
 
 function isReplaceableLocalTitle(sessionId: string): boolean {
-  const detail = getSessionDetail(sessionId)
-  if (!detail) return false
-  const current = normalizeTitleText(detail.title)
+  const session = getSession(sessionId)
+  if (!session) return false
+  const current = normalizeTitleText(session.title)
   if (!current) return true
   const variants = new Set<string>([''])
-  const preview = normalizeTitleText(detail.preview)
+  const preview = normalizeTitleText(session.preview)
   if (preview) {
     variants.add(preview)
     variants.add(fallbackTitleFromText(preview, 40, true))
     variants.add(fallbackTitleFromText(preview, 63, false))
     variants.add(fallbackTitleFromText(preview, 100, false))
   }
-  const firstUser = detail.messages.find(message => message.role === 'user' && normalizeTitleText(message.content))
+  const firstUser = getFirstSessionMessageByRole(sessionId, 'user')
   const firstUserText = normalizeTitleText(firstUser?.content)
   if (firstUserText) {
     variants.add(firstUserText)
@@ -137,9 +137,7 @@ function syncBridgeGeneratedTitle(sessionId: string, title: unknown, emit: (even
 function shouldPollBridgeGeneratedTitle(sessionId: string): boolean {
   const session = getSession(sessionId)
   if (!session || !isBridgeSessionSource(session.source)) return false
-  const detail = getSessionDetail(sessionId)
-  if (!detail) return false
-  const userMessageCount = detail.messages.filter(message => message.role === 'user').length
+  const userMessageCount = getSessionMessageCountByRole(sessionId, 'user')
   return userMessageCount <= 2 && isReplaceableLocalTitle(sessionId)
 }
 
@@ -155,7 +153,17 @@ function looksLikeAgentFailure(value: string): boolean {
     || /\b(?:rate limit|too many requests|quota)\b.{0,100}\b429\b/i.test(text)
     || /\b(?:500|502|503|504)\b.{0,100}\b(?:server error|bad gateway|service unavailable|gateway timeout|upstream|provider|request failed|api)\b/i.test(text)
     || /\b(?:server error|bad gateway|service unavailable|gateway timeout|upstream|provider|request failed|api)\b.{0,100}\b(?:500|502|503|504)\b/i.test(text)
-    || /(?:无可用渠道|渠道不可用|认证失败|鉴权失败|额度不足|余额不足|请求失败|接口调用失败|限流)/i.test(text)
+    || /(?:无可用渠道|渠道不可用|认证失败|鉴权失败|额度不足|余额不足|请求失败|接口调用失败)/i.test(text)
+    || /(?:请求|接口|模型|渠道|API).{0,20}(?:被限流|触发限流|因限流失败)/i.test(text)
+    || /(?:限流|频率限制).{0,20}(?:失败|错误|重试|稍后)/i.test(text)
+}
+
+function looksLikeStandaloneAgentFailure(value: string): boolean {
+  const text = value.replace(/\s+/g, ' ').trim()
+  // A provider failure returned as final_response is normally a compact error.
+  // Do not scan an arbitrary long-form successful answer for incidental terms
+  // such as "登录限流" or documentation about HTTP error handling.
+  return text.length > 0 && text.length <= 2_000 && looksLikeAgentFailure(text)
 }
 
 export function bridgeTerminalError(chunk: Pick<AgentBridgeOutput, 'status' | 'error' | 'result'>): string | null {
@@ -178,8 +186,9 @@ export function bridgeTerminalError(chunk: Pick<AgentBridgeOutput, 'status' | 'e
   }
 
   if (resultError && looksLikeAgentFailure(resultError)) return resultError
+  if (result?.completed === true) return null
   if (!finalResponse && resultMessage && looksLikeAgentFailure(resultMessage)) return resultMessage
-  if (finalResponse && looksLikeAgentFailure(finalResponse)) return finalResponse
+  if (finalResponse && looksLikeStandaloneAgentFailure(finalResponse)) return finalResponse
 
   return null
 }
@@ -945,11 +954,10 @@ async function refreshFinalContextUsage(args: {
   bridge: AgentBridgeClient
 }): Promise<number | undefined> {
   try {
-    const dbHistory = await buildDbHistory(args.sessionId, { excludeLastUser: false })
-    const finalHistory = await buildSnapshotAwareHistory(
+    const finalHistory = await buildDbSnapshotAwareHistory(
       args.sessionId,
       args.profile,
-      dbHistory,
+      { excludeLastUser: false },
       { model: args.model, provider: args.provider },
     )
     const finalMessageUsage = estimateUsageTokensFromMessages(finalHistory)
@@ -1000,11 +1008,10 @@ async function estimateSnapshotAwareMessageTokens(args: {
   currentInputTokens?: number
   currentInputIncludedInDb?: boolean
 }): Promise<{ messageTokens: number; messages: number }> {
-  const dbHistory = await buildDbHistory(args.sessionId, { excludeLastUser: false })
-  const snapshotHistory = await buildSnapshotAwareHistory(
+  const snapshotHistory = await buildDbSnapshotAwareHistory(
     args.sessionId,
     args.profile,
-    dbHistory,
+    { excludeLastUser: false },
     { model: args.model, provider: args.provider },
   )
   const usage = estimateUsageTokensFromMessages(snapshotHistory)
@@ -1327,7 +1334,12 @@ async function applyBridgeChunkAsync(
       replaceState(sessionMap, sessionId, 'clarify.resolved', payload)
       emit('clarify.resolved', payload)
     } else if (evType === 'bridge.compression.requested') {
-      const bridgeHistory = await buildDbHistory(sessionId, { excludeLastUser: true })
+      const bridgeHistory = await buildDbSnapshotAwareHistory(
+        sessionId,
+        profile,
+        { excludeLastUser: true },
+        { model: modelContext.model, provider: modelContext.provider },
+      )
       const bridgeUsage = estimateUsageTokensFromMessages(bridgeHistory)
       const messageOnlyTokens = bridgeUsage.inputTokens + bridgeUsage.outputTokens
       const runInputTokens = typeof currentInputTokens === 'number' && Number.isFinite(currentInputTokens) && currentInputTokens > 0
