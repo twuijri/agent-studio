@@ -12,6 +12,22 @@ const chatRunMock = vi.hoisted(() => ({
   sessionOutputs: new Map<string, string>(),
 }))
 
+const workflowSkillResolverMock = vi.hoisted(() => ({
+  resolve: null as null | ((args: { agent?: string; profile: string; skillName: string }) => Promise<any>),
+}))
+
+vi.mock('../../packages/server/src/services/workflow-skill-resolver', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../packages/server/src/services/workflow-skill-resolver')>()
+  return {
+    ...actual,
+    resolveWorkflowSkillContent: (args: { agent?: string; profile: string; skillName: string }) => (
+      workflowSkillResolverMock.resolve
+        ? workflowSkillResolverMock.resolve(args)
+        : actual.resolveWorkflowSkillContent(args)
+    ),
+  }
+})
+
 vi.mock('../../packages/server/src/routes/hermes/chat-run', () => ({
   getChatRunServer: () => chatRunMock,
 }))
@@ -643,11 +659,53 @@ describe('workflow manager', () => {
       const result = await manager.runNow(workflow.id, { timeoutMs: 100 })
       expect(result.run.status).toBe('failed')
       expect(result.run.error).toBe('workflow run timed out after 100ms')
+      expect(result.run).toMatchObject({
+        requested_timeout_ms: 100,
+        deadline_at: 1100,
+      })
       expect(receivedTimeouts).toEqual([100, 60, 20])
+      expect(result.nodeSessions.map(session => [session.execution_id, session.remaining_timeout_ms_at_start])).toEqual([
+        ['header@loop:retry:0', 100],
+        ['latch@loop:retry:0', 60],
+        ['header@loop:retry:1', 20],
+      ])
       expect(result.nodeSessions.map(session => session.execution_id)).toEqual([
         'header@loop:retry:0', 'latch@loop:retry:0', 'header@loop:retry:1',
       ])
     } finally { nowSpy.mockRestore(); await manager.delete(workflow.id) }
+  })
+
+  it('bounds skill assembly by the same absolute Run deadline', async () => {
+    const { initAllStores } = await import('../../packages/server/src/db/hermes/init')
+    const { WorkflowManager } = await import('../../packages/server/src/services/workflow-manager')
+    initAllStores()
+    const manager = new WorkflowManager()
+    chatRunMock.runAndWait.mockReset()
+    let resolutionCount = 0
+    workflowSkillResolverMock.resolve = async ({ skillName }) => {
+      resolutionCount += 1
+      if (resolutionCount === 1) return { name: skillName, content: 'preflight evidence' }
+      return new Promise(() => {})
+    }
+    const workflow = manager.create({
+      name: `Skill assembly deadline ${Date.now()}`,
+      profile: 'default',
+      nodes: [{ id: 'agent', type: 'agent', data: {
+        title: 'Agent', agent: 'hermes', input: 'work', skills: ['delayed-skill'],
+      } }],
+      edges: [],
+    })
+    try {
+      const result = await manager.runNow(workflow.id, { timeoutMs: 20 })
+      expect(result.run.status).toBe('failed')
+      expect(result.run.error).toBe('workflow run timed out after 20ms')
+      expect(result.nodeSessions).toEqual([])
+      expect(chatRunMock.runAndWait).not.toHaveBeenCalled()
+      expect(manager.getRuntimeStatus(workflow.id).nodeStatuses.agent).toBe('failed')
+    } finally {
+      workflowSkillResolverMock.resolve = null
+      await manager.delete(workflow.id)
+    }
   })
 
   it('fails closed when run-deadline loop epoch evidence cannot be persisted', async () => {
@@ -2699,6 +2757,14 @@ describe('workflow manager', () => {
     try {
       const result = await manager.rerunFromNode(workflow.id, run.id, 'first', { timeoutMs: 100 })
       expect(receivedTimeouts).toEqual([100, 30])
+      expect(result.run).toMatchObject({
+        requested_timeout_ms: 100,
+        deadline_at: 9100,
+      })
+      expect(result.nodeSessions.filter(session => session.started_at !== null && session.started_at >= 9000)
+        .map(session => [session.node_id, session.remaining_timeout_ms_at_start])).toEqual([
+        ['first', 100], ['second', 30],
+      ])
       expect({ status: result.run.status, error: result.run.error, startedAt: result.run.started_at }).toEqual({
         status: 'failed', error: 'workflow run timed out after 100ms', startedAt: 9000,
       })
