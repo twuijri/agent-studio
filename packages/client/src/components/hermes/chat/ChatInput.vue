@@ -891,7 +891,7 @@ function formatTokens(n: number): string {
 
 // --- File attachment helpers ---
 
-function addFile(file: File) {
+function addFile(file: File, context?: string) {
   if (attachments.value.find(a => a.name === file.name)) return
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
   const url = URL.createObjectURL(file)
@@ -902,12 +902,18 @@ function addFile(file: File) {
     size: file.size,
     url,
     file,
+    ...(context?.trim() ? { context: context.trim() } : {}),
   })
 }
 
 function addFiles(files: File[]) {
   for (const file of files) addFile(file)
   if (files.length > 0) textareaRef.value?.focus()
+}
+
+function addBrowserAttachment(file: File, context: string) {
+  addFile(file, context)
+  textareaRef.value?.focus()
 }
 
 function handleAttachClick() {
@@ -961,7 +967,7 @@ function handleDrop(e: DragEvent) {
   addFiles(files)
 }
 
-defineExpose({ addFiles })
+defineExpose({ addFiles, addBrowserAttachment })
 
 // --- Send ---
 
@@ -1199,7 +1205,7 @@ function isImage(type: string): boolean {
         v-for="att in attachments"
         :key="att.id"
         class="attachment-preview"
-        :class="{ image: isImage(att.type) }"
+        :class="{ image: isImage(att.type), 'has-context': !!att.context }"
       >
         <template v-if="isImage(att.type)">
           <img :src="att.url" :alt="att.name" class="attachment-thumb" />
@@ -1211,6 +1217,10 @@ function isImage(type: string): boolean {
             <span class="file-size">{{ formatSize(att.size) }}</span>
           </div>
         </template>
+        <details v-if="att.context" class="attachment-context">
+          <summary>{{ t('browser.selectionData') }}</summary>
+          <pre>{{ att.context }}</pre>
+        </details>
         <button class="attachment-remove" @click="removeAttachment(att.id)">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -2110,12 +2120,36 @@ function isImage(type: string): boolean {
     width: 64px;
     height: 64px;
   }
+
+  &.image.has-context {
+    width: min(420px, 100%);
+    height: auto;
+  }
 }
 
 .attachment-thumb {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.attachment-preview.has-context .attachment-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+  object-fit: contain;
+  background: #fff;
+}
+
+.attachment-context {
+  padding: 7px 9px;
+  border-top: 1px solid $border-color;
+  font-size: 11px;
+  color: $text-secondary;
+
+  summary { cursor: pointer; user-select: none; }
+  pre { max-height: 180px; margin: 8px 0 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 10px/1.45 monospace; }
 }
 
 .attachment-file {

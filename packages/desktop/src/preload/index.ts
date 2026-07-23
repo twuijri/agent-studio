@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { BrowserBounds, BrowserProfileCreateInput, BrowserProfileSwitchImpact, BrowserProfileUpdateInput, BrowserSelection, DesktopBrowserProfile, DesktopBrowserState, DesktopBrowserTab } from '../main/browser/browser-types'
 
 type DesktopWindowKind = 'main' | 'pet'
 
@@ -34,6 +35,40 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     ipcRenderer.on('hermes-desktop:pet-window-refresh', listener)
     return () => ipcRenderer.removeListener('hermes-desktop:pet-window-refresh', listener)
   },
+  ...(desktopWindowKind() === 'main' ? { browser: {
+    getState: (): Promise<DesktopBrowserState> => ipcRenderer.invoke('hermes-desktop:browser-get-state'),
+    setViewport: (bounds: BrowserBounds, visible: boolean): Promise<DesktopBrowserState> => ipcRenderer.invoke('hermes-desktop:browser-set-viewport', bounds, visible),
+    createTab: (url?: string, activate?: boolean): Promise<DesktopBrowserTab> => ipcRenderer.invoke('hermes-desktop:browser-create-tab', url, activate),
+    closeTab: (tabId: string): Promise<DesktopBrowserState> => ipcRenderer.invoke('hermes-desktop:browser-close-tab', tabId),
+    activateTab: (tabId: string): Promise<DesktopBrowserState> => ipcRenderer.invoke('hermes-desktop:browser-activate-tab', tabId),
+    navigate: (tabId: string, url: string): Promise<DesktopBrowserTab> => ipcRenderer.invoke('hermes-desktop:browser-navigate', tabId, url),
+    navigationAction: (tabId: string, action: 'back' | 'forward' | 'reload' | 'stop'): Promise<DesktopBrowserTab> => ipcRenderer.invoke('hermes-desktop:browser-navigation-action', tabId, action),
+    createProfile: (input: BrowserProfileCreateInput): Promise<DesktopBrowserProfile> => ipcRenderer.invoke('hermes-desktop:browser-create-profile', input),
+    chooseProfileRootDirectory: (defaultPath?: string): Promise<string | null> => ipcRenderer.invoke('hermes-desktop:browser-choose-profile-root-directory', defaultPath),
+    renameProfile: (profileId: string, name: string): Promise<DesktopBrowserProfile> => ipcRenderer.invoke('hermes-desktop:browser-rename-profile', profileId, name),
+    profileSwitchImpact: (): Promise<BrowserProfileSwitchImpact> => ipcRenderer.invoke('hermes-desktop:browser-profile-switch-impact'),
+    switchProfile: (profileId: string, force?: boolean): Promise<DesktopBrowserState> => ipcRenderer.invoke('hermes-desktop:browser-switch-profile', profileId, force),
+    updateProfile: (profileId: string, input: BrowserProfileUpdateInput): Promise<DesktopBrowserProfile> => ipcRenderer.invoke('hermes-desktop:browser-update-profile', profileId, input),
+    deleteProfile: (profileId: string): Promise<DesktopBrowserState> => ipcRenderer.invoke('hermes-desktop:browser-delete-profile', profileId),
+    clearProfileData: (profileId: string, kind: 'cache' | 'site-data' | 'permission-audit'): Promise<DesktopBrowserState> => ipcRenderer.invoke('hermes-desktop:browser-clear-profile-data', profileId, kind),
+    cancelDownload: (downloadId: string): Promise<DesktopBrowserState> => ipcRenderer.invoke('hermes-desktop:browser-cancel-download', downloadId),
+    takeOver: (tabId: string): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:browser-take-over', tabId),
+    annotate: (tabId: string, mode: 'element' | 'region'): Promise<BrowserSelection> => ipcRenderer.invoke('hermes-desktop:browser-annotate', tabId, mode),
+    cancelAnnotation: (tabId: string): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:browser-cancel-annotation', tabId),
+    updateAnnotationNote: (tabId: string, marker: number, note: string): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:browser-update-annotation-note', tabId, marker, note),
+    captureAnnotations: (tabId: string): Promise<BrowserSelection['screenshot']> => ipcRenderer.invoke('hermes-desktop:browser-capture-annotations', tabId),
+    clearAnnotations: (tabId: string): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:browser-clear-annotations', tabId),
+    onAnnotationRequest: (callback: (request: { tabId: string; mode: 'element' | 'region' }) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, request: { tabId: string; mode: 'element' | 'region' }) => callback(request)
+      ipcRenderer.on('hermes-desktop:browser-annotation-request', listener)
+      return () => ipcRenderer.removeListener('hermes-desktop:browser-annotation-request', listener)
+    },
+    onStateChange: (callback: (state: DesktopBrowserState) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: DesktopBrowserState) => callback(state)
+      ipcRenderer.on('hermes-desktop:browser-state-change', listener)
+      return () => ipcRenderer.removeListener('hermes-desktop:browser-state-change', listener)
+    },
+  } } : {}),
   platform: process.platform,
   isDesktop: true,
   windowKind: desktopWindowKind(),
