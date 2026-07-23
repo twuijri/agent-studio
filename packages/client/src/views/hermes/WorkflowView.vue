@@ -15,6 +15,7 @@ import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import { useI18n } from 'vue-i18n'
 import { buildWorkflowEvidenceRows, latestWorkflowNodeSession, summarizeWorkflowEvidenceRows, workflowEdgePlaybackState, type WorkflowEvidenceRow } from '@/utils/workflow-history'
+import { resolveWorkflowRunPageSwipe, type WorkflowRunPagerPage } from '@/utils/workflow-run-pager'
 import {
   normalizeWorkflowRunEdge,
   normalizeWorkflowRunNodeTargets,
@@ -122,7 +123,10 @@ const defaultViewport: WorkflowViewport = { x: 80, y: 80, zoom: 0.75 }
 const workflowBodyRef = ref<HTMLElement | null>(null)
 const workflowCanvasRef = ref<HTMLElement | null>(null)
 const workflowRunsPanelRef = ref<HTMLElement | null>(null)
-const workflowEvidenceRef = ref<HTMLElement | null>(null)
+const workflowRunsHistoryScrollRef = ref<HTMLElement | null>(null)
+const workflowRunDetailsScrollRef = ref<HTMLElement | null>(null)
+const workflowRunsHistoryTitleRef = ref<HTMLElement | null>(null)
+const workflowRunDetailsTitleRef = ref<HTMLElement | null>(null)
 const workflowImportInputRef = ref<HTMLInputElement | null>(null)
 const workflowImportConfirmVisible = ref(false)
 const workflowImportPreview = ref<Awaited<ReturnType<typeof previewWorkflowImport>> | null>(null)
@@ -318,17 +322,13 @@ const workflowRunsLoading = ref(false)
 const rerunningWorkflowNodeId = ref<string | null>(null)
 const showWorkflowRunsPanel = ref(true)
 const selectedWorkflowRunId = ref<string | null>(null)
-const workflowEvidenceExpanded = ref(false)
-const workflowOtherEvidenceExpanded = ref(false)
-const workflowEvidenceHeight = ref<number | null>(null)
-const workflowEvidenceResizeStart = ref<{
-  y: number
-  height: number
-  pointerId: number
-  target: HTMLElement
-  bodyCursor: string
-  bodyUserSelect: string
-} | null>(null)
+const workflowRunPage = ref<WorkflowRunPagerPage>('history')
+const workflowEvidenceTab = ref<'actual' | 'other' | 'loops'>('actual')
+const workflowRunPageAnnouncement = ref(t('workflow.evidence.historyPage'))
+const workflowRunPageScrollTops: Record<WorkflowRunPagerPage, number> = { history: 0, details: 0 }
+const workflowRunDetailsScrollTops = new Map<string, number>()
+const workflowRunSwipeStart = ref<{ x: number; y: number; pointerId: number } | null>(null)
+const workflowRunEvidenceDetailsVisible = ref(false)
 const selectedWorkflowEvidenceRow = ref<WorkflowEvidenceRow | null>(null)
 const workflowEvidenceDetailVisible = computed({
   get: () => selectedWorkflowEvidenceRow.value !== null,
@@ -651,6 +651,29 @@ const selectedWorkflowRunBudgetSessions = computed(() => {
 })
 const selectedWorkflowEvidenceRows = computed(() => selectedWorkflowRun.value ? buildWorkflowEvidenceRows(selectedWorkflowRun.value) : [])
 const selectedWorkflowEvidenceSummary = computed(() => summarizeWorkflowEvidenceRows(selectedWorkflowEvidenceRows.value))
+const selectedWorkflowOtherJudgmentRows = computed(() => [
+  ...selectedWorkflowEvidenceSummary.value.notTakenEdges,
+  ...selectedWorkflowEvidenceSummary.value.supplementalRows.filter(row => row.kind !== 'loop'),
+])
+const selectedWorkflowLoopRows = computed(() => selectedWorkflowEvidenceSummary.value.supplementalRows.filter(row => row.kind === 'loop'))
+const selectedWorkflowEvidenceTabRows = computed(() => {
+  if (workflowEvidenceTab.value === 'actual') return selectedWorkflowEvidenceSummary.value.actualPathEdges
+  if (workflowEvidenceTab.value === 'other') return selectedWorkflowOtherJudgmentRows.value
+  return selectedWorkflowLoopRows.value
+})
+const workflowEvidenceTabCounts = computed(() => ({
+  actual: selectedWorkflowEvidenceSummary.value.actualPathEdges.length,
+  other: selectedWorkflowOtherJudgmentRows.value.length,
+  loops: selectedWorkflowLoopRows.value.length,
+}))
+const workflowRunPagerModalOpen = computed(() => (
+  workflowRunEvidenceDetailsVisible.value
+  || workflowEvidenceDetailVisible.value
+  || workflowRunBudgetModalVisible.value
+  || workflowImportConfirmVisible.value
+  || workspaceModalVisible.value
+  || edgeEditorVisible.value
+))
 
 function workflowEdgeCanvasSubject(path: string): string {
   if (path === 'output') return t('workflow.evidence.entireReplyText')
@@ -742,11 +765,15 @@ const renderedEdges = computed<WorkflowEdge[]>({
   },
 })
 
-watch(selectedWorkflowRunId, () => {
+watch(selectedWorkflowRunId, (runId) => {
   clearWorkflowEdgePreview()
-  workflowEvidenceExpanded.value = Boolean(selectedWorkflowRunId.value)
-  workflowOtherEvidenceExpanded.value = Boolean(selectedWorkflowRunId.value)
+  workflowEvidenceTab.value = 'actual'
+  workflowRunEvidenceDetailsVisible.value = false
   selectedWorkflowEvidenceRow.value = null
+  if (!runId) {
+    workflowRunPage.value = 'history'
+    workflowRunPageAnnouncement.value = t('workflow.evidence.historyPage')
+  }
 })
 
 const workflowChatPanelPendingApproval = computed(() => {
@@ -790,7 +817,6 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleWorkflowChatPanelViewportResize)
   window.removeEventListener('keydown', handleWorkflowUndoShortcut)
   clearWorkflowEdgePreview()
-  stopWorkflowEvidenceResize()
   stopWorkflowChatResize()
   removeWorkflowStatusListener?.()
   removeWorkflowStatusListener = null
@@ -832,13 +858,6 @@ function clampWorkflowChatPanelWidth(width: number) {
 
 function handleWorkflowChatPanelViewportResize() {
   if (!isMobile.value) workflowChatPanelWidth.value = clampWorkflowChatPanelWidth(workflowChatPanelWidth.value)
-  if (workflowEvidenceHeight.value !== null) {
-    void nextTick(() => {
-      if (workflowEvidenceHeight.value !== null) {
-        workflowEvidenceHeight.value = clampWorkflowEvidenceHeight(workflowEvidenceHeight.value)
-      }
-    })
-  }
 }
 
 function handleWorkflowChatResizeMove(event: PointerEvent) {
@@ -871,83 +890,6 @@ function startWorkflowChatResize(event: PointerEvent) {
   window.addEventListener('pointerup', stopWorkflowChatResize)
   document.body.style.userSelect = 'none'
   document.body.style.cursor = 'col-resize'
-}
-
-function workflowEvidenceHeightBounds() {
-  const panelHeight = workflowRunsPanelRef.value?.clientHeight || window.innerHeight
-  return {
-    min: Math.min(180, Math.max(120, panelHeight - 120)),
-    max: Math.max(180, Math.floor(panelHeight * 0.82)),
-  }
-}
-
-function clampWorkflowEvidenceHeight(height: number) {
-  const { min, max } = workflowEvidenceHeightBounds()
-  return Math.min(max, Math.max(min, Math.round(height)))
-}
-
-function handleWorkflowEvidenceResizeMove(event: PointerEvent) {
-  const start = workflowEvidenceResizeStart.value
-  if (!start || event.pointerId !== start.pointerId) return
-  workflowEvidenceHeight.value = clampWorkflowEvidenceHeight(start.height + start.y - event.clientY)
-}
-
-function stopWorkflowEvidenceResize() {
-  const start = workflowEvidenceResizeStart.value
-  if (!start) return
-  workflowEvidenceResizeStart.value = null
-  window.removeEventListener('pointermove', handleWorkflowEvidenceResizeMove)
-  window.removeEventListener('pointerup', stopWorkflowEvidenceResize)
-  window.removeEventListener('pointercancel', stopWorkflowEvidenceResize)
-  window.removeEventListener('blur', stopWorkflowEvidenceResize)
-  if (start.target.hasPointerCapture?.(start.pointerId)) start.target.releasePointerCapture(start.pointerId)
-  document.body.style.userSelect = start.bodyUserSelect
-  document.body.style.cursor = start.bodyCursor
-}
-
-function startWorkflowEvidenceResize(event: PointerEvent) {
-  if (isMobile.value || !event.isPrimary || event.button !== 0) return
-  event.preventDefault()
-  const target = event.currentTarget
-  if (!(target instanceof HTMLElement)) return
-  workflowEvidenceExpanded.value = true
-  workflowEvidenceResizeStart.value = {
-    y: event.clientY,
-    height: workflowEvidenceRef.value?.getBoundingClientRect().height || 260,
-    pointerId: event.pointerId,
-    target,
-    bodyCursor: document.body.style.cursor,
-    bodyUserSelect: document.body.style.userSelect,
-  }
-  target.setPointerCapture?.(event.pointerId)
-  window.addEventListener('pointermove', handleWorkflowEvidenceResizeMove)
-  window.addEventListener('pointerup', stopWorkflowEvidenceResize)
-  window.addEventListener('pointercancel', stopWorkflowEvidenceResize)
-  window.addEventListener('blur', stopWorkflowEvidenceResize)
-  document.body.style.userSelect = 'none'
-  document.body.style.cursor = 'row-resize'
-}
-
-function workflowEvidenceCurrentHeight(): number {
-  const current = workflowEvidenceHeight.value
-    ?? workflowEvidenceRef.value?.getBoundingClientRect().height
-    ?? workflowEvidenceHeightBounds().min
-  return clampWorkflowEvidenceHeight(current)
-}
-
-function handleWorkflowEvidenceResizeKeydown(event: KeyboardEvent) {
-  if (isMobile.value) return
-  const { min, max } = workflowEvidenceHeightBounds()
-  const current = workflowEvidenceCurrentHeight()
-  let next: number | null = null
-  if (event.key === 'ArrowUp') next = current + 24
-  else if (event.key === 'ArrowDown') next = current - 24
-  else if (event.key === 'Home') next = min
-  else if (event.key === 'End') next = max
-  if (next === null) return
-  event.preventDefault()
-  workflowEvidenceExpanded.value = true
-  workflowEvidenceHeight.value = clampWorkflowEvidenceHeight(next)
 }
 
 function closeWorkflowChatPanel() {
@@ -1251,10 +1193,25 @@ function openWorkflowEvidenceDetail(row: WorkflowEvidenceRow): void {
   selectedWorkflowEvidenceRow.value = row
 }
 
+function workflowEvidenceRowKey(row: WorkflowEvidenceRow): string {
+  return `${row.kind}:${row.evaluationId || row.technicalId}:${row.sequence}`
+}
+
+function workflowEvidencePathUsed(row: WorkflowEvidenceRow): boolean {
+  return row.consumed === true || (row.consumed === undefined && row.status === 'taken')
+}
+
+function workflowActualPathText(): string {
+  const rows = selectedWorkflowEvidenceSummary.value.actualPathEdges
+  if (rows.length === 0) return t('workflow.evidence.noActualPath')
+  return rows.map(workflowEvidenceTitle).join(' · ')
+}
+
 function workflowEvidenceStatusLabel(row: WorkflowEvidenceRow): string {
   if (row.kind === 'edge') {
-    if (row.status === 'taken') return t('workflow.evidence.statuses.taken')
-    if (row.status === 'not_taken') return t('workflow.evidence.statuses.notTaken')
+    if (workflowEvidencePathUsed(row)) return t('workflow.evidence.actualExecution')
+    if (row.status === 'taken') return t('workflow.evidence.evaluatedNotExecuted')
+    if (row.status === 'not_taken') return t('workflow.evidence.conditionNotMatched')
     return t('workflow.evidence.statuses.evaluationFailed')
   }
   if (row.status === 'timed_out') return t('workflow.evidence.statuses.timedOut')
@@ -1323,26 +1280,6 @@ function workflowEvidenceDisplayActualValue(row: WorkflowEvidenceRow): string {
   return row.conditionActualValue ?? ''
 }
 
-function workflowEvidenceConditionHelp(row: WorkflowEvidenceRow): string {
-  const operator = row.conditionOperator || ''
-  const supportedOperators = new Set(['equals', 'not_equals', 'contains', 'not_contains', 'exists', 'not_exists'])
-  if (!supportedOperators.has(operator)) return ''
-  const values = { path: row.conditionPath || '', value: row.expectedValue || '' }
-  if (row.conditionPath === 'output' || row.conditionPath === 'error') {
-    return t(`workflow.edgeEditor.rawTextOperatorHelp.${operator}`, values)
-  }
-  if (row.conditionPath === 'outputJson' || row.conditionPath?.startsWith('outputJson.')) {
-    return t(`workflow.edgeEditor.jsonFieldOperatorHelp.${operator}`, values)
-  }
-  return ''
-}
-
-function workflowEvidenceSourceOutcomeLabel(row: WorkflowEvidenceRow): string {
-  if (row.sourceOutcome === 'success') return t('workflow.evidence.sourceReturned')
-  if (row.sourceOutcome === 'failure') return t('workflow.evidence.sourceFailed')
-  return t('workflow.evidence.sourceSkippedStatus')
-}
-
 function workflowEvidenceRouteMismatchDescription(row: WorkflowEvidenceRow): string {
   if (row.sourceOutcome === 'skipped') return t('workflow.evidence.reasons.sourceSkipped')
   if (row.route === 'failure' && row.sourceOutcome === 'success') return t('workflow.evidence.reasons.failureRouteAfterSuccess')
@@ -1352,9 +1289,10 @@ function workflowEvidenceRouteMismatchDescription(row: WorkflowEvidenceRow): str
 
 function workflowEvidenceDescription(row: WorkflowEvidenceRow): string {
   if (row.kind === 'edge') {
-    if (row.status === 'taken') {
+    if (workflowEvidencePathUsed(row)) {
       return t('workflow.evidence.reasons.pathSelected')
     }
+    if (row.status === 'taken') return t('workflow.evidence.reasons.pathEvaluatedNotUsed')
     if (row.status === 'error') return t('workflow.evidence.reasons.evaluationFailed')
     if (row.reason === 'condition_not_matched' && row.businessReason) {
       const values = {
@@ -1401,7 +1339,8 @@ function workflowEvidenceDescription(row: WorkflowEvidenceRow): string {
 
 function workflowEvidenceRowDescription(row: WorkflowEvidenceRow): string {
   if (row.kind !== 'edge') return workflowEvidenceDescription(row)
-  if (row.status === 'taken') return t('workflow.evidence.reasons.pathSelected')
+  if (workflowEvidencePathUsed(row)) return t('workflow.evidence.reasons.pathSelected')
+  if (row.status === 'taken') return t('workflow.evidence.reasons.pathEvaluatedNotUsed')
   if (row.reason === 'route_not_matched') return workflowEvidenceRouteMismatchDescription(row)
   if (row.reason === 'condition_not_matched') return t('workflow.evidence.reasons.conditionNotMatched')
   return workflowEvidenceDescription(row)
@@ -1409,9 +1348,9 @@ function workflowEvidenceRowDescription(row: WorkflowEvidenceRow): string {
 
 function workflowEvidenceRawStatus(row: WorkflowEvidenceRow): string {
   if (row.kind === 'edge') {
-    return row.status === 'taken'
+    return workflowEvidencePathUsed(row)
       ? t('workflow.evidence.technicalStatus.pathUsed')
-      : row.status === 'not_taken'
+      : row.status === 'not_taken' || row.status === 'taken'
         ? t('workflow.evidence.technicalStatus.pathNotUsed')
         : t('workflow.evidence.statuses.evaluationFailed')
   }
@@ -1424,6 +1363,9 @@ function workflowEvidenceRawRoute(row: WorkflowEvidenceRow): string {
 }
 
 function workflowEvidenceRawReason(row: WorkflowEvidenceRow): string {
+  if (row.kind === 'edge' && row.status === 'taken' && !workflowEvidencePathUsed(row)) {
+    return t('workflow.evidence.reasons.pathEvaluatedNotUsed')
+  }
   const raw = row.reason || row.exitReason || ''
   if (raw === 'condition_not_matched') return t('workflow.evidence.technicalReason.conditionNotMatched')
   if (raw === 'iteration_limit_reached') return t('workflow.evidence.reasons.iterationLimitReached')
@@ -1645,6 +1587,8 @@ async function clearSelectedWorkflowRun() {
   nextAutoSelect.delete(activeWorkflowId.value)
   autoSelectRunningWorkflowIds.value = nextAutoSelect
   selectedWorkflowRunId.value = null
+  workflowRunPage.value = 'history'
+  workflowRunPageAnnouncement.value = t('workflow.evidence.historyPage')
   const workflow = workflows.value.find(item => item.id === activeWorkflowId.value)
   if (workflow) await applyWorkflow(workflow, false, { resetRuntime: true })
 }
@@ -1668,16 +1612,103 @@ async function clearActiveWorkflowPage() {
   applyingWorkflow = false
 }
 
-async function selectWorkflowRun(run: WorkflowRunRecord) {
-  if (selectedWorkflowRunId.value === run.id) {
-    await clearSelectedWorkflowRun()
-    return
+async function changeWorkflowRunPage(page: WorkflowRunPagerPage) {
+  if (page === 'details' && !selectedWorkflowRun.value) return
+  const currentScroller = workflowRunPage.value === 'history'
+    ? workflowRunsHistoryScrollRef.value
+    : workflowRunDetailsScrollRef.value
+  if (currentScroller) {
+    workflowRunPageScrollTops[workflowRunPage.value] = currentScroller.scrollTop
+    if (workflowRunPage.value === 'details' && selectedWorkflowRunId.value) {
+      workflowRunDetailsScrollTops.set(selectedWorkflowRunId.value, currentScroller.scrollTop)
+    }
   }
+  workflowRunPage.value = page
+  workflowRunPageAnnouncement.value = t(page === 'history' ? 'workflow.evidence.historyPage' : 'workflow.evidence.detailsPage')
+  await nextTick()
+  const nextScroller = page === 'history' ? workflowRunsHistoryScrollRef.value : workflowRunDetailsScrollRef.value
+  if (nextScroller) {
+    nextScroller.scrollTop = page === 'details' && selectedWorkflowRunId.value
+      ? workflowRunDetailsScrollTops.get(selectedWorkflowRunId.value) || 0
+      : workflowRunPageScrollTops[page]
+  }
+  const title = page === 'history' ? workflowRunsHistoryTitleRef.value : workflowRunDetailsTitleRef.value
+  title?.focus({ preventScroll: true })
+}
+
+function showWorkflowRunHistory() {
+  void changeWorkflowRunPage('history')
+}
+
+function startWorkflowRunPageSwipe(event: PointerEvent) {
+  if (!event.isPrimary || event.button !== 0 || workflowRunPagerModalOpen.value) return
+  const target = event.target instanceof Element ? event.target : null
+  if (target?.closest('button, a, input, textarea, select, [role="tab"]')) return
+  const captureTarget = event.currentTarget instanceof Element ? event.currentTarget : null
+  try {
+    captureTarget?.setPointerCapture(event.pointerId)
+  } catch {
+    // Synthetic PointerEvents do not always have an active pointer to capture.
+  }
+  workflowRunSwipeStart.value = { x: event.clientX, y: event.clientY, pointerId: event.pointerId }
+}
+
+function releaseWorkflowRunPageSwipe(event: PointerEvent) {
+  const captureTarget = event.currentTarget instanceof Element ? event.currentTarget : null
+  try {
+    if (captureTarget?.hasPointerCapture(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId)
+  } catch {
+    // The browser may already have released capture after pointer cancellation.
+  }
+}
+
+function cancelWorkflowRunPageSwipe(event: PointerEvent) {
+  releaseWorkflowRunPageSwipe(event)
+  workflowRunSwipeStart.value = null
+}
+
+function finishWorkflowRunPageSwipe(event: PointerEvent) {
+  const start = workflowRunSwipeStart.value
+  releaseWorkflowRunPageSwipe(event)
+  workflowRunSwipeStart.value = null
+  if (!start || start.pointerId !== event.pointerId) return
+  const nextPage = resolveWorkflowRunPageSwipe({
+    page: workflowRunPage.value,
+    dx: event.clientX - start.x,
+    dy: event.clientY - start.y,
+    hasSelectedRun: Boolean(selectedWorkflowRun.value),
+    modalOpen: workflowRunPagerModalOpen.value,
+  })
+  if (nextPage) void changeWorkflowRunPage(nextPage)
+}
+
+async function selectWorkflowRun(run: WorkflowRunRecord) {
   const nextDeselected = new Set(manuallyDeselectedWorkflowRunIds.value)
   nextDeselected.delete(run.id)
   manuallyDeselectedWorkflowRunIds.value = nextDeselected
   selectedWorkflowRunId.value = run.id
   await applyWorkflowRunSnapshot(run)
+  await changeWorkflowRunPage('details')
+}
+
+function selectWorkflowEvidenceTab(tab: 'actual' | 'other' | 'loops') {
+  workflowEvidenceTab.value = tab
+  void nextTick(() => {
+    workflowRunsPanelRef.value?.querySelector<HTMLElement>(`#workflow-evidence-tab-${tab}`)?.focus()
+  })
+}
+
+function handleWorkflowEvidenceTabKeydown(event: KeyboardEvent) {
+  const tabs: Array<'actual' | 'other' | 'loops'> = ['actual', 'other', 'loops']
+  const current = tabs.indexOf(workflowEvidenceTab.value)
+  let next = current
+  if (event.key === 'ArrowRight') next = (current + 1) % tabs.length
+  else if (event.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length
+  else if (event.key === 'Home') next = 0
+  else if (event.key === 'End') next = tabs.length - 1
+  else return
+  event.preventDefault()
+  selectWorkflowEvidenceTab(tabs[next])
 }
 
 function openWorkflowRunContextMenu(event: MouseEvent, run: WorkflowRunRecord) {
@@ -3203,9 +3234,23 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
           @clickoutside="handleContextMenuClickOutside"
         />
       </section>
-      <aside ref="workflowRunsPanelRef" v-if="showWorkflowRunsPanel" class="workflow-runs-panel">
+      <aside
+        ref="workflowRunsPanelRef"
+        v-if="showWorkflowRunsPanel"
+        class="workflow-runs-panel"
+        @pointerdown="startWorkflowRunPageSwipe"
+        @pointerup="finishWorkflowRunPageSwipe"
+        @pointercancel="cancelWorkflowRunPageSwipe"
+      >
+        <span class="workflow-runs-live-region" aria-live="polite" aria-atomic="true">{{ workflowRunPageAnnouncement }}</span>
+        <div
+          class="workflow-runs-pages"
+          :class="{ 'show-details': workflowRunPage === 'details' }"
+          data-testid="workflow-runs-pages"
+        >
+          <section class="workflow-runs-page" data-testid="workflow-runs-history-page" :aria-hidden="workflowRunPage !== 'history'" :inert="workflowRunPage !== 'history'">
         <div class="workflow-runs-header">
-          <div class="workflow-runs-title">{{ t('workflow.runs.title') }}</div>
+          <div ref="workflowRunsHistoryTitleRef" class="workflow-runs-title" tabindex="-1">{{ t('workflow.evidence.historyPage') }}</div>
           <div class="workflow-runs-header-actions">
             <button class="workflow-runs-refresh" type="button" :title="t('workflow.runs.refresh')" @click="loadWorkflowRuns()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -3223,14 +3268,16 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
             </button>
           </div>
         </div>
-        <div v-if="workflowRunsLoading" class="workflow-runs-empty">{{ t('common.loading') }}</div>
-        <div v-else-if="workflowRuns.length === 0" class="workflow-runs-empty">{{ t('workflow.runs.empty') }}</div>
-        <div v-else class="workflow-runs-list">
+        <div ref="workflowRunsHistoryScrollRef" class="workflow-runs-page-scroll">
+          <div v-if="workflowRunsLoading" class="workflow-runs-empty">{{ t('common.loading') }}</div>
+          <div v-else-if="workflowRuns.length === 0" class="workflow-runs-empty">{{ t('workflow.runs.empty') }}</div>
+          <div v-else class="workflow-runs-list">
           <button
             v-for="run in workflowRuns"
             :key="run.id"
             class="workflow-run-item"
             :class="{ active: selectedWorkflowRunId === run.id }"
+            :aria-current="selectedWorkflowRunId === run.id ? 'true' : undefined"
             type="button"
             @click="selectWorkflowRun(run)"
             @contextmenu="openWorkflowRunContextMenu($event, run)"
@@ -3252,189 +3299,92 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
             </div>
             <div v-if="run.error" class="workflow-run-error" :title="run.error">{{ run.error }}</div>
           </button>
+          </div>
         </div>
+          </section>
+          <section class="workflow-runs-page" data-testid="workflow-run-details-page" :aria-hidden="workflowRunPage !== 'details'" :inert="workflowRunPage !== 'details'">
+            <div class="workflow-runs-header workflow-run-details-header">
+              <button
+                class="workflow-run-back"
+                type="button"
+                data-testid="workflow-run-back"
+                @click="showWorkflowRunHistory"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+                <span>{{ t('workflow.evidence.backToRuns') }}</span>
+              </button>
+              <div ref="workflowRunDetailsTitleRef" class="workflow-runs-title" tabindex="-1">{{ t('workflow.evidence.detailsPage') }}</div>
+            </div>
+            <div ref="workflowRunDetailsScrollRef" class="workflow-runs-page-scroll">
         <section
           v-if="selectedWorkflowRun"
-          ref="workflowEvidenceRef"
           class="workflow-evidence"
-          :class="{ expanded: workflowEvidenceExpanded }"
-          :style="workflowEvidenceHeight ? { height: `${workflowEvidenceHeight}px`, flexBasis: `${workflowEvidenceHeight}px`, maxHeight: 'none' } : undefined"
           :aria-label="t('workflow.evidence.ariaLabel')"
         >
-          <button
-            type="button"
-            role="separator"
-            class="workflow-evidence-resize-handle"
-            data-testid="workflow-evidence-resize-handle"
-            :aria-label="t('workflow.evidence.resizeConclusion')"
-            aria-orientation="horizontal"
-            :aria-valuemin="workflowEvidenceHeightBounds().min"
-            :aria-valuemax="workflowEvidenceHeightBounds().max"
-            :aria-valuenow="workflowEvidenceCurrentHeight()"
-            @pointerdown="startWorkflowEvidenceResize"
-            @pointercancel="stopWorkflowEvidenceResize"
-            @lostpointercapture="stopWorkflowEvidenceResize"
-            @keydown="handleWorkflowEvidenceResizeKeydown"
-          />
           <div class="workflow-evidence-overview" data-testid="workflow-evidence-overview">
             <div class="workflow-evidence-summary-topline">
-              <span>{{ t('workflow.evidence.summaryTitle') }}</span>
-              <strong>{{ workflowEvidenceOutcomeLabel() }}</strong>
+              <span>{{ t('workflow.evidence.resultStatus') }}</span>
+              <strong data-testid="workflow-run-result-status">{{ workflowEvidenceOutcomeLabel() }}</strong>
             </div>
-            <div class="workflow-evidence-actual-path" data-testid="workflow-actual-path">
+            <div class="workflow-evidence-result-duration">
+              <span>{{ t('workflow.evidence.duration') }}</span>
+              <strong data-testid="workflow-run-result-duration">{{ formatWorkflowRunDuration(selectedWorkflowRun) }}</strong>
+            </div>
+            <div class="workflow-evidence-actual-path-compact" data-testid="workflow-actual-path-compact" :title="workflowActualPathText()">
               <span class="workflow-evidence-section-label">{{ t('workflow.evidence.actualPath') }}</span>
-              <ol v-if="selectedWorkflowEvidenceSummary.actualPathEdges.length > 0">
-                <li v-for="row in selectedWorkflowEvidenceSummary.actualPathEdges" :key="`actual:${row.sequence}:${row.technicalId}`">
-                  {{ workflowEvidenceTitle(row) }}
-                </li>
-              </ol>
-              <span v-else class="workflow-evidence-empty-path">{{ t('workflow.evidence.noActualPath') }}</span>
+              <strong>{{ workflowActualPathText() }}</strong>
             </div>
-            <div class="workflow-run-budget-evidence" data-testid="workflow-run-budget-evidence">
+            <div class="workflow-run-budget-compact" data-testid="workflow-run-budget-compact" :title="workflowRunBudgetTitle(selectedWorkflowRun)">
+              <span class="workflow-evidence-section-label">{{ t('workflow.evidence.budgetLabel') }}</span>
               <strong>{{ workflowRunBudgetDetails(selectedWorkflowRun) }}</strong>
-              <span>{{ workflowRunBudgetTitle(selectedWorkflowRun) }}</span>
-              <ul v-if="selectedWorkflowRunBudgetSessions.length > 0">
-                <li v-for="session in selectedWorkflowRunBudgetSessions" :key="session.id">
-                  {{ workflowEditorNodeName(session.node_id) }} · {{ workflowNodeStartBudgetLabel(session.remaining_timeout_ms_at_start) }}
-                </li>
-              </ul>
             </div>
+            <button
+              type="button"
+              class="workflow-run-evidence-details-trigger"
+              data-testid="workflow-run-evidence-details-trigger"
+              @click="workflowRunEvidenceDetailsVisible = true"
+            >
+              {{ t('workflow.evidence.runDetails') }}
+              <span aria-hidden="true">›</span>
+            </button>
           </div>
-          <button
-            type="button"
-            class="workflow-evidence-toggle"
-            :aria-expanded="workflowEvidenceExpanded"
-            @click="workflowEvidenceExpanded = !workflowEvidenceExpanded"
-          >
-            <span class="workflow-evidence-title">
-              {{ t('workflow.evidence.pathChecks') }}
-              <span>{{ t('workflow.evidence.selectedCount', { count: selectedWorkflowEvidenceSummary.takenEdges.length }) }}</span>
-              <span>· {{ t('workflow.evidence.otherCount', { count: selectedWorkflowEvidenceSummary.notTakenEdges.length }) }}</span>
-              <span v-if="selectedWorkflowEvidenceSummary.supplementalRows.length > 0">· {{ t('workflow.evidence.eventCount', { count: selectedWorkflowEvidenceSummary.supplementalRows.length }) }}</span>
-            </span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path :d="workflowEvidenceExpanded ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'" />
-            </svg>
-          </button>
-          <template v-if="workflowEvidenceExpanded">
-            <div v-if="selectedWorkflowEvidenceRows.length === 0" class="workflow-runs-empty">{{ t('workflow.evidence.empty') }}</div>
-            <div v-else class="workflow-evidence-list">
-              <section data-testid="workflow-selected-paths">
-                <h3>{{ t('workflow.evidence.selectedPaths') }}</h3>
-                <article
-                  v-for="row in selectedWorkflowEvidenceSummary.takenEdges"
-                  :key="`selected:${row.kind}:${row.sequence}:${row.technicalId}`"
-                  class="workflow-evidence-row selected"
-                  role="button"
-                  tabindex="0"
-                  :aria-label="workflowEvidenceTitle(row)"
-                  @click="openWorkflowEvidenceDetail(row)"
-                  @keydown.enter="openWorkflowEvidenceDetail(row)"
-                  @keydown.space.prevent="openWorkflowEvidenceDetail(row)"
-                >
-                  <div class="workflow-evidence-topline">
-                    <span class="workflow-evidence-kind">{{ t(`workflow.evidence.${row.kind}`) }}</span>
-                    <span class="workflow-evidence-status">{{ workflowEvidenceStatusLabel(row) }}</span>
-                  </div>
-                  <strong>{{ workflowEvidenceTitle(row) }}</strong>
-                  <span class="workflow-evidence-description">{{ workflowEvidenceRowDescription(row) }}</span>
-                  <div class="workflow-source-outcome">
-                    <span>{{ t('workflow.evidence.sourceOutcome') }}</span>
-                    <strong>{{ workflowEvidenceSourceOutcomeLabel(row) }}</strong>
-                  </div>
-                  <div v-if="row.conditionPath" class="workflow-condition-comparison" data-testid="workflow-condition-comparison">
-                    <dl>
-                      <dt>{{ t('workflow.evidence.checkedData') }}</dt>
-                      <dd><strong>{{ workflowEvidenceCheckedDataLabel(row) }}</strong> <code>({{ row.conditionPath }})</code></dd>
-                      <dt>{{ t('workflow.evidence.comparison') }}</dt>
-                      <dd>{{ workflowEvidenceConditionOperatorLabel(row) }}</dd>
-                      <template v-if="row.expectedValue !== undefined">
-                        <dt>{{ workflowEvidenceExpectedValueLabel(row) }}</dt><dd><code>{{ row.expectedValue }}</code></dd>
-                      </template>
-                      <template v-if="row.conditionActualValue !== undefined">
-                        <dt>{{ workflowEvidenceActualValueLabel(row) }}</dt><dd><code>{{ workflowEvidenceDisplayActualValue(row) }}</code></dd>
-                      </template>
-                      <template v-if="workflowEvidenceDecisionLabel(row.businessDecision) && !workflowEvidenceUsesBusinessProjection(row)">
-                        <dt>{{ t('workflow.evidence.parsedBusinessDecision') }}</dt><dd><code>{{ workflowEvidenceDecisionLabel(row.businessDecision) }}</code></dd>
-                      </template>
-                      <template v-if="row.businessGate">
-                        <dt>{{ t('workflow.evidence.failedGateLabel') }}</dt><dd><code>{{ row.businessGate }}</code></dd>
-                      </template>
-                    </dl>
-                    <p v-if="workflowEvidenceConditionHelp(row)" class="workflow-condition-note">
-                      {{ workflowEvidenceConditionHelp(row) }}
-                    </p>
-                    <strong v-if="row.conditionMatched !== undefined" class="workflow-condition-result" :class="row.conditionMatched ? 'matched' : 'not-matched'">
-                      {{ row.conditionMatched ? t('workflow.evidence.conditionMatched') : t('workflow.evidence.conditionNotMatched') }}
-                    </strong>
-                  </div>
-                </article>
-              </section>
+          <div class="workflow-evidence-tabs" data-testid="workflow-evidence-tabs" role="tablist" :aria-label="t('workflow.evidence.pathChecks')" @keydown="handleWorkflowEvidenceTabKeydown">
+            <button id="workflow-evidence-tab-actual" type="button" role="tab" aria-controls="workflow-evidence-tabpanel" :aria-selected="workflowEvidenceTab === 'actual'" :tabindex="workflowEvidenceTab === 'actual' ? 0 : -1" @click="selectWorkflowEvidenceTab('actual')">
+              {{ t('workflow.evidence.actualExecution') }} <span>{{ workflowEvidenceTabCounts.actual }}</span>
+            </button>
+            <button id="workflow-evidence-tab-other" type="button" role="tab" aria-controls="workflow-evidence-tabpanel" :aria-selected="workflowEvidenceTab === 'other'" :tabindex="workflowEvidenceTab === 'other' ? 0 : -1" @click="selectWorkflowEvidenceTab('other')">
+              {{ t('workflow.evidence.otherJudgments') }} <span>{{ workflowEvidenceTabCounts.other }}</span>
+            </button>
+            <button id="workflow-evidence-tab-loops" type="button" role="tab" aria-controls="workflow-evidence-tabpanel" :aria-selected="workflowEvidenceTab === 'loops'" :tabindex="workflowEvidenceTab === 'loops' ? 0 : -1" @click="selectWorkflowEvidenceTab('loops')">
+              {{ t('workflow.evidence.loopEvents') }} <span>{{ workflowEvidenceTabCounts.loops }}</span>
+            </button>
+          </div>
+          <section id="workflow-evidence-tabpanel" class="workflow-evidence-list" data-testid="workflow-evidence-tabpanel" role="tabpanel" :aria-labelledby="`workflow-evidence-tab-${workflowEvidenceTab}`">
+            <div v-if="selectedWorkflowEvidenceTabRows.length === 0" class="workflow-runs-empty">{{ t('workflow.evidence.empty') }}</div>
+            <article
+              v-for="row in selectedWorkflowEvidenceTabRows"
+              :key="workflowEvidenceRowKey(row)"
+              class="workflow-evidence-row"
+              :class="{ selected: workflowEvidencePathUsed(row) }"
+            >
+              <div class="workflow-evidence-topline">
+                <strong class="workflow-evidence-row-title">{{ workflowEvidenceTitle(row) }}</strong>
+                <span class="workflow-evidence-status">{{ workflowEvidenceStatusLabel(row) }}</span>
+              </div>
+              <p class="workflow-evidence-description">{{ workflowEvidenceRowDescription(row) }}</p>
               <button
-                v-if="selectedWorkflowEvidenceSummary.otherRows.length > 0"
                 type="button"
-                class="workflow-other-evidence-toggle"
-                :aria-expanded="workflowOtherEvidenceExpanded"
-                @click="workflowOtherEvidenceExpanded = !workflowOtherEvidenceExpanded"
+                class="workflow-evidence-detail-trigger"
+                @click="openWorkflowEvidenceDetail(row)"
               >
-                {{ workflowOtherEvidenceExpanded
-                  ? t('workflow.evidence.hideOtherPaths')
-                  : t('workflow.evidence.showOtherPaths', { count: selectedWorkflowEvidenceSummary.otherRows.length }) }}
+                {{ t('workflow.evidence.judgmentDetails') }} <span aria-hidden="true">›</span>
               </button>
-              <section v-if="workflowOtherEvidenceExpanded" data-testid="workflow-other-paths">
-                <h3>{{ t('workflow.evidence.otherPaths') }}</h3>
-                <article
-                  v-for="row in selectedWorkflowEvidenceSummary.otherRows"
-                  :key="`other:${row.kind}:${row.sequence}:${row.technicalId}`"
-                  class="workflow-evidence-row"
-                  role="button"
-                  tabindex="0"
-                  :aria-label="workflowEvidenceTitle(row)"
-                  @click="openWorkflowEvidenceDetail(row)"
-                  @keydown.enter="openWorkflowEvidenceDetail(row)"
-                  @keydown.space.prevent="openWorkflowEvidenceDetail(row)"
-                >
-                  <div class="workflow-evidence-topline">
-                    <span class="workflow-evidence-kind">{{ t(`workflow.evidence.${row.kind}`) }}</span>
-                    <span class="workflow-evidence-status">{{ workflowEvidenceStatusLabel(row) }}</span>
-                  </div>
-                  <strong>{{ workflowEvidenceTitle(row) }}</strong>
-                  <span class="workflow-evidence-description">{{ workflowEvidenceRowDescription(row) }}</span>
-                  <div v-if="row.kind === 'edge'" class="workflow-source-outcome">
-                    <span>{{ t('workflow.evidence.sourceOutcome') }}</span>
-                    <strong>{{ workflowEvidenceSourceOutcomeLabel(row) }}</strong>
-                  </div>
-                  <div v-if="row.conditionPath" class="workflow-condition-comparison" data-testid="workflow-condition-comparison">
-                    <dl>
-                      <dt>{{ t('workflow.evidence.checkedData') }}</dt>
-                      <dd><strong>{{ workflowEvidenceCheckedDataLabel(row) }}</strong> <code>({{ row.conditionPath }})</code></dd>
-                      <dt>{{ t('workflow.evidence.comparison') }}</dt>
-                      <dd>{{ workflowEvidenceConditionOperatorLabel(row) }}</dd>
-                      <template v-if="row.expectedValue !== undefined">
-                        <dt>{{ workflowEvidenceExpectedValueLabel(row) }}</dt><dd><code>{{ row.expectedValue }}</code></dd>
-                      </template>
-                      <template v-if="row.conditionActualValue !== undefined">
-                        <dt>{{ workflowEvidenceActualValueLabel(row) }}</dt><dd><code>{{ workflowEvidenceDisplayActualValue(row) }}</code></dd>
-                      </template>
-                      <template v-if="workflowEvidenceDecisionLabel(row.businessDecision) && !workflowEvidenceUsesBusinessProjection(row)">
-                        <dt>{{ t('workflow.evidence.parsedBusinessDecision') }}</dt><dd><code>{{ workflowEvidenceDecisionLabel(row.businessDecision) }}</code></dd>
-                      </template>
-                      <template v-if="row.businessGate">
-                        <dt>{{ t('workflow.evidence.failedGateLabel') }}</dt><dd><code>{{ row.businessGate }}</code></dd>
-                      </template>
-                    </dl>
-                    <p v-if="workflowEvidenceConditionHelp(row)" class="workflow-condition-note">
-                      {{ workflowEvidenceConditionHelp(row) }}
-                    </p>
-                    <strong v-if="row.conditionMatched !== undefined" class="workflow-condition-result" :class="row.conditionMatched ? 'matched' : 'not-matched'">
-                      {{ row.conditionMatched ? t('workflow.evidence.conditionMatched') : t('workflow.evidence.conditionNotMatched') }}
-                    </strong>
-                  </div>
-                </article>
-              </section>
-            </div>
-          </template>
+            </article>
+          </section>
         </section>
+            </div>
+          </section>
+        </div>
         <NDropdown
           placement="bottom-start"
           trigger="manual"
@@ -3448,6 +3398,37 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
       </aside>
     </div>
     </main>
+
+    <NModal
+      v-model:show="workflowRunEvidenceDetailsVisible"
+      preset="card"
+      :title="t('workflow.evidence.runDetails')"
+      :style="{ width: 'min(720px, calc(100vw - 32px))' }"
+      data-testid="workflow-run-evidence-details-modal"
+    >
+      <div v-if="selectedWorkflowRun" class="workflow-run-evidence-details-list">
+        <section>
+          <h3>{{ t('workflow.evidence.actualPathSteps') }}</h3>
+          <ol v-if="selectedWorkflowEvidenceSummary.actualPathEdges.length > 0">
+            <li v-for="row in selectedWorkflowEvidenceSummary.actualPathEdges" :key="`actual-detail:${row.evaluationId || row.sequence}:${row.technicalId}`">
+              <strong>{{ workflowEvidenceTitle(row) }}</strong>
+              <span v-if="row.iterationPath !== '—'">{{ row.iterationPath }}</span>
+            </li>
+          </ol>
+          <p v-else>{{ t('workflow.evidence.noActualPath') }}</p>
+        </section>
+        <section>
+          <h3>{{ t('workflow.evidence.nodeBudgetDetails') }}</h3>
+          <strong>{{ workflowRunBudgetDetails(selectedWorkflowRun) }}</strong>
+          <span>{{ workflowRunBudgetTitle(selectedWorkflowRun) }}</span>
+          <ul v-if="selectedWorkflowRunBudgetSessions.length > 0">
+            <li v-for="session in selectedWorkflowRunBudgetSessions" :key="session.id">
+              {{ workflowEditorNodeName(session.node_id) }} · {{ workflowNodeStartBudgetLabel(session.remaining_timeout_ms_at_start) }}
+            </li>
+          </ul>
+        </section>
+      </div>
+    </NModal>
 
     <NModal
       v-model:show="workflowEvidenceDetailVisible"
@@ -3914,108 +3895,33 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
 }
 
 .workflow-evidence {
-  position: relative;
-  flex: 0 0 auto;
-  min-height: 0;
-  border-top: 1px solid var(--border-color);
+  min-height: 100%;
   background: $bg-card;
 }
-.workflow-evidence-resize-handle {
-  position: absolute;
-  z-index: 5;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 10px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: row-resize;
-  touch-action: none;
-}
-.workflow-evidence-resize-handle::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 3px;
-  width: 34px;
-  height: 3px;
-  border-radius: 999px;
-  transform: translateX(-50%);
-  background: var(--border-color);
-  transition: background-color 0.15s ease, width 0.15s ease;
-}
-.workflow-evidence-resize-handle:hover::after,
-.workflow-evidence-resize-handle:focus-visible::after {
-  width: 48px;
-  background: var(--accent-primary);
-}
-.workflow-evidence-resize-handle:focus-visible { outline: none; }
-.workflow-evidence-overview { padding: 12px; border-bottom: 1px solid var(--border-light); display: flex; flex-direction: column; gap: 8px; }
-.workflow-evidence-summary-topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-muted); font-size: 11px; }
-.workflow-evidence-summary-topline strong { color: var(--text-primary); font-size: 13px; }
-.workflow-evidence-gate { width: fit-content; max-width: 100%; padding: 3px 7px; border-radius: 999px; background: rgba(220, 38, 38, 0.1); color: var(--error); font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
-.workflow-evidence-summary-reason { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 16px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
-.workflow-evidence-actual-path { display: flex; flex-direction: column; gap: 5px; }
+.workflow-evidence-overview { min-width: 0; padding: 14px 12px 12px; border-bottom: 1px solid var(--border-light); display: flex; flex-direction: column; gap: 8px; }
+.workflow-evidence-summary-topline,
+.workflow-evidence-result-duration { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-muted); font-size: 11px; }
+.workflow-evidence-summary-topline strong { color: var(--text-primary); font-size: 15px; }
+.workflow-evidence-result-duration strong { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.workflow-evidence-actual-path-compact { min-width: 0; display: flex; flex-direction: column; gap: 3px; color: var(--text-primary); font-size: 11px; line-height: 16px; }
+.workflow-evidence-actual-path-compact strong { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-weight: 500; }
 .workflow-evidence-section-label { color: var(--text-muted); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-.workflow-evidence-actual-path ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
-.workflow-evidence-actual-path li { position: relative; padding-left: 14px; color: var(--text-primary); font-size: 11px; line-height: 16px; }
-.workflow-evidence-actual-path li::before { content: ''; position: absolute; left: 1px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-primary); }
-.workflow-evidence-empty-path { color: var(--text-muted); font-size: 11px; }
-.workflow-run-budget-evidence { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--border-light); color: var(--text-muted); font-size: 11px; line-height: 16px; }
-.workflow-run-budget-evidence strong { color: var(--text-primary); }
-.workflow-run-budget-evidence ul { margin: 2px 0 0; padding-left: 16px; }
-.workflow-run-budget-evidence li { margin: 2px 0; }
-.workflow-evidence.expanded {
-  flex-basis: 45%;
-  max-height: 45%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.workflow-evidence-toggle {
-  width: 100%;
-  flex: 0 0 auto;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  cursor: pointer;
-  text-align: left;
-}
-.workflow-evidence-toggle:hover { background: rgba(var(--accent-primary-rgb), 0.06); color: var(--text-primary); }
-.workflow-evidence-title { min-width: 0; font-size: 12px; font-weight: 600; }
-.workflow-evidence-title > span { margin-left: 4px; color: var(--text-muted); font-weight: 400; }
-.workflow-evidence-intro { flex: 0 0 auto; margin: 0; padding: 0 12px 8px; color: var(--text-muted); font-size: 11px; line-height: 16px; }
-.workflow-evidence-list { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
-.workflow-evidence-list section { display: flex; flex-direction: column; gap: 6px; }
-.workflow-evidence-list h3 { margin: 0; padding-top: 2px; color: var(--text-muted); font-size: 10px; line-height: 16px; text-transform: uppercase; letter-spacing: 0.04em; }
-.workflow-evidence-row { flex: 0 0 auto; display: flex; flex-direction: column; gap: 3px; padding: 7px 8px; border: 1px solid transparent; border-radius: 6px; background: rgba(var(--accent-primary-rgb), 0.05); font-size: 11px; color: var(--text-muted); cursor: pointer; transition: border-color 0.15s ease, background-color 0.15s ease; }
+.workflow-run-budget-compact { min-width: 0; padding-top: 7px; border-top: 1px solid var(--border-light); display: flex; flex-direction: column; gap: 3px; color: var(--text-muted); font-size: 11px; line-height: 16px; }
+.workflow-run-budget-compact strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-weight: 500; }
+.workflow-run-evidence-details-trigger { align-self: flex-end; min-height: 36px; padding: 0 2px; border: 0; background: transparent; color: var(--accent-primary); display: inline-flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer; }
+.workflow-run-evidence-details-trigger:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.workflow-evidence-tabs { position: sticky; top: 0; z-index: 2; padding: 8px; border-bottom: 1px solid var(--border-light); background: $bg-card; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.workflow-evidence-tabs button { min-width: 0; min-height: 38px; padding: 5px 3px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text-muted); font-size: 10px; white-space: nowrap; cursor: pointer; }
+.workflow-evidence-tabs button[aria-selected="true"] { border-color: rgba(var(--accent-primary-rgb), 0.24); background: rgba(var(--accent-primary-rgb), 0.1); color: var(--text-primary); }
+.workflow-evidence-tabs button span { display: inline-grid; min-width: 17px; height: 17px; padding: 0 4px; place-items: center; border-radius: 999px; background: rgba(var(--accent-primary-rgb), 0.12); }
+.workflow-evidence-list { min-height: 0; overflow: visible; overscroll-behavior: contain; padding: 10px 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.workflow-evidence-row { flex: 0 0 auto; display: flex; flex-direction: column; gap: 7px; padding: 10px; border: 1px solid var(--border-light); border-radius: 8px; background: rgba(var(--accent-primary-rgb), 0.04); font-size: 11px; color: var(--text-muted); }
 .workflow-evidence-row.selected { border-color: rgba(var(--accent-primary-rgb), 0.24); background: rgba(var(--accent-primary-rgb), 0.08); }
-.workflow-evidence-row:hover { border-color: rgba(var(--accent-primary-rgb), 0.28); background: rgba(var(--accent-primary-rgb), 0.09); }
-.workflow-evidence-row:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
-.workflow-evidence-row strong, .workflow-evidence-description { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workflow-evidence-row strong { color: var(--text-primary); font-size: 12px; }
-.workflow-evidence-topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.workflow-evidence-kind { font-weight: 600; }
-.workflow-evidence-status { color: var(--text-secondary); }
-.workflow-source-outcome { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; color: var(--text-muted); font-size: 10px; line-height: 15px; }
-.workflow-source-outcome strong { color: var(--text-secondary); font-weight: 600; }
-.workflow-condition-comparison { margin-top: 3px; padding-top: 5px; border-top: 1px solid var(--border-light); color: var(--text-muted); font-size: 10px; line-height: 15px; }
-.workflow-condition-comparison dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 7px; }
-.workflow-condition-comparison dt { color: var(--text-muted); }
-.workflow-condition-comparison dd { min-width: 0; margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
-.workflow-condition-comparison code { color: var(--text-primary); overflow-wrap: anywhere; }
-.workflow-condition-note { margin: 5px 0 0; padding: 5px 6px; border-radius: 4px; background: rgba(var(--accent-info-rgb), 0.06); color: var(--text-secondary); }
-.workflow-condition-result { display: block; margin-top: 4px; color: var(--text-secondary); text-align: right; }
-.workflow-condition-result.matched { color: var(--success); }
-.workflow-condition-result.not-matched { color: var(--text-muted); }
-.workflow-other-evidence-toggle { width: 100%; border: 1px dashed var(--border-color); border-radius: 6px; padding: 6px 8px; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
-.workflow-other-evidence-toggle:hover { border-color: rgba(var(--accent-primary-rgb), 0.35); color: var(--text-primary); background: rgba(var(--accent-primary-rgb), 0.04); }
+.workflow-evidence-topline { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.workflow-evidence-row-title { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--text-primary); font-size: 12px; line-height: 17px; }
+.workflow-evidence-status { flex: 0 0 auto; max-width: 43%; color: var(--text-secondary); font-size: 10px; text-align: right; }
+.workflow-evidence-description { margin: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--text-secondary); line-height: 16px; }
+.workflow-evidence-detail-trigger { align-self: flex-end; min-height: 32px; padding: 0; border: 0; background: transparent; color: var(--accent-primary); font-size: 11px; cursor: pointer; }
 .workflow-evidence-detail { max-height: min(70vh, 680px); overflow-y: auto; color: var(--text-secondary); }
 .workflow-evidence-detail-description { margin: 12px 0 18px; color: var(--text-primary); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .workflow-evidence-detail h3 { margin: 0 0 10px; color: var(--text-primary); font-size: 13px; }
@@ -4023,6 +3929,13 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
 .workflow-evidence-detail dt { color: var(--text-muted); }
 .workflow-evidence-detail dd { min-width: 0; margin: 0; color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; }
 .workflow-evidence-detail code { color: var(--accent-primary); white-space: inherit; overflow-wrap: inherit; }
+.workflow-run-evidence-details-list { max-height: min(70vh, 680px); overflow-y: auto; display: flex; flex-direction: column; gap: 18px; color: var(--text-secondary); }
+.workflow-run-evidence-details-list section { display: flex; flex-direction: column; gap: 8px; }
+.workflow-run-evidence-details-list h3 { margin: 0; color: var(--text-primary); font-size: 13px; }
+.workflow-run-evidence-details-list ol, .workflow-run-evidence-details-list ul { margin: 0; padding-left: 20px; }
+.workflow-run-evidence-details-list li { margin: 5px 0; }
+.workflow-run-evidence-details-list li span { display: block; color: var(--text-muted); font-size: 11px; }
+.workflow-run-evidence-details-list p { margin: 0; color: var(--text-muted); }
 
 .workflow-run-budget-form {
   display: flex;
@@ -4266,13 +4179,85 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
 }
 
 .workflow-runs-panel {
+  position: relative;
   width: 280px;
   flex: 0 0 280px;
   min-height: 0;
   border-left: 1px solid $border-color;
   background: $bg-card;
+  overflow: hidden;
+  overscroll-behavior-x: contain;
+  touch-action: pan-y;
+}
+
+.workflow-runs-live-region {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.workflow-runs-pages {
+  width: 200%;
+  height: 100%;
+  display: flex;
+  transform: translateX(0);
+  transition: transform 220ms ease;
+  will-change: transform;
+}
+
+.workflow-runs-pages.show-details {
+  transform: translateX(-50%);
+}
+
+.workflow-runs-page {
+  width: 50%;
+  flex: 0 0 50%;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.workflow-runs-page[aria-hidden="true"] {
+  visibility: hidden;
+}
+
+.workflow-runs-page-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.workflow-run-details-header {
+  justify-content: flex-start;
+}
+
+.workflow-run-back {
+  min-height: 36px;
+  margin: -6px 0 -6px -6px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.workflow-run-back:hover { background: rgba(var(--accent-primary-rgb), 0.08); }
+
+@media (prefers-reduced-motion: reduce) {
+  .workflow-runs-pages { transition-duration: 0.01ms; }
 }
 
 .workflow-chat-panel {
@@ -4474,9 +4459,6 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
 }
 
 .workflow-runs-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
   padding: 10px;
   display: flex;
   flex-direction: column;
