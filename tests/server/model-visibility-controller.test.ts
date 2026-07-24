@@ -123,8 +123,13 @@ vi.mock('../../packages/server/src/services/app-config', () => ({
 vi.mock('../../packages/server/src/services/hermes/model-catalog-cache', () => ({
   readProviderModelCatalogCache: mockReadProviderModelCatalogCache,
   resolveProviderCatalogModels: mockResolveProviderCatalogModels,
+  resolveProviderCatalogEntry: vi.fn(() => undefined),
   refreshConfiguredProviderModelCatalogs: mockRefreshConfiguredProviderModelCatalogs,
   writeProviderModelCatalogEntry: mockWriteProviderModelCatalogEntry,
+}))
+
+vi.mock('../../packages/server/src/services/hermes/provider-model-refresh', () => ({
+  providerModelRefreshCapabilities: () => ({ refreshable: true }),
 }))
 
 vi.mock('../../packages/server/src/db', () => ({
@@ -201,6 +206,31 @@ describe('models controller — model visibility', () => {
     expect(ctx.body.model_visibility).toEqual({
       deepseek: { mode: 'include', models: ['deepseek-reasoner'] },
     })
+  })
+
+  it('exposes single-provider refresh for authorized providers that are not editable', async () => {
+    mockReadFile.mockResolvedValue('')
+    mockReadConfigYamlForProfile.mockResolvedValue({
+      model: { default: 'grok-4.3', provider: 'xai-oauth' },
+    })
+    mockExistsSync.mockReturnValue(true)
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      credential_pool: {
+        'xai-oauth': [{ access_token: 'profile-oauth-token' }],
+      },
+    }))
+
+    const ctx = makeCtx()
+    ctx.query = { profile: 'default' }
+    await ctrl.getAvailable(ctx)
+
+    expect(ctx.body.groups).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: 'xai-oauth',
+        provider_editable: false,
+        model_refreshable: true,
+      }),
+    ]))
   })
 
   it('merges Web UI custom models into available provider groups', async () => {
