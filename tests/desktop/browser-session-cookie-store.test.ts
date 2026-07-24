@@ -1,33 +1,21 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Cookie, CookiesSetDetails } from 'electron'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   BrowserSessionCookieStore,
-  type BrowserCookieCrypto,
   type BrowserCookies,
 } from '../../packages/desktop/src/main/browser/browser-session-cookie-store'
 
 const roots: string[] = []
-
-const testCrypto: BrowserCookieCrypto = {
-  isEncryptionAvailable: () => true,
-  async encryptString(value) {
-    return Buffer.from(`test-encrypted:${Buffer.from(value).toString('base64')}`)
-  },
-  async decryptString(value) {
-    const encoded = value.toString().replace(/^test-encrypted:/, '')
-    return Buffer.from(encoded, 'base64').toString()
-  },
-}
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })))
 })
 
 describe('desktop browser session cookie store', () => {
-  it('encrypts all profile cookies and restores their host/domain and expiration semantics', async () => {
+  it('persists Google session cookies without OS encryption and restores their semantics', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hermes-browser-session-cookies-'))
     roots.push(root)
     const persistentExpiration = Date.now() / 1_000 + 86_400
@@ -67,13 +55,13 @@ describe('desktop browser session cookie store', () => {
       },
       async set() {},
     }
-    const store = new BrowserSessionCookieStore(testCrypto)
+    const store = new BrowserSessionCookieStore()
 
-    expect(await store.persist(root, source)).toBe(true)
-    const encrypted = await readFile(store.filePath(root), 'utf8')
-    expect(encrypted).not.toContain('host-session-secret')
-    expect(encrypted).not.toContain('domain-session-secret')
-    expect(encrypted).not.toContain('normal-cookie-secret')
+    await store.persist(root, source)
+    const serialized = await readFile(store.filePath(root), 'utf8')
+    expect(serialized).toContain('host-session-secret')
+    expect(serialized).toContain('domain-session-secret')
+    expect(serialized).toContain('normal-cookie-secret')
     if (process.platform !== 'win32') expect((await stat(store.filePath(root))).mode & 0o077).toBe(0)
 
     const restored: CookiesSetDetails[] = []
@@ -121,10 +109,10 @@ describe('desktop browser session cookie store', () => {
     expect(restored.slice(0, 2).every(cookie => cookie.expirationDate === undefined)).toBe(true)
   })
 
-  it('removes a stale snapshot after the last session cookie is deleted', async () => {
+  it('removes stale plaintext and legacy encrypted snapshots after the last cookie is deleted', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hermes-browser-session-cookie-clear-'))
     roots.push(root)
-    const store = new BrowserSessionCookieStore(testCrypto)
+    const store = new BrowserSessionCookieStore()
     const cookies: BrowserCookies = {
       async get() {
         return [{
@@ -138,9 +126,11 @@ describe('desktop browser session cookie store', () => {
       async set() {},
     }
     await store.persist(root, cookies)
+    await writeFile(join(root, '.hermes-session-cookies.enc'), 'legacy')
     cookies.get = async () => []
 
-    await expect(store.persist(root, cookies)).resolves.toBe(true)
+    await store.persist(root, cookies)
     await expect(stat(store.filePath(root))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(stat(join(root, '.hermes-session-cookies.enc'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 })

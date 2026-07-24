@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import type { Cookie, CookiesGetFilter, CookiesSetDetails } from 'electron'
 
 const SNAPSHOT_SCHEMA = 1
-const SNAPSHOT_FILE = '.hermes-session-cookies.enc'
+const SNAPSHOT_FILE = '.hermes-session-cookies.json'
+const LEGACY_ENCRYPTED_SNAPSHOT_FILE = '.hermes-session-cookies.enc'
 const MAX_SNAPSHOT_BYTES = 4 * 1024 * 1024
 
 interface StoredSessionCookie {
@@ -21,17 +22,6 @@ interface StoredSessionCookie {
 interface StoredSessionCookies {
   schema: typeof SNAPSHOT_SCHEMA
   cookies: StoredSessionCookie[]
-}
-
-interface EncryptedSessionCookies {
-  schema: typeof SNAPSHOT_SCHEMA
-  payload: string
-}
-
-export interface BrowserCookieCrypto {
-  isEncryptionAvailable(): boolean
-  encryptString(value: string): Promise<Buffer>
-  decryptString(value: Buffer): Promise<string>
 }
 
 export interface BrowserCookies {
@@ -88,32 +78,24 @@ function cookieDetails(cookie: StoredSessionCookie): CookiesSetDetails | null {
 }
 
 export class BrowserSessionCookieStore {
-  constructor(private readonly crypto: BrowserCookieCrypto) {}
-
   filePath(sessionPath: string): string {
     return join(sessionPath, SNAPSHOT_FILE)
   }
 
   async restore(sessionPath: string, cookies: BrowserCookies): Promise<{ restored: number; failed: number }> {
-    if (!this.crypto.isEncryptionAvailable()) return { restored: 0, failed: 0 }
     const pathname = this.filePath(sessionPath)
     let serialized: string
     try {
       const info = await stat(pathname)
-      if (info.size > MAX_SNAPSHOT_BYTES) throw new Error('Encrypted session cookie snapshot is too large')
+      if (info.size > MAX_SNAPSHOT_BYTES) throw new Error('Session cookie snapshot is too large')
       serialized = await readFile(pathname, 'utf8')
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { restored: 0, failed: 0 }
       throw error
     }
-    const envelope = JSON.parse(serialized) as Partial<EncryptedSessionCookies>
-    if (envelope.schema !== SNAPSHOT_SCHEMA || typeof envelope.payload !== 'string') {
-      throw new Error('Encrypted session cookie snapshot has an unsupported format')
-    }
-    const decrypted = await this.crypto.decryptString(Buffer.from(envelope.payload, 'base64'))
-    const snapshot = JSON.parse(decrypted) as Partial<StoredSessionCookies>
+    const snapshot = JSON.parse(serialized) as Partial<StoredSessionCookies>
     if (snapshot.schema !== SNAPSHOT_SCHEMA || !Array.isArray(snapshot.cookies)) {
-      throw new Error('Decrypted session cookie snapshot has an unsupported format')
+      throw new Error('Session cookie snapshot has an unsupported format')
     }
     const details = snapshot.cookies.map(storedCookie).filter((cookie): cookie is StoredSessionCookie => cookie !== null)
       .map(cookieDetails).filter((cookie): cookie is CookiesSetDetails => cookie !== null)
@@ -124,8 +106,7 @@ export class BrowserSessionCookieStore {
     }
   }
 
-  async persist(sessionPath: string, cookies: BrowserCookies): Promise<boolean> {
-    if (!this.crypto.isEncryptionAvailable()) return false
+  async persist(sessionPath: string, cookies: BrowserCookies): Promise<void> {
     const current = await cookies.get({})
     const sessionCookies: StoredSessionCookie[] = current.filter(cookie => !!cookie.domain).map(cookie => ({
       name: cookie.name,
@@ -141,31 +122,30 @@ export class BrowserSessionCookieStore {
         : {}),
     }))
     const pathname = this.filePath(sessionPath)
+    await rm(join(sessionPath, LEGACY_ENCRYPTED_SNAPSHOT_FILE), { force: true })
     if (sessionCookies.length === 0) {
       await rm(pathname, { force: true })
-      return true
+      return
     }
-    const encrypted = await this.crypto.encryptString(JSON.stringify({
-      schema: SNAPSHOT_SCHEMA,
-      cookies: sessionCookies,
-    } satisfies StoredSessionCookies))
     const tempPath = `${pathname}.${process.pid}.tmp`
     await mkdir(sessionPath, { recursive: true, mode: 0o700 })
     try {
       await writeFile(tempPath, `${JSON.stringify({
         schema: SNAPSHOT_SCHEMA,
-        payload: encrypted.toString('base64'),
-      } satisfies EncryptedSessionCookies)}\n`, { mode: 0o600 })
+        cookies: sessionCookies,
+      } satisfies StoredSessionCookies)}\n`, { mode: 0o600 })
       await rename(tempPath, pathname)
       await chmod(pathname, 0o600)
     } catch (error) {
       await rm(tempPath, { force: true }).catch(() => undefined)
       throw error
     }
-    return true
   }
 
   async clear(sessionPath: string): Promise<void> {
-    await rm(this.filePath(sessionPath), { force: true })
+    await Promise.all([
+      rm(this.filePath(sessionPath), { force: true }),
+      rm(join(sessionPath, LEGACY_ENCRYPTED_SNAPSHOT_FILE), { force: true }),
+    ])
   }
 }

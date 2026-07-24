@@ -6,7 +6,6 @@ import {
   app,
   dialog,
   Menu,
-  safeStorage,
   session,
   shell,
   WebContentsView,
@@ -17,7 +16,7 @@ import {
 } from 'electron'
 import { BrowserAutomation } from './browser-automation'
 import { BrowserProfileStore } from './browser-profile-store'
-import { BrowserSessionCookieStore, type BrowserCookieCrypto } from './browser-session-cookie-store'
+import { BrowserSessionCookieStore } from './browser-session-cookie-store'
 import type {
   BrowserAgentControl,
   BrowserBounds,
@@ -103,34 +102,6 @@ function proxyConfig(profile: DesktopBrowserProfile): ProxyConfig {
   return { mode: 'direct' }
 }
 
-const browserCookieCrypto: BrowserCookieCrypto = {
-  isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
-  async encryptString(value) {
-    let asyncEncryptionAvailable = false
-    try {
-      asyncEncryptionAvailable = await safeStorage.isAsyncEncryptionAvailable()
-    } catch {
-      // Fall back to the synchronous OS encryption API.
-    }
-    if (asyncEncryptionAvailable) {
-      return safeStorage.encryptStringAsync(value)
-    }
-    return safeStorage.encryptString(value)
-  },
-  async decryptString(value) {
-    let asyncEncryptionAvailable = false
-    try {
-      asyncEncryptionAvailable = await safeStorage.isAsyncEncryptionAvailable()
-    } catch {
-      // Fall back to the synchronous OS encryption API.
-    }
-    if (asyncEncryptionAvailable) {
-      return (await safeStorage.decryptStringAsync(value)).result
-    }
-    return safeStorage.decryptString(value)
-  },
-}
-
 export class BrowserManager {
   readonly automation = new BrowserAutomation()
   private readonly profileStore: BrowserProfileStore
@@ -139,12 +110,11 @@ export class BrowserManager {
   private readonly downloadItems = new Map<string, DownloadItem>()
   private readonly permissions: BrowserSitePermission[] = []
   private readonly browserSessions = new Map<string, Session>()
-  private readonly sessionCookieStore = new BrowserSessionCookieStore(browserCookieCrypto)
+  private readonly sessionCookieStore = new BrowserSessionCookieStore()
   private readonly sessionCookieRestorePromises = new Map<string, Promise<void>>()
   private readonly sessionCookiePersistQueues = new Map<string, Promise<void>>()
   private readonly sessionCookiePersistTimers = new Map<string, NodeJS.Timeout>()
   private readonly sessionCookieChangeListeners = new Map<string, () => void>()
-  private readonly sessionCookieWarningPaths = new Set<string>()
   private readonly configuredSessions = new Set<string>()
   private readonly configuredSessionProxies = new Map<string, string>()
   private readonly automationVisibleTabs = new Set<string>()
@@ -382,6 +352,7 @@ export class BrowserManager {
       else {
         await browserSession.clearStorageData()
         await this.persistSessionCookies(profile, browserSession)
+        browserSession.flushStorageData()
         await browserSession.cookies.flushStore()
       }
       if (profileId === this.activeProfileId) {
@@ -793,11 +764,11 @@ export class BrowserManager {
     const restore = this.sessionCookieStore.restore(sessionProfile.sessionPath, browserSession.cookies)
       .then(result => {
         if (result.failed > 0) {
-          console.warn(`[desktop-browser] failed to restore ${result.failed} encrypted session cookies for profile ${sessionProfile.id}`)
+          console.warn(`[desktop-browser] failed to restore ${result.failed} session cookies for profile ${sessionProfile.id}`)
         }
       })
       .catch(error => {
-        console.warn(`[desktop-browser] failed to restore encrypted session cookies for profile ${sessionProfile.id}:`, error)
+        console.warn(`[desktop-browser] failed to restore session cookies for profile ${sessionProfile.id}:`, error)
       })
       .then(() => {
         if (this.browserSessions.get(sessionProfile.sessionPath) !== browserSession) return
@@ -833,7 +804,7 @@ export class BrowserManager {
     const timer = setTimeout(() => {
       this.sessionCookiePersistTimers.delete(profile.sessionPath)
       void this.persistSessionCookies(profile, browserSession).catch(error => {
-        console.warn(`[desktop-browser] failed to persist encrypted session cookies for profile ${profile.id}:`, error)
+        console.warn(`[desktop-browser] failed to persist session cookies for profile ${profile.id}:`, error)
       })
     }, SESSION_COOKIE_PERSIST_DELAY_MS)
     timer.unref?.()
@@ -843,13 +814,7 @@ export class BrowserManager {
   private async persistSessionCookies(profile: DesktopBrowserProfile, browserSession: Session): Promise<void> {
     const previous = this.sessionCookiePersistQueues.get(profile.sessionPath) || Promise.resolve()
     const next = previous.catch(() => undefined).then(async () => {
-      const persisted = await this.sessionCookieStore.persist(profile.sessionPath, browserSession.cookies)
-      if (!persisted && !this.sessionCookieWarningPaths.has(profile.sessionPath)) {
-        this.sessionCookieWarningPaths.add(profile.sessionPath)
-        console.warn(`[desktop-browser] OS encryption is unavailable; session-cookie persistence is disabled for profile ${profile.id}`)
-      } else if (persisted) {
-        this.sessionCookieWarningPaths.delete(profile.sessionPath)
-      }
+      await this.sessionCookieStore.persist(profile.sessionPath, browserSession.cookies)
     })
     this.sessionCookiePersistQueues.set(profile.sessionPath, next)
     try {
@@ -870,7 +835,6 @@ export class BrowserManager {
     this.sessionCookieRestorePromises.delete(sessionPath)
     this.sessionCookiePersistQueues.delete(sessionPath)
     this.sessionCookieChangeListeners.delete(sessionPath)
-    this.sessionCookieWarningPaths.delete(sessionPath)
     this.configuredSessions.delete(sessionPath)
     this.configuredSessionProxies.delete(sessionPath)
   }
