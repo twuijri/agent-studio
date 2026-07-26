@@ -1,7 +1,7 @@
 import type { MemoryContext, MemoryNode } from './types'
 
 export function buildMemoryContextPrompt(context: MemoryContext): string {
-  if (!context.diagnostics.enabled || context.usedMemoryIds.length === 0 && !context.latestSummary) return ''
+  if (!context.diagnostics.enabled) return ''
   const sections: string[] = []
   if (context.latestSummary) {
     sections.push(`Latest session summary:\n${context.latestSummary.summary}`)
@@ -15,11 +15,13 @@ export function buildMemoryContextPrompt(context: MemoryContext): string {
     ...context.preferences,
   ].map(node => node.id))
   appendNodes(sections, 'Relevant facts and decisions', context.relevantNodes.filter(node => !categorizedIds.has(node.id)))
-  if (!sections.length) return ''
   return [
-    '## Retrieved Memory',
-    'Use these memories only when relevant. Newer constraints and corrections override older preferences.',
-    ...sections,
+    '## Memory Usage Rules',
+    'The following content is only a partial automatic recall, not the complete memory store. Use it only when relevant; newer constraints and corrections override older preferences.',
+    'When the user asks about personal information such as identity, name, location, relationships, preferences, habits, constraints, or long-term projects, inspect the automatically recalled cards first. If a current, conflict-free card directly answers the question, use it without searching again.',
+    'If automatic recall has no direct answer, is incomplete, contains a conflict, or you are about to answer that you do not know or remember, call memory_search to verify. Prefer structured kinds when the information category is known; use queryText for open-ended questions. If the first search fails, adjust kinds or filters, or omit queryText to broaden the search. Never treat empty automatic recall as an empty memory store.',
+    'Do not infer durable user facts from weather lookups, location searches, tool output, or one-time behavior. Only information the user explicitly states, confirms, or adopts is evidence.',
+    ...(sections.length ? ['## Automatically Recalled Memory', ...sections] : ['No memory cards were automatically recalled. Search the complete memory store when needed.']),
   ].join('\n\n')
 }
 

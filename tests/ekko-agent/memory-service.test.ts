@@ -55,6 +55,53 @@ describe('MemoryService', () => {
     expect(exact.exact).toMatchObject([{ profileId: 'work', valueJson: 'tofu' }])
   })
 
+  it('searches controlled memory kinds without relying on natural-language matching', async () => {
+    const identity = { sessionId: 's1', profileId: 'default' }
+    await service.proposeUpdate({
+      operation: 'create',
+      kind: 'general_preference',
+      itemKey: 'visual_theme',
+      reason: '用户陈述稳定偏好。',
+      identity,
+      node: {
+        valueJson: '深色界面',
+        title: '界面主题偏好',
+        content: '用户偏好使用深色界面。',
+      },
+    })
+    await service.proposeUpdate({
+      operation: 'create',
+      kind: 'habit_routine',
+      itemKey: 'weekly_review',
+      reason: '用户陈述固定习惯。',
+      identity,
+      node: {
+        valueJson: '每周复盘',
+        title: '复盘习惯',
+        content: '用户保持每周复盘的习惯。',
+      },
+    })
+    await service.proposeUpdate({
+      operation: 'create',
+      kind: 'home_location',
+      reason: '用户陈述常住地。',
+      identity,
+      node: { valueJson: '测试城市' },
+    })
+
+    const tool = createMemoryTools(service).find(item => item.definition.name === 'memory_search')!
+    const result = await tool.execute({
+      kinds: ['general_preference', 'habit_routine'],
+      limit: 10,
+    }, identity)
+
+    expect(result.ok).toBe(true)
+    expect((result.data as { exact: MemoryNode[] }).exact.map(node => node.key).sort()).toEqual([
+      'preference.general:visual_theme',
+      'profile.habit:weekly_review',
+    ])
+  })
+
   it('prefers corrections when resolving unified-memory conflicts', () => {
     const nodes = [
       memoryNode('older'),
@@ -248,7 +295,8 @@ describe('MemoryService', () => {
     })
 
     const request = vi.mocked(client.create).mock.calls[0][0] as ModelRequest
-    expect(request.messages[0].content).toContain('Retrieved Memory')
+    expect(request.messages[0].content).toContain('## Memory Usage Rules')
+    expect(request.messages[0].content).toContain('about to answer that you do not know or remember')
     expect(request.messages[0].content).toContain('Avoid 香菜')
     expect(request.messages[0].content).toContain('key=preference.food.avoid:香菜 revision=1')
     expect(request.tools?.map(tool => tool.name)).toEqual(expect.arrayContaining([
@@ -386,6 +434,8 @@ describe('MemoryService', () => {
     expect(summaryRequest.messages[0].content).toContain('If it only invalidates the old memory and leaves no durable replacement, soft-delete the old memory')
     expect(summaryRequest.messages[0].content).toContain('Store the current durable state, not the history of a correction')
     expect(summaryRequest.messages[0].content).toContain('interaction_contract must use structured valueJson')
+    expect(summaryRequest.messages[0].content).toContain('A durable fact stated directly in ordinary language is valid evidence')
+    expect(summaryRequest.messages[0].content).toContain('CATEGORY SELECTION')
     expect(summaryRequest.messages[0].content).not.toContain('terminal tool')
     expect(summaryRequest.messages[1].content).toContain('请记住以后代码示例优先使用 TypeScript')
     await expect(store.getLatestSummary({ sessionId: 's1' })).resolves.toMatchObject({

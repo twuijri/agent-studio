@@ -178,6 +178,14 @@ Save compact, standalone information that is likely to prevent the user from rep
 6. Ongoing projects, commitments, and decisions only when the user states an actual continuing commitment that is expected to outlive the current task. A request, idea, wish, or hypothetical plan is not an ongoing project.
 7. Corrections, refinements, revocations, and explicit requests to remember or forget any of the above.
 
+A durable fact stated directly in ordinary language is valid evidence. Do not require the user to say "remember," and do not recognize only a small set of fixed phrases. Judge whether to save information by its meaning, stability, and future value rather than by specific place names, interests, phrasing, or keywords.
+
+CATEGORY SELECTION
+- Single-slot information: use interaction_contract for interaction agreements, profile_name for the user's name, home_location for home location, occupation for occupation, timezone_preference for timezone, and language_preference for language.
+- Itemized information that may contain multiple independent entries: use accessibility_need for accessibility needs, communication_preference for communication preferences, general_preference for general likes or dislikes, workflow_preference for ways of working, tool_preference for tool choices, personal_relationship for important people and relationships, habit_routine for habits and routines, environment_fact for stable environment information, project_context for long-term project context, long_term_goal for long-term goals, durable_decision for durable decisions, hard_constraint for non-negotiable constraints, and food_avoidance for dietary exclusions.
+- Choose the most specific kind that matches the meaning. Use custom_fact only when the information genuinely does not fit any controlled category; never use it as the default.
+- For an itemized kind, itemKey must be a short, stable concept or entity identifier that distinguishes independent memories that can coexist. Never use a full sentence, timestamp, or random value.
+
 GENERAL DECISION TEST
 - Persist information only when it is likely to remain true and useful across future sessions.
 - Current requests, possibilities, uncommitted plans, completed tasks, and transient external results belong to rolling session state rather than profile memory.
