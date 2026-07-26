@@ -1,3 +1,5 @@
+import { imageUrlToAnthropicSource, openAiImageUrl } from './multimodal'
+
 export interface ResponsesAdapterTarget {
   model: string
 }
@@ -422,16 +424,66 @@ function safeJsonParse(value: string): any {
     return {}
   }
 }
-function responseContentToText(content: unknown): string {
+function responseContentToOpenAiChat(content: unknown): string | any[] {
   if (typeof content === 'string') return content
   if (!Array.isArray(content)) return stringifyContent(content)
-  return content.map((part: any) => {
-    if (typeof part === 'string') return part
-    if (part?.type === 'input_text' || part?.type === 'output_text' || part?.type === 'text') {
-      return String(part.text || '')
+  const parts: any[] = []
+  let hasImage = false
+  for (const part of content) {
+    if (typeof part === 'string') {
+      parts.push({ type: 'text', text: part })
+      continue
     }
-    return stringifyContent(part)
-  }).filter(Boolean).join('\n')
+    if (part?.type === 'input_text' || part?.type === 'output_text' || part?.type === 'text' || (part && typeof part === 'object' && 'text' in part)) {
+      parts.push({ type: 'text', text: String(part.text || '') })
+      continue
+    }
+    if (part?.type === 'input_image') {
+      const url = openAiImageUrl(part)
+      if (url) {
+        hasImage = true
+        const detail = typeof part.detail === 'string' ? part.detail : ''
+        parts.push({
+          type: 'image_url',
+          image_url: {
+            url,
+            ...(detail ? { detail } : {}),
+          },
+        })
+      }
+      continue
+    }
+    const text = stringifyContent(part)
+    if (text) parts.push({ type: 'text', text })
+  }
+  if (hasImage) return parts
+  return parts.map(part => String(part.text || '')).filter(Boolean).join('\n')
+}
+
+function responseToolOutputToOpenAiChat(output: unknown, toolName: string, callId: string): {
+  toolContent: string
+  imageMessageContent: any[]
+} {
+  const converted = responseContentToOpenAiChat(output)
+  if (typeof converted === 'string') {
+    return { toolContent: converted, imageMessageContent: [] }
+  }
+  const imageParts = converted.filter(part => part?.type === 'image_url')
+  const text = converted
+    .filter(part => part?.type === 'text')
+    .map(part => String(part.text || ''))
+    .filter(Boolean)
+    .join('\n')
+  if (!imageParts.length) {
+    return { toolContent: text, imageMessageContent: [] }
+  }
+  return {
+    toolContent: text || `[Image output attached for tool ${toolName}]`,
+    imageMessageContent: [
+      { type: 'text', text: `[Image output from tool ${toolName} (${callId})]` },
+      ...imageParts,
+    ],
+  }
 }
 
 function chatRoleForResponsesRole(role: unknown): string {
@@ -459,16 +511,30 @@ function responsesInputToChatMessages(body: any): any[] {
     if (!pendingToolCalls.length) return
     const outputs = pendingToolCalls.map(call => pendingToolOutputs.get(call.id))
     if (outputs.every(Boolean)) {
+      const imageMessageContent: any[] = []
       messages.push({
         role: 'assistant',
         content: null,
         tool_calls: pendingToolCalls,
       })
       for (let index = 0; index < pendingToolCalls.length; index += 1) {
+        const call = pendingToolCalls[index]
+        const converted = responseToolOutputToOpenAiChat(
+          outputs[index].output,
+          call.function.name,
+          call.id,
+        )
         messages.push({
           role: 'tool',
-          tool_call_id: pendingToolCalls[index].id,
-          content: stringifyContent(outputs[index].output),
+          tool_call_id: call.id,
+          content: converted.toolContent,
+        })
+        imageMessageContent.push(...converted.imageMessageContent)
+      }
+      if (imageMessageContent.length) {
+        messages.push({
+          role: 'user',
+          content: imageMessageContent,
         })
       }
     }
@@ -508,7 +574,7 @@ function responsesInputToChatMessages(body: any): any[] {
     if (item.role) {
       messages.push({
         role: chatRoleForResponsesRole(item.role),
-        content: responseContentToText(item.content),
+        content: responseContentToOpenAiChat(item.content),
       })
     }
   }
@@ -555,12 +621,24 @@ function responsesContentToAnthropicContent(content: unknown, role: 'user' | 'as
   const parts = Array.isArray(content) ? content : [{ type: role === 'assistant' ? 'output_text' : 'input_text', text: stringifyContent(content) }]
   const mapped = parts.map((part: any) => {
     if (typeof part === 'string') return { type: 'text', text: part }
-    if (part?.type === 'input_text' || part?.type === 'output_text' || part?.type === 'text') {
+    if (part?.type === 'input_text' || part?.type === 'output_text' || part?.type === 'text' || (part && typeof part === 'object' && 'text' in part)) {
       return { type: 'text', text: String(part.text || '') }
+    }
+    if (part?.type === 'input_image') {
+      const url = openAiImageUrl(part)
+      const source = url ? imageUrlToAnthropicSource(url) : null
+      return source ? { type: 'image', source } : null
     }
     return null
   }).filter(Boolean)
   return mapped.length ? mapped : [{ type: 'text', text: '' }]
+}
+
+function responsesToolOutputToAnthropicContent(output: unknown): string | any[] {
+  if (typeof output === 'string') return output
+  const parts = responsesContentToAnthropicContent(output, 'user')
+  if (parts.some(part => part?.type === 'image')) return parts
+  return parts.map(part => String(part.text || '')).filter(Boolean).join('\n')
 }
 
 function responsesInputToAnthropicMessages(body: any): any[] {
@@ -592,7 +670,7 @@ function responsesInputToAnthropicMessages(body: any): any[] {
           tool_use_id: String(item.call_id || ''),
           content: item.type === 'tool_search_output'
             ? toolSearchOutputText(item)
-            : stringifyContent(item.output),
+            : responsesToolOutputToAnthropicContent(item.output),
         }],
       })
       continue
