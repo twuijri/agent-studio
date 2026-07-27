@@ -5,14 +5,20 @@ import { join } from 'node:path'
 const getSessionMock = vi.hoisted(() => vi.fn())
 const createSessionMock = vi.hoisted(() => vi.fn())
 const addMessageMock = vi.hoisted(() => vi.fn())
+const addMessagesMock = vi.hoisted(() => vi.fn())
+const updateMessageDisplayContentMock = vi.hoisted(() => vi.fn(() => true))
 const updateSessionMock = vi.hoisted(() => vi.fn())
 const updateSessionStatsMock = vi.hoisted(() => vi.fn())
 const resolveBridgeRunModelConfigMock = vi.hoisted(() => vi.fn())
+const resolveEkkoProviderRuntimeConfigMock = vi.hoisted(() => vi.fn())
+const resolveModelProviderConfigsMock = vi.hoisted(() => vi.fn())
 const agentRunMock = vi.hoisted(() => vi.fn())
 const agentEstimateContextMock = vi.hoisted(() => vi.fn(async () => ({ contextTokens: 5_000 })))
+const agentWriteLogMock = vi.hoisted(() => vi.fn(() => true))
 const getGlobalEkkoAgentMock = vi.hoisted(() => vi.fn(() => ({
   run: agentRunMock,
   estimateContext: agentEstimateContextMock,
+  writeLog: agentWriteLogMock,
 })))
 const buildCompressedHistoryMock = vi.hoisted(() => vi.fn())
 const recordSessionUsageMock = vi.hoisted(() => vi.fn())
@@ -21,6 +27,8 @@ vi.mock('../../packages/server/src/db/hermes/session-store', () => ({
   getSession: getSessionMock,
   createSession: createSessionMock,
   addMessage: addMessageMock,
+  addMessages: addMessagesMock,
+  updateMessageDisplayContent: updateMessageDisplayContentMock,
   updateSession: updateSessionMock,
   updateSessionStats: updateSessionStatsMock,
 }))
@@ -45,6 +53,10 @@ vi.mock('../../packages/server/src/services/ekko-agent/mcp', () => ({
   resolveEkkoMcpServers: vi.fn(() => undefined),
 }))
 
+vi.mock('../../packages/server/src/services/ekko-agent/provider-runtime', () => ({
+  resolveEkkoProviderRuntimeConfig: resolveEkkoProviderRuntimeConfigMock,
+}))
+
 vi.mock('../../packages/ekko-agent/src', () => ({
   createModelClient: vi.fn(() => ({
     provider: 'test',
@@ -57,13 +69,7 @@ vi.mock('../../packages/ekko-agent/src', () => ({
       systemPrompt: true,
     },
   })),
-  resolveModelProviderConfigs: vi.fn(() => ({
-    providerConfig: {
-      provider: 'test',
-      model: 'ekko-test-model',
-      apiMode: 'chat_completions',
-    },
-  })),
+  resolveModelProviderConfigs: resolveModelProviderConfigsMock,
 }))
 
 vi.mock('../../packages/server/src/services/hermes/hermes-profile', () => ({
@@ -140,10 +146,104 @@ describe('ekko-agent context usage events', () => {
       workspace: '/tmp/workspace',
     })
     addMessageMock.mockReturnValue(1)
+    addMessagesMock.mockImplementation((messages: unknown[]) => messages.map((_, index) => 100 + index))
     resolveBridgeRunModelConfigMock.mockResolvedValue({
       model: 'ekko-test-model',
       provider: 'test-provider',
     })
+    resolveEkkoProviderRuntimeConfigMock.mockResolvedValue({
+      provider: 'test-provider',
+      apiMode: 'chat_completions',
+    })
+    resolveModelProviderConfigsMock.mockReturnValue({
+      providerConfig: {
+        provider: 'test',
+        model: 'ekko-test-model',
+        apiMode: 'chat_completions',
+      },
+    })
+  })
+
+  it('forwards the selected reasoning effort and requests an automatic summary', async () => {
+    agentRunMock.mockResolvedValueOnce({
+      runId: 'run-1',
+      output: { role: 'assistant', content: 'done' },
+      steps: [],
+      messages: [],
+      events: [],
+      contextEstimate: { contextTokens: 5_000 },
+    })
+    const { handleEkkoAgentRun } = await import('../../packages/server/src/services/hermes/run-chat/handle-ekko-agent-run')
+    const { nsp, socket, sessionMap } = makeHarness()
+
+    await handleEkkoAgentRun(nsp as any, socket as any, {
+      session_id: 'session-1',
+      input: 'think carefully',
+      coding_agent_id: 'ekko-agent',
+      reasoning_effort: 'high',
+    }, 'default', sessionMap, vi.fn(() => false))
+
+    expect(agentRunMock).toHaveBeenCalledWith(expect.objectContaining({
+      reasoningEffort: 'high',
+      reasoningSummary: 'auto',
+      modelDefaults: expect.objectContaining({
+        reasoningEffort: 'high',
+        reasoningSummary: 'auto',
+      }),
+    }))
+  })
+
+  it('uses the Hermes Responses default reasoning effort when none is selected', async () => {
+    agentRunMock.mockResolvedValueOnce({
+      runId: 'run-1',
+      output: { role: 'assistant', content: 'done' },
+      steps: [],
+      messages: [],
+      events: [],
+      contextEstimate: { contextTokens: 5_000 },
+    })
+    const { handleEkkoAgentRun } = await import('../../packages/server/src/services/hermes/run-chat/handle-ekko-agent-run')
+    const { nsp, socket, sessionMap } = makeHarness()
+
+    await handleEkkoAgentRun(nsp as any, socket as any, {
+      session_id: 'session-1',
+      input: 'think carefully',
+      coding_agent_id: 'ekko-agent',
+    }, 'default', sessionMap, vi.fn(() => false))
+
+    expect(agentRunMock).toHaveBeenCalledWith(expect.objectContaining({
+      reasoningEffort: 'medium',
+      reasoningSummary: 'auto',
+      modelDefaults: expect.objectContaining({
+        reasoningEffort: 'medium',
+        reasoningSummary: 'auto',
+      }),
+    }))
+  })
+
+  it('preserves an explicit request to disable reasoning', async () => {
+    agentRunMock.mockResolvedValueOnce({
+      runId: 'run-1',
+      output: { role: 'assistant', content: 'done' },
+      steps: [],
+      messages: [],
+      events: [],
+      contextEstimate: { contextTokens: 5_000 },
+    })
+    const { handleEkkoAgentRun } = await import('../../packages/server/src/services/hermes/run-chat/handle-ekko-agent-run')
+    const { nsp, socket, sessionMap } = makeHarness()
+
+    await handleEkkoAgentRun(nsp as any, socket as any, {
+      session_id: 'session-1',
+      input: 'answer directly',
+      coding_agent_id: 'ekko-agent',
+      reasoning_effort: 'none',
+    }, 'default', sessionMap, vi.fn(() => false))
+
+    expect(agentRunMock).toHaveBeenCalledWith(expect.objectContaining({
+      reasoningEffort: 'none',
+      reasoningSummary: 'auto',
+    }))
   })
 
   it('does not publish step context estimates as formal usage updates', async () => {
@@ -188,6 +288,17 @@ describe('ekko-agent context usage events', () => {
           reasoningTokens: 1,
         },
       })
+      input.onEvent({
+        type: 'skill.review.started',
+        runId: 'run-1',
+        reviewId: 'review-1',
+      })
+      input.onEvent({
+        type: 'skill.review.completed',
+        runId: 'run-1',
+        reviewId: 'review-1',
+        mutations: 1,
+      })
       return {
         runId: 'run-1',
         output: { role: 'assistant', content: 'done', usage: { inputTokens: 3, outputTokens: 2 } },
@@ -220,6 +331,29 @@ describe('ekko-agent context usage events', () => {
       contextTokens: 30_000,
     }))
     expect(state.contextTokens).toBe(30_000)
+    expect(events).toEqual(expect.arrayContaining([
+      {
+        event: 'skill.review.started',
+        payload: {
+          event: 'skill.review.started',
+          run_id: 'run-1',
+          review_id: 'review-1',
+          session_id: 'session-1',
+        },
+      },
+      {
+        event: 'skill.review.completed',
+        payload: {
+          event: 'skill.review.completed',
+          run_id: 'run-1',
+          review_id: 'review-1',
+          mutations: 1,
+          session_id: 'session-1',
+        },
+      },
+    ]))
+    const runInput = agentRunMock.mock.calls[0][0]
+    expect(getGlobalEkkoAgentMock).toHaveBeenCalledWith('default')
     expect(recordSessionUsageMock).toHaveBeenCalledWith({
       sessionId: 'session-1',
       runId: 'run-1:step:2:call:1',
@@ -238,8 +372,26 @@ describe('ekko-agent context usage events', () => {
       provider: 'test-provider',
       isEstimated: false,
     })
-    const runInput = agentRunMock.mock.calls[0][0]
-    expect(getGlobalEkkoAgentMock).toHaveBeenCalledWith('/tmp/hermes-default/skills')
+    runInput.onSkillReviewUsage({
+      purpose: 'ekko-skill-review',
+      usage: { inputTokens: 34, outputTokens: 6, cacheReadTokens: 8 },
+      model: 'ekko-review-model',
+      callIndex: 1,
+    })
+    expect(recordSessionUsageMock).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      runId: expect.stringMatching(/^skill-review:.+:call:1$/),
+      source: 'ekko_agent',
+      agent: 'ekko_agent',
+      usageScope: 'model_call',
+      purpose: 'ekko-skill-review',
+      apiCalls: 1,
+      usage: { inputTokens: 34, outputTokens: 6, cacheReadTokens: 8 },
+      profile: 'default',
+      model: 'ekko-review-model',
+      provider: 'test-provider',
+      isEstimated: false,
+    })
     runInput.onMemoryUsage({
       purpose: 'ekko-memory-summary',
       usage: { inputTokens: 21, outputTokens: 4, cacheReadTokens: 7 },
@@ -271,6 +423,306 @@ describe('ekko-agent context usage events', () => {
     }))
   })
 
+  it('keeps Ekko background subtask state and accounts for late child usage', async () => {
+    let runtimeEvent: ((event: any) => void) | undefined
+    const dequeueNextQueuedRun = vi.fn(() => false)
+    agentRunMock.mockImplementationOnce(async (input: any) => {
+      runtimeEvent = input.onEvent
+      input.onEvent({ type: 'run.started', runId: 'run-parent', maxSteps: 3 })
+      input.onEvent({
+        type: 'subagent.start',
+        runId: 'run-parent',
+        subagentId: 'child-background',
+        goal: 'Run validation',
+        background: true,
+        model: 'ekko-test-model',
+        startedAt: 1_000,
+      })
+      return {
+        runId: 'run-parent',
+        output: {
+          role: 'assistant',
+          content: 'Validation is running.',
+          usage: { inputTokens: 3, outputTokens: 2 },
+        },
+        steps: [],
+        messages: [],
+        events: [],
+        contextEstimate: { contextTokens: 6_000 },
+      }
+    })
+    const { handleEkkoAgentRun } = await import('../../packages/server/src/services/hermes/run-chat/handle-ekko-agent-run')
+    const { nsp, socket, sessionMap, state, events } = makeHarness()
+
+    await handleEkkoAgentRun(nsp as any, socket as any, {
+      session_id: 'session-1',
+      input: 'run checks in the background',
+      coding_agent_id: 'ekko-agent',
+      onEvent: (event: string, payload: any) => events.push({ event, payload }),
+    }, 'default', sessionMap, dequeueNextQueuedRun)
+
+    expect(state.backgroundTasks['child-background']).toEqual(expect.objectContaining({
+      runtime: 'ekko',
+      subagent_id: 'child-background',
+      goal: 'Run validation',
+      status: 'running',
+      last_event: 'subagent.start',
+    }))
+    expect(state.inputTokens).toBe(13)
+    expect(state.outputTokens).toBe(7)
+    expect(events).toContainEqual(expect.objectContaining({
+      event: 'run.completed',
+      payload: expect.objectContaining({
+        run_id: 'run-parent',
+        background_pending: 1,
+      }),
+    }))
+
+    runtimeEvent?.({
+      type: 'subagent.text',
+      runId: 'run-parent',
+      childRunId: 'run-child',
+      subagentId: 'child-background',
+      goal: 'Run validation',
+      background: true,
+      text: 'All checks\n\n',
+    })
+    runtimeEvent?.({
+      type: 'subagent.text',
+      runId: 'run-parent',
+      childRunId: 'run-child',
+      subagentId: 'child-background',
+      goal: 'Run validation',
+      background: true,
+      text: 'passed.',
+    })
+    state.messages.push({
+      id: 77,
+      session_id: 'session-1',
+      role: 'tool',
+      content: JSON.stringify({
+        runtime: 'ekko',
+        mode: 'background',
+        subagent_id: 'child-background',
+        status: 'running',
+      }),
+      tool_call_id: 'delegate-call',
+      tool_name: 'delegate_task',
+      timestamp: 1,
+    })
+    runtimeEvent?.({
+      type: 'subagent.complete',
+      runId: 'run-parent',
+      childRunId: 'run-child',
+      subagentId: 'child-background',
+      goal: 'Run validation',
+      background: true,
+      status: 'completed',
+      summary: 'All checks passed.',
+      output: 'All checks\n\npassed.',
+      outputTail: 'All checks\n\npassed.',
+      durationMs: 2_500,
+      toolCount: 2,
+      apiCalls: 2,
+      inputTokens: 11,
+      outputTokens: 4,
+      cacheReadTokens: 3,
+      cacheWriteTokens: 2,
+      reasoningTokens: 1,
+    })
+
+    expect(state.backgroundTasks['child-background']).toEqual(expect.objectContaining({
+      runtime: 'ekko',
+      status: 'completed',
+      last_event: 'subagent.complete',
+      summary: 'All checks passed.',
+      api_calls: 2,
+      input_tokens: 11,
+      output_tokens: 4,
+      cache_read_tokens: 3,
+      cache_write_tokens: 2,
+      reasoning_tokens: 1,
+    }))
+    expect(state.inputTokens).toBe(24)
+    expect(state.outputTokens).toBe(11)
+    expect(updateMessageDisplayContentMock).toHaveBeenCalledWith(
+      'session-1',
+      77,
+      expect.stringContaining('"status":"completed"'),
+    )
+    expect(state.messages.find(message => message.id === 77)?.display_content)
+      .toContain('"runtime":"ekko"')
+    expect(dequeueNextQueuedRun).toHaveBeenCalledOnce()
+    expect(dequeueNextQueuedRun).toHaveBeenCalledWith(socket, 'session-1', 'default')
+    expect(state.queue).toHaveLength(1)
+    expect(state.queue[0]).toEqual(expect.objectContaining({
+      queue_id: 'ekko_subagent_child-background',
+      displayInput: null,
+      codingAgentId: 'ekko-agent',
+      autonomous: true,
+      backgroundDelegationId: 'child-background',
+    }))
+    expect(state.queue[0].input).toContain('All checks\n\npassed.')
+    expect(recordSessionUsageMock).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      runId: 'run-parent:subagent:child-background',
+      source: 'ekko_agent',
+      agent: 'ekko_agent',
+      usageScope: 'model_call',
+      purpose: 'ekko-background-subtask',
+      apiCalls: 2,
+      usage: {
+        inputTokens: 11,
+        outputTokens: 4,
+        cacheReadTokens: 3,
+        cacheWriteTokens: 2,
+        reasoningTokens: 1,
+      },
+      profile: 'default',
+      model: 'ekko-test-model',
+      provider: 'test-provider',
+      isEstimated: false,
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        event: 'subagent.start',
+        payload: expect.objectContaining({
+          subagent_id: 'child-background',
+          background: true,
+        }),
+      }),
+      expect.objectContaining({
+        event: 'subagent.complete',
+        payload: expect.objectContaining({
+          parent_run_id: 'run-parent',
+          child_run_id: 'run-child',
+          subagent_id: 'child-background',
+          status: 'completed',
+          summary: 'All checks\n\npassed.',
+        }),
+      }),
+      expect.objectContaining({
+        event: 'usage.updated',
+        payload: expect.objectContaining({
+          input_tokens: 24,
+          output_tokens: 11,
+          total_tokens: 35,
+        }),
+      }),
+    ]))
+  })
+
+  it('queues a completed background result without starting it while the parent run is busy', async () => {
+    const dequeueNextQueuedRun = vi.fn(() => false)
+    agentRunMock.mockImplementationOnce(async (input: any) => {
+      input.onEvent({ type: 'run.started', runId: 'run-parent', maxSteps: 3 })
+      input.onEvent({
+        type: 'subagent.start',
+        runId: 'run-parent',
+        subagentId: 'child-background',
+        goal: 'Run validation',
+        background: true,
+        startedAt: 1_000,
+      })
+      input.onEvent({
+        type: 'subagent.complete',
+        runId: 'run-parent',
+        childRunId: 'run-child',
+        subagentId: 'child-background',
+        goal: 'Run validation',
+        background: true,
+        status: 'completed',
+        summary: 'Validation passed.',
+        output: 'Validation passed.',
+        outputTail: 'Validation passed.',
+        durationMs: 500,
+        toolCount: 0,
+        apiCalls: 1,
+        inputTokens: 4,
+        outputTokens: 2,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+      })
+      expect(dequeueNextQueuedRun).not.toHaveBeenCalled()
+      return {
+        runId: 'run-parent',
+        output: {
+          role: 'assistant',
+          content: 'The background task is running.',
+          usage: { inputTokens: 3, outputTokens: 2 },
+        },
+        steps: [],
+        messages: [],
+        events: [],
+        contextEstimate: { contextTokens: 6_000 },
+      }
+    })
+    const { handleEkkoAgentRun } = await import('../../packages/server/src/services/hermes/run-chat/handle-ekko-agent-run')
+    const { nsp, socket, sessionMap, state } = makeHarness()
+
+    await handleEkkoAgentRun(nsp as any, socket as any, {
+      session_id: 'session-1',
+      input: 'run checks in the background',
+      coding_agent_id: 'ekko-agent',
+    }, 'default', sessionMap, dequeueNextQueuedRun)
+
+    expect(state.queue).toHaveLength(1)
+    expect(dequeueNextQueuedRun).toHaveBeenCalledOnce()
+    expect(dequeueNextQueuedRun).toHaveBeenCalledWith(socket, 'session-1', 'default')
+  })
+
+  it('marks the parent continuation as an autonomous run for the completed child', async () => {
+    agentRunMock.mockImplementationOnce(async (input: any) => {
+      input.onEvent({ type: 'run.started', runId: 'run-autonomous', maxSteps: 3 })
+      return {
+        runId: 'run-autonomous',
+        output: {
+          role: 'assistant',
+          content: 'Validation passed.',
+          usage: { inputTokens: 3, outputTokens: 2 },
+        },
+        steps: [],
+        messages: [],
+        events: [],
+        contextEstimate: { contextTokens: 6_000 },
+      }
+    })
+    const { handleEkkoAgentRun } = await import('../../packages/server/src/services/hermes/run-chat/handle-ekko-agent-run')
+    const { nsp, socket, sessionMap, events } = makeHarness()
+
+    await handleEkkoAgentRun(nsp as any, socket as any, {
+      session_id: 'session-1',
+      input: 'Background subtask result: Validation passed.',
+      display_input: null,
+      coding_agent_id: 'ekko-agent',
+      queue_id: 'ekko_subagent_child-background',
+      autonomous: true,
+      background_delegation_id: 'child-background',
+      onEvent: (event: string, payload: any) => events.push({ event, payload }),
+    }, 'default', sessionMap, vi.fn(() => false), true)
+
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        event: 'run.started',
+        payload: expect.objectContaining({
+          run_id: 'run-autonomous',
+          autonomous: true,
+          delegation_id: 'child-background',
+        }),
+      }),
+      expect.objectContaining({
+        event: 'run.completed',
+        payload: expect.objectContaining({
+          run_id: 'run-autonomous',
+          autonomous: true,
+          delegation_id: 'child-background',
+          background_pending: 0,
+        }),
+      }),
+    ]))
+  })
+
   it('publishes the workspace when a new Ekko session is persisted', async () => {
     getSessionMock.mockReturnValueOnce(null)
     agentRunMock.mockResolvedValueOnce({
@@ -295,6 +747,7 @@ describe('ekko-agent context usage events', () => {
     expect(createSessionMock).toHaveBeenCalledWith(expect.objectContaining({
       id: 'session-1',
       agent: 'ekko-agent',
+      api_mode: 'chat_completions',
       workspace: '/tmp/new-workspace',
     }))
     expect(events).toContainEqual({
@@ -304,6 +757,62 @@ describe('ekko-agent context usage events', () => {
         session_id: 'session-1',
         workspace: '/tmp/new-workspace',
       },
+    })
+  })
+
+  it('loads and persists the configured API mode when the session and request omit it', async () => {
+    getSessionMock.mockReturnValueOnce({
+      id: 'session-1',
+      profile: 'default',
+      source: 'coding_agent',
+      agent: 'ekko-agent',
+      model: 'ekko-test-model',
+      provider: 'custom:fun-codex',
+      api_mode: '',
+      workspace: '/tmp/workspace',
+    })
+    resolveBridgeRunModelConfigMock.mockResolvedValueOnce({
+      model: 'ekko-test-model',
+      provider: 'custom:fun-codex',
+    })
+    resolveEkkoProviderRuntimeConfigMock.mockResolvedValueOnce({
+      provider: 'custom:fun-codex',
+      baseUrl: 'https://example.test/v1',
+      apiKey: 'test-key',
+      apiMode: 'codex_responses',
+    })
+    agentRunMock.mockResolvedValueOnce({
+      runId: 'run-1',
+      output: { role: 'assistant', content: 'done', usage: { inputTokens: 3, outputTokens: 2 } },
+      steps: [],
+      messages: [],
+      events: [],
+      contextEstimate: { contextTokens: 12_000 },
+    })
+    const { handleEkkoAgentRun } = await import('../../packages/server/src/services/hermes/run-chat/handle-ekko-agent-run')
+    const { nsp, socket, sessionMap } = makeHarness()
+
+    await handleEkkoAgentRun(nsp as any, socket as any, {
+      session_id: 'session-1',
+      input: 'use the configured protocol',
+      coding_agent_id: 'ekko-agent',
+    }, 'default', sessionMap, vi.fn(() => false))
+
+    expect(resolveEkkoProviderRuntimeConfigMock).toHaveBeenCalledWith({
+      profile: 'default',
+      provider: 'custom:fun-codex',
+      baseUrl: undefined,
+      apiKey: undefined,
+      apiMode: undefined,
+    })
+    expect(resolveModelProviderConfigsMock).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'custom:fun-codex',
+      baseUrl: 'https://example.test/v1',
+      apiKey: 'test-key',
+      apiMode: 'codex_responses',
+    }))
+    expect(updateSessionMock).toHaveBeenCalledWith('session-1', {
+      api_mode: 'codex_responses',
     })
   })
 
@@ -414,7 +923,271 @@ describe('ekko-agent context usage events', () => {
     )
   })
 
-  it('includes paired tool results in Ekko history for follow-up turns', async () => {
+  it('writes structured model, tool, and run lifecycle events to the profile log', async () => {
+    agentRunMock.mockImplementationOnce(async (input: any) => {
+      input.onEvent({ type: 'run.started', runId: 'run-log', maxSteps: 3 })
+      input.onEvent({ type: 'model.started', runId: 'run-log', step: 1 })
+      input.onEvent({
+        type: 'model.retry',
+        runId: 'run-log',
+        step: 1,
+        retry: 1,
+        maxRetries: 3,
+        error: 'provider timeout',
+      })
+      input.onEvent({
+        type: 'model.message',
+        runId: 'run-log',
+        step: 1,
+        message: { role: 'assistant', content: 'done' },
+      })
+      input.onEvent({
+        type: 'tool.started',
+        runId: 'run-log',
+        step: 1,
+        toolCallId: 'call-1',
+        toolName: 'terminal_exec',
+        arguments: { command: '/bin/sh', timeoutMs: 650_000 },
+      })
+      input.onEvent({
+        type: 'tool.failed',
+        runId: 'run-log',
+        step: 1,
+        toolCallId: 'call-1',
+        toolName: 'terminal_exec',
+        result: { ok: false, content: 'timed out', error: 'timed out' },
+        durationMs: 120_000,
+      })
+      input.onEvent({ type: 'model.delta', runId: 'run-log', step: 1, text: 'done' })
+      input.onEvent({
+        type: 'run.completed',
+        runId: 'run-log',
+        output: { role: 'assistant', content: 'done' },
+        steps: 1,
+      })
+      return {
+        runId: 'run-log',
+        output: { role: 'assistant', content: 'done', usage: { inputTokens: 3, outputTokens: 2 } },
+        steps: [],
+        messages: [],
+        events: [],
+        contextEstimate: { contextTokens: 6_000 },
+      }
+    })
+    const { handleEkkoAgentRun } = await import('../../packages/server/src/services/hermes/run-chat/handle-ekko-agent-run')
+    const { nsp, socket, sessionMap } = makeHarness()
+
+    await handleEkkoAgentRun(nsp as any, socket as any, {
+      session_id: 'session-1',
+      input: 'run a tool',
+      coding_agent_id: 'ekko-agent',
+    }, 'default', sessionMap, vi.fn(() => false))
+
+    const records = agentWriteLogMock.mock.calls.map(call => call[0])
+    expect(records).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: 'run', event: 'run.requested', sessionId: 'session-1' }),
+      expect.objectContaining({ category: 'model', event: 'model.started', runId: 'run-log' }),
+      expect.objectContaining({ category: 'model', event: 'model.retry', level: 'warn', runId: 'run-log' }),
+      expect.objectContaining({
+        category: 'tool',
+        event: 'tool.started',
+        data: expect.objectContaining({ toolName: 'terminal_exec', arguments: { command: '/bin/sh', timeoutMs: 650_000 } }),
+      }),
+      expect.objectContaining({
+        category: 'tool',
+        event: 'tool.failed',
+        level: 'warn',
+        data: expect.objectContaining({ durationMs: 120_000, error: 'timed out' }),
+      }),
+      expect.objectContaining({ category: 'run', event: 'run.persisted', runId: 'run-log' }),
+    ]))
+    expect(records.some(record => record.event === 'model.delta')).toBe(false)
+  })
+
+  it('incrementally persists a completed tool group before an aborted run exits', async () => {
+    agentRunMock.mockImplementationOnce(async (input: any) => {
+      input.onEvent({ type: 'run.started', runId: 'run-abort', maxSteps: 3 })
+      input.onEvent({
+        type: 'model.message',
+        runId: 'run-abort',
+        step: 1,
+        message: {
+          role: 'assistant',
+          content: '',
+          toolCalls: [{
+            id: 'call-search',
+            name: 'skill_list',
+            arguments: { query: 'apikey-image-gen' },
+          }],
+        },
+      })
+      input.onEvent({
+        type: 'tool.completed',
+        runId: 'run-abort',
+        step: 1,
+        toolCallId: 'call-search',
+        toolName: 'skill_list',
+        result: { ok: true, content: '{"skills":["apikey-image-gen"]}' },
+        durationMs: 5,
+      })
+      expect(addMessagesMock).toHaveBeenCalledTimes(1)
+      const abortError = new Error('Run aborted.')
+      abortError.name = 'AbortError'
+      throw abortError
+    })
+    const { handleEkkoAgentRun } = await import('../../packages/server/src/services/hermes/run-chat/handle-ekko-agent-run')
+    const { nsp, socket, sessionMap, state, events } = makeHarness()
+
+    await handleEkkoAgentRun(nsp as any, socket as any, {
+      session_id: 'session-1',
+      input: 'generate an image',
+      coding_agent_id: 'ekko-agent',
+      onEvent: (event: string, payload: any) => events.push({ event, payload }),
+    }, 'default', sessionMap, vi.fn(() => false))
+
+    expect(addMessagesMock).toHaveBeenCalledWith([
+      expect.objectContaining({
+        role: 'assistant',
+        tool_calls: [{
+          id: 'call-search',
+          type: 'function',
+          function: {
+            name: 'skill_list',
+            arguments: '{"query":"apikey-image-gen"}',
+          },
+        }],
+        finish_reason: 'tool_calls',
+      }),
+      expect.objectContaining({
+        role: 'tool',
+        content: '{"skills":["apikey-image-gen"]}',
+        tool_call_id: 'call-search',
+        tool_name: 'skill_list',
+      }),
+    ])
+    expect(state.messages.slice(-2).map((message: any) => message.role)).toEqual(['assistant', 'tool'])
+    expect(events.some(item => item.event === 'run.failed')).toBe(false)
+  })
+
+  it('waits for every result before atomically persisting a multi-tool group', async () => {
+    agentRunMock.mockImplementationOnce(async (input: any) => {
+      input.onEvent({ type: 'run.started', runId: 'run-multi', maxSteps: 3 })
+      input.onEvent({
+        type: 'model.message',
+        runId: 'run-multi',
+        step: 1,
+        message: {
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            { id: 'call-one', name: 'skill_list', arguments: { query: 'image' } },
+            { id: 'call-two', name: 'skill_view', arguments: { name: 'apikey-image-gen' } },
+          ],
+        },
+      })
+      input.onEvent({
+        type: 'tool.completed',
+        runId: 'run-multi',
+        step: 1,
+        toolCallId: 'call-one',
+        toolName: 'skill_list',
+        result: { ok: true, content: 'found' },
+        durationMs: 2,
+      })
+      expect(addMessagesMock).not.toHaveBeenCalled()
+      input.onEvent({
+        type: 'tool.failed',
+        runId: 'run-multi',
+        step: 1,
+        toolCallId: 'call-two',
+        toolName: 'skill_view',
+        result: { ok: false, content: 'read failed', error: 'read failed' },
+        durationMs: 3,
+      })
+      expect(addMessagesMock).toHaveBeenCalledTimes(1)
+      const abortError = new Error('Run aborted.')
+      abortError.name = 'AbortError'
+      throw abortError
+    })
+    const { handleEkkoAgentRun } = await import('../../packages/server/src/services/hermes/run-chat/handle-ekko-agent-run')
+    const { nsp, socket, sessionMap } = makeHarness()
+
+    await handleEkkoAgentRun(nsp as any, socket as any, {
+      session_id: 'session-1',
+      input: 'use both tools',
+      coding_agent_id: 'ekko-agent',
+    }, 'default', sessionMap, vi.fn(() => false))
+
+    const rows = addMessagesMock.mock.calls[0][0]
+    expect(rows.map((row: any) => row.role)).toEqual(['assistant', 'tool', 'tool'])
+    expect(rows[2]).toEqual(expect.objectContaining({
+      tool_call_id: 'call-two',
+      finish_reason: 'error',
+    }))
+  })
+
+  it('does not duplicate incrementally persisted tool messages after a successful run', async () => {
+    const modelStep = {
+      type: 'model',
+      step: 1,
+      message: {
+        role: 'assistant',
+        content: '',
+        toolCalls: [{
+          id: 'call-once',
+          name: 'skill_list',
+          arguments: { query: 'image' },
+        }],
+      },
+    }
+    const toolStep = {
+      type: 'tool',
+      step: 1,
+      toolCallId: 'call-once',
+      toolName: 'skill_list',
+      result: { ok: true, content: 'found' },
+    }
+    agentRunMock.mockImplementationOnce(async (input: any) => {
+      input.onEvent({ type: 'run.started', runId: 'run-success', maxSteps: 3 })
+      input.onEvent({
+        type: 'model.message',
+        runId: 'run-success',
+        step: 1,
+        message: modelStep.message,
+      })
+      input.onEvent({
+        type: 'tool.completed',
+        runId: 'run-success',
+        step: 1,
+        toolCallId: 'call-once',
+        toolName: 'skill_list',
+        result: toolStep.result,
+        durationMs: 2,
+      })
+      return {
+        runId: 'run-success',
+        output: { role: 'assistant', content: 'done', usage: { inputTokens: 3, outputTokens: 2 } },
+        steps: [modelStep, toolStep],
+        messages: [],
+        events: [],
+        contextEstimate: { contextTokens: 6_000 },
+      }
+    })
+    const { handleEkkoAgentRun } = await import('../../packages/server/src/services/hermes/run-chat/handle-ekko-agent-run')
+    const { nsp, socket, sessionMap } = makeHarness()
+
+    await handleEkkoAgentRun(nsp as any, socket as any, {
+      session_id: 'session-1',
+      input: 'find the skill',
+      coding_agent_id: 'ekko-agent',
+    }, 'default', sessionMap, vi.fn(() => false))
+
+    expect(addMessagesMock).toHaveBeenCalledTimes(1)
+    expect(addMessageMock.mock.calls.filter(call => call[0]?.tool_calls?.length)).toHaveLength(0)
+    expect(addMessageMock.mock.calls.filter(call => call[0]?.role === 'tool')).toHaveLength(0)
+  })
+
+  it('includes paired non-empty and empty tool results in Ekko history for follow-up turns', async () => {
     agentRunMock.mockResolvedValueOnce({
       runId: 'run-1',
       output: { role: 'assistant', content: 'follow-up done', usage: { inputTokens: 3, outputTokens: 2 } },
@@ -445,6 +1218,13 @@ describe('ekko-agent context usage events', () => {
             name: 'browser_navigate',
             arguments: '{"url":"https://weather.example"}',
           },
+        }, {
+          id: 'call_empty',
+          type: 'function',
+          function: {
+            name: 'terminal_exec',
+            arguments: '{"command":"mdfind example"}',
+          },
         }],
         timestamp: 1001,
       },
@@ -461,10 +1241,19 @@ describe('ekko-agent context usage events', () => {
         id: 4,
         session_id: 'session-1',
         role: 'tool',
+        content: '',
+        tool_call_id: 'call_empty',
+        tool_name: 'terminal_exec',
+        timestamp: 1003,
+      },
+      {
+        id: 5,
+        session_id: 'session-1',
+        role: 'tool',
         content: 'orphan result',
         tool_call_id: 'call_orphan',
         tool_name: 'browser_navigate',
-        timestamp: 1003,
+        timestamp: 1004,
       },
     ]
 
@@ -485,6 +1274,11 @@ describe('ekko-agent context usage events', () => {
           name: 'browser_navigate',
           arguments: { url: 'https://weather.example' },
           rawArguments: '{"url":"https://weather.example"}',
+        }, {
+          id: 'call_empty',
+          name: 'terminal_exec',
+          arguments: { command: 'mdfind example' },
+          rawArguments: '{"command":"mdfind example"}',
         }],
       },
       {
@@ -492,6 +1286,12 @@ describe('ekko-agent context usage events', () => {
         content: '{"forecast":"sunny"}',
         toolCallId: 'call_weather',
         name: 'browser_navigate',
+      },
+      {
+        role: 'tool',
+        content: '(no output)',
+        toolCallId: 'call_empty',
+        name: 'terminal_exec',
       },
       { role: 'user', content: 'thanks' },
     ])

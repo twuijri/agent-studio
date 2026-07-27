@@ -12,7 +12,7 @@ import type { AgentMessage, AgentToolCall, ModelRequest, ModelResponse } from '.
 import type { AgentSkill } from '../skills/types'
 import { AgentToolRegistry, createDefaultToolRegistry } from '../tools/registry'
 import { sanitizeAgentToolResult } from '../tools/tool-result-sanitizer'
-import type { AgentToolContext, AgentToolResult } from '../tools/types'
+import type { AgentTaskRequest, AgentToolContext, AgentToolResult } from '../tools/types'
 import type { AgentRuntimeEvent } from './events'
 import { buildSystemPrompt } from './system-prompt'
 import type { AgentRuntimeContextEstimate, AgentRuntimeOptions, AgentRuntimeRunInput, AgentRuntimeRunResult, AgentRuntimeStep } from './types'
@@ -20,15 +20,29 @@ import type { MemoryContext, MemoryRuntimeIdentity } from '../memory/types'
 import type { MemoryCaptureMessage } from '../memory/service'
 import { ModelMemoryExtractor } from '../memory/extraction'
 import { createMemoryTools } from '../memory/tools'
+import {
+  DEFAULT_SKILL_REVIEW_TOOL_CALL_INTERVAL,
+  SkillReviewService,
+} from '../skills/review'
 
 export const DEFAULT_AGENT_MAX_STEPS = 90
 export const DEFAULT_AGENT_MODEL_MAX_RETRIES = 3
 export const DEFAULT_AGENT_MAX_CONSECUTIVE_TOOL_FAILURES = 6
 export const DEFAULT_AGENT_TOOL_DELAY_MS = 1000
+export const DEFAULT_AGENT_SUBTASK_MAX_STEPS = 30
+const MAX_TRACKED_SKILL_REVIEW_CONTEXTS = 1_024
+const SUBTASK_OUTPUT_TAIL_CHARS = 4_000
+const SUBTASK_SUMMARY_CHARS = 500
 
 interface ModelResponseResult {
   response: ModelResponse
   emittedReasoning: boolean
+}
+
+interface BackgroundTask {
+  sessionId?: string
+  controller: AbortController
+  promise: Promise<AgentToolResult>
 }
 
 export class AgentRuntime {
@@ -47,7 +61,11 @@ export class AgentRuntime {
   private readonly toolDelayMs: number
   private readonly defaultContextKey?: string
   private readonly memory?: AgentRuntimeOptions['memory']
+  private readonly skillReview?: SkillReviewService
+  private readonly skillReviewEveryToolCalls: number
+  private readonly skillToolCallCounts = new Map<string, number>()
   private readonly modelContexts = new Map<string, unknown>()
+  private readonly backgroundTasks = new Map<string, BackgroundTask>()
 
   constructor(options: AgentRuntimeOptions) {
     this.modelClient = options.modelClient
@@ -67,6 +85,13 @@ export class AgentRuntime {
     this.toolDelayMs = options.toolDelayMs ?? DEFAULT_AGENT_TOOL_DELAY_MS
     this.defaultContextKey = options.contextKey
     this.memory = options.memory
+    this.skillReviewEveryToolCalls = Math.max(
+      0,
+      Math.floor(options.skillReviewEveryToolCalls ?? DEFAULT_SKILL_REVIEW_TOOL_CALL_INTERVAL),
+    )
+    this.skillReview = this.toolsEnabled && this.skillsEnabled && options.skillDirectory
+      ? new SkillReviewService({ skillDirectory: options.skillDirectory })
+      : undefined
     this.registerSkillTools(this.skills)
     if (this.toolsEnabled && this.memory) this.tools.registerMany(createMemoryTools(this.memory))
   }
@@ -86,6 +111,25 @@ export class AgentRuntime {
   async refreshTools(context?: AgentToolContext): Promise<void> {
     if (!this.toolsEnabled) return
     await this.tools.refreshTools(context)
+  }
+
+  async drainSkillReviews(): Promise<void> {
+    await this.skillReview?.drain()
+  }
+
+  hasBackgroundTasks(sessionId?: string): boolean {
+    for (const task of this.backgroundTasks.values()) {
+      if (!sessionId || task.sessionId === sessionId) return true
+    }
+    return false
+  }
+
+  async abortBackgroundTasks(sessionId?: string): Promise<number> {
+    const tasks = [...this.backgroundTasks.values()]
+      .filter(task => !sessionId || task.sessionId === sessionId)
+    for (const task of tasks) task.controller.abort()
+    await Promise.allSettled(tasks.map(task => task.promise))
+    return tasks.length
   }
 
   /**
@@ -125,7 +169,13 @@ export class AgentRuntime {
     const memoryIdentity = this.memoryIdentityFor(input)
     const memoryPreparation = await this.prepareMemory(input, memoryIdentity)
     const memoryContext = memoryPreparation?.context
-    const executionToolContext = this.runToolContext(input, memoryPreparation?.sourceMessageIds)
+    const executionToolContext: AgentToolContext = {
+      ...(this.runToolContext(input, memoryPreparation?.sourceMessageIds) || {}),
+      runId,
+      skillMutationSource: 'foreground',
+      delegationDepth: input.toolContext?.delegationDepth ?? this.toolContext?.delegationDepth ?? 0,
+      delegateTask: request => this.delegateTask(request, input, runId, emit),
+    }
     if (memoryContext) {
       emit({
         type: 'memory.retrieved',
@@ -178,6 +228,7 @@ export class AgentRuntime {
           const context = contextKey ? this.modelContexts.get(contextKey) : assistantMessage.context
           emit({ type: 'run.completed', runId, output, steps: step, context, contextEstimate })
           this.completeMemory(memoryIdentity, messages, input)
+          this.completeSkillReview(runId, contextKey, messages, input, input.onEvent)
           return { runId, messages, output, steps, events, context, contextEstimate, memoryContext }
         }
 
@@ -195,6 +246,7 @@ export class AgentRuntime {
           messages.push(createToolResultMessage(toolCall.id, result.content, toolCall.name, result.contentParts))
           steps.push({ type: 'tool', step, toolCallId: toolCall.id, toolName: toolCall.name, result })
           consecutiveToolFailures = result.ok ? 0 : consecutiveToolFailures + 1
+          this.recordSkillToolCall(contextKey, toolCall.name)
           if (maxConsecutiveToolFailures > 0 && consecutiveToolFailures >= maxConsecutiveToolFailures) {
             emit({ type: 'run.tool_failure_limit', runId, failures: consecutiveToolFailures })
             output = {
@@ -205,6 +257,7 @@ export class AgentRuntime {
             const context = contextKey ? this.modelContexts.get(contextKey) : undefined
             emit({ type: 'run.completed', runId, output, steps: step, context, contextEstimate })
             this.completeMemory(memoryIdentity, messages, input)
+            this.completeSkillReview(runId, contextKey, messages, input, input.onEvent)
             return { runId, messages, output, steps, events, context, contextEstimate, memoryContext }
           }
           await delay(toolDelayMs, input.signal)
@@ -220,6 +273,7 @@ export class AgentRuntime {
       const context = contextKey ? this.modelContexts.get(contextKey) : undefined
       emit({ type: 'run.completed', runId, output, steps: maxSteps, context, contextEstimate })
       this.completeMemory(memoryIdentity, messages, input)
+      this.completeSkillReview(runId, contextKey, messages, input, input.onEvent)
       return { runId, messages, output, steps, events, context, contextEstimate, memoryContext }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -319,6 +373,7 @@ export class AgentRuntime {
       skillDiscoveryEnabled: this.toolsEnabled &&
         !!this.tools.get('skill_list') &&
         !!this.tools.get('skill_view'),
+      skillManagementEnabled: this.toolsEnabled && !!this.tools.get('skill_manage'),
       context: {
         provider: modelClient.provider,
         model: input.model ?? input.modelDefaults?.model ?? this.modelDefaults?.model,
@@ -390,6 +445,57 @@ export class AgentRuntime {
     )
   }
 
+  private recordSkillToolCall(contextKey: string | undefined, toolName: string): void {
+    if (!this.skillReview || this.skillReviewEveryToolCalls <= 0) return
+    const key = contextKey || '__default__'
+    if (toolName === 'skill_manage') {
+      this.skillToolCallCounts.delete(key)
+      return
+    }
+    const count = (this.skillToolCallCounts.get(key) || 0) + 1
+    this.skillToolCallCounts.delete(key)
+    this.skillToolCallCounts.set(key, count)
+    if (this.skillToolCallCounts.size > MAX_TRACKED_SKILL_REVIEW_CONTEXTS) {
+      const oldestKey = this.skillToolCallCounts.keys().next().value
+      if (oldestKey) this.skillToolCallCounts.delete(oldestKey)
+    }
+  }
+
+  private completeSkillReview(
+    runId: string,
+    contextKey: string | undefined,
+    messages: AgentMessage[],
+    input: AgentRuntimeRunInput,
+    emit?: (event: AgentRuntimeEvent) => void,
+  ): void {
+    if (
+      (input.toolContext?.delegationDepth ?? this.toolContext?.delegationDepth ?? 0) > 0 ||
+      !this.skillReview ||
+      this.skillReviewEveryToolCalls <= 0 ||
+      !this.tools.get('skill_manage')
+    ) {
+      return
+    }
+    const key = contextKey || '__default__'
+    if ((this.skillToolCallCounts.get(key) || 0) < this.skillReviewEveryToolCalls) return
+    this.skillToolCallCounts.delete(key)
+    const modelClient = this.modelClientFor(input)
+    this.skillReview.schedule({
+      modelClient,
+      model: input.model ?? input.modelDefaults?.model ?? this.modelDefaults?.model,
+      messages: messages.map(message => ({ ...message })),
+      onUsage: input.onSkillReviewUsage,
+      onStarted: reviewId => emit?.({ type: 'skill.review.started', runId, reviewId }),
+      onCompleted: (reviewId, mutations) => emit?.({
+        type: 'skill.review.completed',
+        runId,
+        reviewId,
+        mutations,
+      }),
+      onFailed: (reviewId, error) => emit?.({ type: 'skill.review.failed', runId, reviewId, error }),
+    })
+  }
+
   private modelRequest(
     input: AgentRuntimeRunInput,
     messages: AgentMessage[],
@@ -402,10 +508,17 @@ export class AgentRuntime {
       model: input.model ?? modelDefaults?.model,
       temperature: input.temperature ?? modelDefaults?.temperature,
       maxTokens: input.maxTokens ?? modelDefaults?.maxTokens,
+      reasoningEffort: input.reasoningEffort ?? modelDefaults?.reasoningEffort,
+      reasoningSummary: input.reasoningSummary ?? modelDefaults?.reasoningSummary,
       metadata: input.metadata ?? modelDefaults?.metadata,
       messages,
       signal: input.signal,
-      tools: this.toolsEnabled ? this.tools.definitions() : undefined,
+      tools: this.toolsEnabled
+        ? this.tools.definitions().filter(definition => (
+            (input.toolContext?.delegationDepth ?? this.toolContext?.delegationDepth ?? 0) === 0 ||
+            definition.name !== 'delegate_task'
+          ))
+        : undefined,
       stream: modelClient.capabilities.streaming,
       context: input.context ?? (contextKey ? this.modelContexts.get(contextKey) : modelDefaults?.context),
     }
@@ -489,6 +602,228 @@ export class AgentRuntime {
     }
   }
 
+  private async delegateTask(
+    request: AgentTaskRequest,
+    parentInput: AgentRuntimeRunInput,
+    parentRunId: string,
+    emit: (event: AgentRuntimeEvent) => void,
+  ): Promise<AgentToolResult> {
+    const subagentId = randomUUID()
+    const background = request.mode === 'background'
+    const startedAt = Date.now()
+    const controller = new AbortController()
+    const sessionId = this.contextKeyFor(parentInput)
+    const childContextKey = sessionId
+      ? `${sessionId}:subagent:${subagentId}`
+      : `subagent:${subagentId}`
+    const abortChild = () => controller.abort()
+    parentInput.signal?.addEventListener('abort', abortChild, { once: true })
+    if (parentInput.signal?.aborted) controller.abort()
+    emit({
+      type: 'subagent.start',
+      runId: parentRunId,
+      subagentId,
+      goal: request.goal,
+      background,
+      model: parentInput.model ?? parentInput.modelDefaults?.model ?? this.modelDefaults?.model,
+      startedAt,
+    })
+
+    let toolCount = 0
+    let apiCalls = 0
+    let inputTokens = 0
+    let outputTokens = 0
+    let cacheReadTokens = 0
+    let cacheWriteTokens = 0
+    let reasoningTokens = 0
+    let childRunId: string | undefined
+    const streamedTextSteps = new Set<number>()
+    const childPromise = (async (): Promise<AgentToolResult> => {
+      let status: 'completed' | 'failed' | 'interrupted' = 'completed'
+      let output = ''
+      let error: string | undefined
+      try {
+        const child = await this.run({
+          messages: [{
+            role: 'user',
+            content: subtaskPrompt(request),
+          }],
+          signal: controller.signal,
+          systemPrompt: parentInput.systemPrompt,
+          skills: parentInput.skills,
+          maxSteps: Math.min(
+            parentInput.maxSteps ?? this.maxSteps,
+            DEFAULT_AGENT_SUBTASK_MAX_STEPS,
+          ),
+          maxModelRetries: parentInput.maxModelRetries,
+          maxConsecutiveToolFailures: parentInput.maxConsecutiveToolFailures,
+          toolDelayMs: parentInput.toolDelayMs,
+          toolContext: {
+            ...(parentInput.toolContext ?? this.toolContext),
+            signal: controller.signal,
+            delegationDepth: (parentInput.toolContext?.delegationDepth ?? this.toolContext?.delegationDepth ?? 0) + 1,
+            delegateTask: undefined,
+          },
+          model: parentInput.model,
+          temperature: parentInput.temperature,
+          maxTokens: parentInput.maxTokens,
+          reasoningEffort: parentInput.reasoningEffort,
+          reasoningSummary: parentInput.reasoningSummary,
+          metadata: {
+            ...parentInput.metadata,
+            session_id: sessionId ? `${sessionId}:subagent:${subagentId}` : `subagent:${subagentId}`,
+            parent_session_id: sessionId,
+            parent_run_id: parentRunId,
+            subagent_id: subagentId,
+          },
+          modelClient: parentInput.modelClient,
+          modelDefaults: parentInput.modelDefaults,
+          contextKey: childContextKey,
+          memoryEnabled: false,
+          onEvent: (event) => {
+            if ('runId' in event) childRunId = event.runId
+            if (event.type === 'model.delta') {
+              streamedTextSteps.add(event.step)
+              emit({
+                type: 'subagent.text',
+                runId: parentRunId,
+                childRunId,
+                subagentId,
+                goal: request.goal,
+                background,
+                text: event.text,
+              })
+            } else if (
+              event.type === 'model.message' &&
+              event.message.content &&
+              !streamedTextSteps.has(event.step)
+            ) {
+              emit({
+                type: 'subagent.text',
+                runId: parentRunId,
+                childRunId,
+                subagentId,
+                goal: request.goal,
+                background,
+                text: event.message.content,
+              })
+            } else if (event.type === 'model.reasoning' && event.text) {
+              emit({
+                type: 'subagent.thinking',
+                runId: parentRunId,
+                childRunId,
+                subagentId,
+                goal: request.goal,
+                background,
+                text: event.text,
+              })
+            } else if (event.type === 'tool.started') {
+              toolCount += 1
+              emit({
+                type: 'subagent.tool',
+                runId: parentRunId,
+                childRunId,
+                subagentId,
+                goal: request.goal,
+                background,
+                toolName: event.toolName,
+                arguments: event.arguments,
+                toolCount,
+              })
+            } else if (event.type === 'model.usage') {
+              apiCalls += 1
+              inputTokens += event.usage.inputTokens || 0
+              outputTokens += event.usage.outputTokens || 0
+              cacheReadTokens += event.usage.cacheReadTokens || 0
+              cacheWriteTokens += event.usage.cacheWriteTokens || 0
+              reasoningTokens += event.usage.reasoningTokens || 0
+            }
+          },
+        })
+        output = child.output.content || ''
+        if (child.output.finishReason === 'tool_failure_limit' || child.output.finishReason === 'max_steps') {
+          status = 'failed'
+          error = output || `Subtask stopped with ${child.output.finishReason}.`
+        }
+      } catch (childError) {
+        status = controller.signal.aborted || isAbortError(childError) ? 'interrupted' : 'failed'
+        error = childError instanceof Error ? childError.message : String(childError)
+        output = error
+      } finally {
+        parentInput.signal?.removeEventListener('abort', abortChild)
+        this.modelContexts.delete(childContextKey)
+      }
+
+      const summary = subtaskSummary(output, status)
+      emit({
+        type: 'subagent.complete',
+        runId: parentRunId,
+        childRunId,
+        subagentId,
+        goal: request.goal,
+        background,
+        status,
+        summary,
+        output,
+        outputTail: output.slice(-SUBTASK_OUTPUT_TAIL_CHARS),
+        durationMs: Date.now() - startedAt,
+        toolCount,
+        apiCalls,
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
+        reasoningTokens,
+      })
+      const payload = {
+        runtime: 'ekko',
+        mode: request.mode,
+        subagent_id: subagentId,
+        status,
+        summary,
+        output,
+        duration_ms: Date.now() - startedAt,
+        tool_count: toolCount,
+        api_calls: apiCalls,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        cache_read_tokens: cacheReadTokens,
+        cache_write_tokens: cacheWriteTokens,
+        reasoning_tokens: reasoningTokens,
+      }
+      return {
+        ok: status === 'completed',
+        content: JSON.stringify(payload, null, 2),
+        data: payload,
+        ...(error ? { error } : {}),
+      }
+    })()
+
+    if (!background) return childPromise
+
+    this.backgroundTasks.set(subagentId, {
+      sessionId,
+      controller,
+      promise: childPromise,
+    })
+    void childPromise.then(
+      () => this.backgroundTasks.delete(subagentId),
+      () => this.backgroundTasks.delete(subagentId),
+    )
+    const payload = {
+      runtime: 'ekko',
+      mode: request.mode,
+      subagent_id: subagentId,
+      status: 'running',
+      goal: request.goal,
+    }
+    return {
+      ok: true,
+      content: JSON.stringify(payload, null, 2),
+      data: payload,
+    }
+  }
+
   private registerSkillTools(skills: AgentSkill[]): void {
     if (!this.toolsEnabled || !this.skillsEnabled) return
     for (const skill of skills) {
@@ -523,6 +858,26 @@ function abortError(): Error {
   const error = new Error('Run aborted.')
   error.name = 'AbortError'
   return error
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || error.message === 'Run aborted.')
+}
+
+function subtaskPrompt(request: AgentTaskRequest): string {
+  return [
+    `Complete this delegated task independently:\n${request.goal}`,
+    request.context ? `Relevant context:\n${request.context}` : '',
+    'Return a concise result that the parent agent can use directly.',
+  ].filter(Boolean).join('\n\n')
+}
+
+function subtaskSummary(output: string, status: 'completed' | 'failed' | 'interrupted'): string {
+  const normalized = output.replace(/\s+/g, ' ').trim()
+  if (normalized) return normalized.slice(0, SUBTASK_SUMMARY_CHARS)
+  if (status === 'interrupted') return 'Subtask interrupted.'
+  if (status === 'failed') return 'Subtask failed.'
+  return 'Subtask completed.'
 }
 
 function isEmptyModelResponse(response: ModelResponse): boolean {

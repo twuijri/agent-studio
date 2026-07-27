@@ -222,6 +222,88 @@ describe('ekko-agent model requests', () => {
     }))
   })
 
+  it('requests and streams Responses reasoning summaries', async () => {
+    const encoder = new TextEncoder()
+    const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        reasoning: {
+          effort: 'high',
+          summary: 'auto',
+        },
+      })
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode('event: response.reasoning_summary_text.delta\ndata: {"type":"response.reasoning_summary_text.delta","delta":"Checked the constraints."}\n\n'))
+          controller.enqueue(encoder.encode('event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"Done"}\n\n'))
+          controller.enqueue(encoder.encode('event: response.completed\ndata: {"type":"response.completed","response":{"id":"resp_reasoning","status":"completed","output":[]}}\n\n'))
+          controller.close()
+        },
+      }), { status: 200 })
+    })
+    const client = createModelClient({
+      id: 'custom:responses',
+      type: 'openai-compatible',
+      requestStyle: 'openai-responses',
+      apiKey: 'token',
+      defaultModel: 'reasoning-model',
+    }, { fetch: fetchMock })
+
+    const events = []
+    for await (const event of client.stream({
+      messages: [{ role: 'user', content: 'Solve it' }],
+      reasoningEffort: 'high',
+      reasoningSummary: 'auto',
+    })) events.push(event)
+
+    expect(events).toContainEqual({ type: 'reasoning-delta', text: 'Checked the constraints.' })
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'done',
+      response: expect.objectContaining({
+        content: 'Done',
+        reasoning: 'Checked the constraints.',
+      }),
+    }))
+  })
+
+  it('routes Responses commentary-phase messages through the reasoning channel', async () => {
+    const encoder = new TextEncoder()
+    const fetchMock = vi.fn(async () => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('event: response.output_item.added\ndata: {"type":"response.output_item.added","output_index":0,"item":{"id":"msg_commentary","type":"message","phase":"commentary","content":[]}}\n\n'))
+        controller.enqueue(encoder.encode('event: response.output_text.delta\ndata: {"type":"response.output_text.delta","output_index":0,"item_id":"msg_commentary","delta":"**Loading model skill**"}\n\n'))
+        controller.enqueue(encoder.encode('event: response.output_item.done\ndata: {"type":"response.output_item.done","output_index":0,"item":{"id":"msg_commentary","type":"message","phase":"commentary","content":[{"type":"output_text","text":"**Loading model skill**"}]}}\n\n'))
+        controller.enqueue(encoder.encode('event: response.output_item.added\ndata: {"type":"response.output_item.added","output_index":1,"item":{"id":"msg_final","type":"message","phase":"final_answer","content":[]}}\n\n'))
+        controller.enqueue(encoder.encode('event: response.output_text.delta\ndata: {"type":"response.output_text.delta","output_index":1,"item_id":"msg_final","delta":"Ready."}\n\n'))
+        controller.enqueue(encoder.encode('event: response.output_item.done\ndata: {"type":"response.output_item.done","output_index":1,"item":{"id":"msg_final","type":"message","phase":"final_answer","content":[{"type":"output_text","text":"Ready."}]}}\n\n'))
+        controller.enqueue(encoder.encode('event: response.completed\ndata: {"type":"response.completed","response":{"id":"resp_commentary","status":"completed","output":[]}}\n\n'))
+        controller.close()
+      },
+    }), { status: 200 }))
+    const client = createModelClient({
+      id: 'custom:responses',
+      type: 'openai-compatible',
+      requestStyle: 'openai-responses',
+      apiKey: 'token',
+      defaultModel: 'reasoning-model',
+    }, { fetch: fetchMock })
+
+    const events = []
+    for await (const event of client.stream({
+      messages: [{ role: 'user', content: 'Use the model skill.' }],
+    })) events.push(event)
+
+    expect(events).toContainEqual({ type: 'reasoning-delta', text: '**Loading model skill**' })
+    expect(events).not.toContainEqual({ type: 'text-delta', text: '**Loading model skill**' })
+    expect(events).toContainEqual({ type: 'text-delta', text: 'Ready.' })
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'done',
+      response: expect.objectContaining({
+        content: 'Ready.',
+        reasoning: '**Loading model skill**',
+      }),
+    }))
+  })
+
   it('keeps non-Codex Responses create requests non-streaming', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       output_text: 'xAI',
@@ -508,7 +590,7 @@ describe('ekko-agent model requests', () => {
     }).requestStyle).toBe('custom-runtime')
   })
 
-  it('converts internal requests to OpenAI Responses payloads', () => {
+  it('converts internal requests to self-contained OpenAI Responses payloads', () => {
     const payload = toOpenAIResponsesPayload({
       id: 'openai',
       type: 'openai',
@@ -521,6 +603,8 @@ describe('ekko-agent model requests', () => {
       ],
       tools: [{ name: 'search', parameters: { type: 'object' } }],
       maxTokens: 500,
+      reasoningEffort: 'medium',
+      reasoningSummary: 'auto',
       context: { responseId: 'resp_previous' },
     })
 
@@ -529,10 +613,11 @@ describe('ekko-agent model requests', () => {
       instructions: 'Be direct.',
       input: [{ role: 'user', content: 'Search docs.' }],
       max_output_tokens: 500,
-      previous_response_id: 'resp_previous',
+      reasoning: { effort: 'medium', summary: 'auto' },
       tools: [{ type: 'function', name: 'search' }],
       store: false,
     })
+    expect(payload).not.toHaveProperty('previous_response_id')
   })
 
   it('replays Responses tool calls and results with native input item types', () => {
@@ -576,6 +661,40 @@ describe('ekko-agent model requests', () => {
         call_id: 'call_weather',
         output: 'Sunny, 30°C',
       },
+    ])
+  })
+
+  it('omits invalid empty-name tool history from Responses replay', () => {
+    const payload = toOpenAIResponsesPayload({
+      id: 'custom:fun-codex',
+      type: 'openai-compatible',
+      requestStyle: 'openai-responses',
+      defaultModel: 'gpt-5.5',
+    }, {
+      messages: [
+        { role: 'user', content: 'Check the weather.' },
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [{
+            id: 'call_invalid',
+            name: '',
+            arguments: { url: 'https://example.com' },
+          }],
+        },
+        {
+          role: 'tool',
+          toolCallId: 'call_invalid',
+          name: '',
+          content: 'Unknown tool: ',
+        },
+        { role: 'user', content: 'Try again.' },
+      ],
+    })
+
+    expect(payload.input).toEqual([
+      { role: 'user', content: 'Check the weather.' },
+      { role: 'user', content: 'Try again.' },
     ])
   })
 
