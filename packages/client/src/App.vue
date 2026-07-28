@@ -269,6 +269,7 @@ useKeyboard()
     backdrop-filter: none;
   }
 
+  :deep(.desktop-titlebar),
   :deep(.chat-panel > .chat-main > .chat-header),
   :deep(.group-chat-panel > .chat-main > .chat-header) {
     background-color: rgba(var(--bg-main-surface-rgb), 0.72);
@@ -299,6 +300,10 @@ useKeyboard()
     background-color: rgba(var(--bg-main-surface-rgb), 0.72);
     -webkit-backdrop-filter: blur(8px) saturate(110%);
     backdrop-filter: blur(8px) saturate(110%);
+  }
+
+  :deep(.browser-settings-page > .settings-card) {
+    background-color: transparent;
   }
 
 }
