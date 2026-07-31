@@ -75,7 +75,7 @@ const WORKSPACE_PANEL_MIN_WIDTH = 360
 const WORKSPACE_PANEL_DEFAULT_WIDTH = 560
 const WORKSPACE_PANEL_STORAGE_KEY = 'hermes.groupChat.workspacePanelWidth'
 const workspacePanelWidth = ref(loadWorkspacePanelWidth())
-const workspaceResizeStart = ref<{ x: number; width: number } | null>(null)
+const workspaceResizeStart = ref<{ x: number; width: number; deltaSign: 1 | -1 } | null>(null)
 const workspacePanelStyle = computed(() => ({
     width: workspacePanelMobile.value ? '100%' : `${workspacePanelWidth.value}px`,
 }))
@@ -162,7 +162,8 @@ function handleWorkspacePanelResize(): void {
 function handleWorkspaceResizeMove(event: PointerEvent): void {
     if (!workspaceResizeStart.value) return
     workspacePanelWidth.value = clampWorkspacePanelWidth(
-        workspaceResizeStart.value.width + workspaceResizeStart.value.x - event.clientX,
+        workspaceResizeStart.value.width
+            + (event.clientX - workspaceResizeStart.value.x) * workspaceResizeStart.value.deltaSign,
     )
 }
 
@@ -181,7 +182,11 @@ function stopWorkspaceResize(): void {
 function startWorkspaceResize(event: PointerEvent): void {
     if (workspacePanelMobile.value) return
     event.preventDefault()
-    workspaceResizeStart.value = { x: event.clientX, width: workspacePanelWidth.value }
+    workspaceResizeStart.value = {
+        x: event.clientX,
+        width: workspacePanelWidth.value,
+        deltaSign: document.documentElement.dir === 'rtl' ? 1 : -1,
+    }
     window.addEventListener('pointermove', handleWorkspaceResizeMove)
     window.addEventListener('pointerup', stopWorkspaceResize)
     document.body.style.userSelect = 'none'
@@ -1763,7 +1768,7 @@ export default defineComponent({ components: { CreateRoomForm } })
     position: relative;
 
     &--sidebar-collapsed {
-        margin-left: 10px;
+        margin-inline-start: 10px;
     }
 }
 
@@ -1801,12 +1806,12 @@ export default defineComponent({ components: { CreateRoomForm } })
     overflow: visible;
     display: flex;
     background: $bg-card;
-    border-left: 1px solid $border-color;
+    border-inline-start: 1px solid $border-color;
 }
 
 .group-workspace-resize-handle {
     position: absolute;
-    left: -7px;
+    inset-inline-start: -7px;
     top: 0;
     bottom: 0;
     width: 14px;
@@ -1816,7 +1821,7 @@ export default defineComponent({ components: { CreateRoomForm } })
     &::after {
         content: '';
         position: absolute;
-        left: 6px;
+        inset-inline-start: 6px;
         top: 0;
         bottom: 0;
         width: 1px;
@@ -1828,7 +1833,7 @@ export default defineComponent({ components: { CreateRoomForm } })
     &::before {
         content: '';
         position: absolute;
-        left: 1px;
+        inset-inline-start: 1px;
         top: 50%;
         width: 12px;
         height: 38px;
@@ -1889,7 +1894,7 @@ export default defineComponent({ components: { CreateRoomForm } })
     .group-workspace-panel-close {
         width: 30px;
         padding: 0;
-        margin-left: auto;
+        margin-inline-start: auto;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -1952,7 +1957,7 @@ export default defineComponent({ components: { CreateRoomForm } })
         z-index: 70;
         width: 100% !important;
         min-width: 0;
-        border-left: none;
+        border-inline-start: none;
     }
 
     .group-workspace-resize-handle {
@@ -2006,7 +2011,7 @@ export default defineComponent({ components: { CreateRoomForm } })
     }
 
     .avatar-stack-item {
-        margin-left: -10px;
+        margin-inline-start: -10px;
     }
 
     .header-left {
@@ -2099,7 +2104,7 @@ export default defineComponent({ components: { CreateRoomForm } })
     height: 28px;
     border-radius: 50%;
     border: 2px solid $bg-card;
-    margin-left: -12px;
+    margin-inline-start: -12px;
     overflow: hidden;
     display: flex;
     align-items: center;
@@ -2108,7 +2113,7 @@ export default defineComponent({ components: { CreateRoomForm } })
     transition: transform $transition-fast;
 
     &:first-child {
-        margin-left: 0;
+        margin-inline-start: 0;
     }
 
     &:hover {
@@ -2122,7 +2127,7 @@ export default defineComponent({ components: { CreateRoomForm } })
     height: 28px;
     border-radius: 50%;
     border: 2px solid $bg-card;
-    margin-left: -12px;
+    margin-inline-start: -12px;
     display: flex;
     align-items: center;
     justify-content: center;

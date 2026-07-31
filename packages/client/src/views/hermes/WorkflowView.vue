@@ -351,7 +351,7 @@ const workflowChatPanelSessionId = ref<string | null>(null)
 const workflowChatPanelExecutionId = ref<string | null>(null)
 const workflowApprovalSubmitting = ref(false)
 const workflowChatPanelWidth = ref(loadWorkflowChatPanelWidth())
-const workflowChatResizeStart = ref<{ x: number; width: number } | null>(null)
+const workflowChatResizeStart = ref<{ x: number; width: number; deltaSign: 1 | -1 } | null>(null)
 const skillOptionsByKey = ref<Record<string, WorkflowSelectOption[]>>({})
 const skillOptionsLoadingByKey = ref<Record<string, boolean>>({})
 const skillOptionRequests = new Map<string, Promise<void>>()
@@ -868,7 +868,7 @@ function handleWorkflowChatPanelViewportResize() {
 function handleWorkflowChatResizeMove(event: PointerEvent) {
   const start = workflowChatResizeStart.value
   if (!start) return
-  const delta = event.clientX - start.x
+  const delta = (event.clientX - start.x) * start.deltaSign
   workflowChatPanelWidth.value = clampWorkflowChatPanelWidth(start.width + delta)
 }
 
@@ -890,6 +890,7 @@ function startWorkflowChatResize(event: PointerEvent) {
   workflowChatResizeStart.value = {
     x: event.clientX,
     width: workflowChatPanelWidth.value,
+    deltaSign: document.documentElement.dir === 'rtl' ? -1 : 1,
   }
   window.addEventListener('pointermove', handleWorkflowChatResizeMove)
   window.addEventListener('pointerup', stopWorkflowChatResize)
@@ -3674,7 +3675,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
 
   &--sidebar-collapsed {
-    margin-left: 10px;
+    margin-inline-start: 10px;
   }
 }
 
@@ -3697,8 +3698,8 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
 
   &.collapsed {
     width: 0;
-    margin-left: 0;
-    margin-right: 0;
+    margin-inline-start: 0;
+    margin-inline-end: 0;
     border: none;
     box-shadow: none;
     opacity: 0;
@@ -3765,7 +3766,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   align-items: center;
   gap: 10px;
   padding: 10px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   transition:
     background-color $transition-fast,
@@ -3924,7 +3925,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
 .workflow-evidence-row.selected { border-color: rgba(var(--accent-primary-rgb), 0.24); background: rgba(var(--accent-primary-rgb), 0.08); }
 .workflow-evidence-topline { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .workflow-evidence-row-title { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--text-primary); font-size: 12px; line-height: 17px; }
-.workflow-evidence-status { flex: 0 0 auto; max-width: 43%; color: var(--text-secondary); font-size: 10px; text-align: right; }
+.workflow-evidence-status { flex: 0 0 auto; max-width: 43%; color: var(--text-secondary); font-size: 10px; text-align: end; }
 .workflow-evidence-description { margin: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--text-secondary); line-height: 16px; }
 .workflow-evidence-detail-trigger { align-self: flex-end; min-height: 32px; padding: 0; border: 0; background: transparent; color: var(--accent-primary); font-size: 11px; cursor: pointer; }
 .workflow-evidence-detail { max-height: min(70vh, 680px); overflow-y: auto; color: var(--text-secondary); }
@@ -3937,7 +3938,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
 .workflow-run-evidence-details-list { max-height: min(70vh, 680px); overflow-y: auto; display: flex; flex-direction: column; gap: 18px; color: var(--text-secondary); }
 .workflow-run-evidence-details-list section { display: flex; flex-direction: column; gap: 8px; }
 .workflow-run-evidence-details-list h3 { margin: 0; color: var(--text-primary); font-size: 13px; }
-.workflow-run-evidence-details-list ol, .workflow-run-evidence-details-list ul { margin: 0; padding-left: 20px; }
+.workflow-run-evidence-details-list ol, .workflow-run-evidence-details-list ul { margin: 0; padding-inline-start: 20px; }
 .workflow-run-evidence-details-list li { margin: 5px 0; }
 .workflow-run-evidence-details-list li span { display: block; color: var(--text-muted); font-size: 11px; }
 .workflow-run-evidence-details-list p { margin: 0; color: var(--text-muted); }
@@ -3978,7 +3979,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
 .workflow-edge-editor-form {
   max-height: min(720px, calc(100vh - 180px));
   overflow-y: auto;
-  padding-right: 6px;
+  padding-inline-end: 6px;
 }
 
 .workflow-edge-connection-summary {
@@ -4094,7 +4095,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   flex: 0 1 auto;
   min-width: 0;
   max-width: min(520px, 52vw);
-  margin-left: 10px;
+  margin-inline-start: 10px;
   display: inline-flex;
   align-items: center;
   min-height: 20px;
@@ -4188,7 +4189,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   width: 280px;
   flex: 0 0 280px;
   min-height: 0;
-  border-left: 1px solid $border-color;
+  border-inline-start: 1px solid $border-color;
   background: $bg-card;
   overflow: hidden;
   overscroll-behavior-x: contain;
@@ -4271,7 +4272,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   min-width: 320px;
   max-width: 100%;
   min-height: 0;
-  border-right: 1px solid $border-color;
+  border-inline-end: 1px solid $border-color;
   background: $bg-card;
   display: flex;
   overflow: visible;
@@ -4279,7 +4280,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
 
 .workflow-chat-resize-handle {
   position: absolute;
-  right: -7px;
+  inset-inline-end: -7px;
   top: 0;
   bottom: 0;
   width: 14px;
@@ -4289,7 +4290,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   &::after {
     content: "";
     position: absolute;
-    right: 6px;
+    inset-inline-end: 6px;
     top: 0;
     bottom: 0;
     width: 1px;
@@ -4303,7 +4304,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   &::before {
     content: "";
     position: absolute;
-    right: 1px;
+    inset-inline-end: 1px;
     top: 50%;
     width: 12px;
     height: 38px;
@@ -4479,7 +4480,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   transition: border-color $transition-fast, background-color $transition-fast;
 
@@ -4753,15 +4754,19 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   .workflow-runs-panel {
     position: absolute;
     top: 0;
-    right: 0;
+    inset-inline-end: 0;
     bottom: 0;
     z-index: 70;
     width: min(340px, 88vw);
     flex: none;
     min-height: 0;
-    border-left: 1px solid $border-color;
+    border-inline-start: 1px solid $border-color;
     box-shadow: -8px 0 24px rgba(0, 0, 0, 0.16);
     display: flex;
+
+    &:dir(rtl) {
+      box-shadow: 8px 0 24px rgba(0, 0, 0, 0.16);
+    }
   }
 
   .workflow-chat-panel {
@@ -4773,7 +4778,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
     z-index: 80;
     width: 100% !important;
     min-width: 0;
-    border-right: none;
+    border-inline-end: none;
     box-shadow: none;
   }
 
