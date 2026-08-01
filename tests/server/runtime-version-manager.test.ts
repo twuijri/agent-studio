@@ -108,4 +108,5 @@ describe('runtime version manager storage migration', () => {
     expect(() => activateDownloadedWebUiVersion('0.6.30'))
       .toThrow('Downloaded Web UI version not found')
   })
+
 })

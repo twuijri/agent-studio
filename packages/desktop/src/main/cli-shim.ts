@@ -90,13 +90,13 @@ export function createShimContent(
   executablePath: string,
   platform: NodeJS.Platform = process.platform,
   archName: string = process.arch,
-  runtimeVersion = '0.19.0',
+  runtimeVersion = '0.19.1',
   nodePath = process.execPath,
   webUiScriptPath = resolve(process.cwd(), 'bin', 'hermes-web-ui.mjs'),
 ): string {
   if (platform === 'win32') {
     const runtimePlatform = windowsRuntimePlatformKey(archName)
-    const cliForwarder = `const cp=require('node:child_process');const args=process.argv.slice(1);if(args[0]&&args[0].toLowerCase()==='cli')args.shift();const r=cp.spawnSync(process.env.PYTHON,['-m','hermes_cli.main',...args],{stdio:'inherit'});if(r.error){console.error(r.error.message);process.exit(127)}process.exit(r.status===null?(r.signal?1:0):r.status)`
+    const cliForwarder = `const cp=require('node:child_process');const args=process.argv.slice(1);if(args[0]&&args[0].toLowerCase()==='cli')args.shift();const r=cp.spawnSync(process.env.PYTHON,['-m','hermes_cli.main',...args],{stdio:'inherit',windowsHide:true});if(r.error){console.error(r.error.message);process.exit(127)}process.exit(r.status===null?(r.signal?1:0):r.status)`
     const webForwarder = `const cp=require('node:child_process');const args=process.argv.slice(1);if(args[0]&&args[0].toLowerCase()==='web')args.shift();const r=cp.spawnSync(process.env.NODE,[process.env.WEBUI_SCRIPT,...args],{stdio:'inherit'});if(r.error){console.error(r.error.message);process.exit(127)}process.exit(r.status===null?(r.signal?1:0):r.status)`
     return [
       '@echo off',
@@ -122,7 +122,19 @@ export function createShimContent(
       `  for /f "usebackq delims=" %%I in (\`powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p = Join-Path $env:WEBUI_HOME 'desktop-runtime\\active-version.json'; try { $j = Get-Content -LiteralPath $p -Raw | ConvertFrom-Json; if ($j.platform -eq '${runtimePlatform}' -and $j.runtimeDirectory -and (Test-Path -LiteralPath $j.runtimeDirectory)) { [Console]::Out.Write($j.runtimeDirectory) } } catch {}" 2^>nul\`) do set "RUNTIME=%%I"`,
       ')',
       `if "%RUNTIME%"=="" set "RUNTIME=%WEBUI_HOME%\\desktop-runtime\\hermes\\${runtimeVersion}\\${runtimePlatform}"`,
-      'set "PYTHON=%RUNTIME%\\python\\python.exe"',
+      'set "VIRTUAL_ENV=%RUNTIME%\\python\\venv"',
+      'set "PYTHON=%VIRTUAL_ENV%\\Scripts\\python.exe"',
+      'if not exist "%PYTHON%" set "PYTHON=%VIRTUAL_ENV%\\python.exe"',
+      'if not exist "%PYTHON%" set "VIRTUAL_ENV=%RUNTIME%\\python"',
+      'if not exist "%PYTHON%" set "PYTHON=%VIRTUAL_ENV%\\python.exe"',
+      'set "UV_PROJECT_ENVIRONMENT=%VIRTUAL_ENV%"',
+      'set "UV_PYTHON=%PYTHON%"',
+      'set "HERMES_AGENT_ROOT=%RUNTIME%\\python"',
+      'set "HERMES_AGENT_NODE=%RUNTIME%\\node\\node.exe"',
+      'set "HERMES_AGENT_NODE_ROOT=%RUNTIME%\\node"',
+      'set "AGENT_BROWSER_HOME=%RUNTIME%\\python\\agent-browser"',
+      'set "PLAYWRIGHT_BROWSERS_PATH=%RUNTIME%\\python\\ms-playwright"',
+      'set "PATH=%RUNTIME%\\python\\venv\\Scripts;%RUNTIME%\\python\\node;%RUNTIME%\\node;%RUNTIME%\\git\\cmd;%PATH%"',
       'exit /b 0',
       ':runCli',
       'call :resolveRuntime',
