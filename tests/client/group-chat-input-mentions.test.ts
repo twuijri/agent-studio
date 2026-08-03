@@ -85,6 +85,30 @@ describe('GroupChatInput mentions', () => {
     expect(wrapper.find('.mention-dropdown').text()).toContain('@Worker')
   })
 
+  it('inserts an agent mention at the current cursor from the avatar action', async () => {
+    const pinia = createTestingPinia({ stubActions: false, createSpy: vi.fn })
+    const settingsStore = useSettingsStore()
+    settingsStore.display = {}
+    const store = useGroupChatStore()
+    store.emitTyping = vi.fn()
+    const wrapper = mount(GroupChatInput, {
+      attachTo: document.body,
+      global: { plugins: [pinia], stubs: { Transition: false } },
+    })
+    const textarea = wrapper.get('textarea')
+
+    await textarea.setValue('老板喊你')
+    ;(textarea.element as HTMLTextAreaElement).setSelectionRange(5, 5)
+    ;(wrapper.vm as any).insertMention('codex')
+    await nextTick()
+
+    expect((textarea.element as HTMLTextAreaElement).value).toBe('老板喊你 @codex ')
+    expect(document.activeElement).toBe(textarea.element)
+    expect(store.emitTyping).toHaveBeenCalled()
+
+    wrapper.unmount()
+  })
+
   it('shows the active room reference outside the input and can cancel it', async () => {
     const pinia = createTestingPinia({ stubActions: false, createSpy: vi.fn })
     const settingsStore = useSettingsStore()
@@ -160,5 +184,23 @@ describe('GroupChatInput mentions', () => {
     await nextTick()
 
     expect((wrapper.get('textarea').element as HTMLTextAreaElement).style.height).not.toBe('168px')
+  })
+
+  it('keeps the draft intact when room configuration blocks sending', async () => {
+    const pinia = createTestingPinia({ stubActions: false, createSpy: vi.fn })
+    const settingsStore = useSettingsStore()
+    settingsStore.display = {}
+    const wrapper = mount(GroupChatInput, {
+      props: { sendBlocked: true },
+      global: { plugins: [pinia], stubs: { Transition: false } },
+    })
+    const textarea = wrapper.get('textarea')
+
+    await textarea.setValue('@Worker keep this draft')
+    await textarea.trigger('keydown', { key: 'Enter' })
+
+    expect(wrapper.emitted('send-blocked')).toHaveLength(1)
+    expect(wrapper.emitted('send')).toBeUndefined()
+    expect((textarea.element as HTMLTextAreaElement).value).toBe('@Worker keep this draft')
   })
 })

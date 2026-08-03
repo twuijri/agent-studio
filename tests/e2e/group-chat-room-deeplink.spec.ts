@@ -48,9 +48,15 @@ const agentsByRoom: Record<string, unknown[]> = {
       id: 'agent-row-1',
       roomId: 'room-alpha',
       agentId: 'agent-1',
+      agent: 'hermes',
       profile: 'default',
+      provider: 'test-provider',
+      model: 'test-model',
+      apiMode: '',
+      reasoningEffort: '',
       name: 'Worker',
       description: 'Group agent',
+      avatar: '',
       invited: 1,
     },
   ],
@@ -205,6 +211,9 @@ async function installDesktopBridge(page: Page, platform: DesktopPlatform) {
 
 async function setup(page: Page, path: string, platform?: DesktopPlatform) {
   if (platform) await installDesktopBridge(page, platform)
+  await page.addInitScript(() => {
+    window.localStorage.setItem('hermes.groupChat.refactorNotice.v1.acknowledged', '1')
+  })
   await authenticate(page)
   await mockGroupChatSocket(page)
   const api = await mockGroupChatApi(page)
@@ -306,19 +315,39 @@ test.describe('group chat room deep links', () => {
   })
 
   for (const platform of ['darwin', 'win32'] as const) {
-    test(`opens the Agent list from the ${platform} desktop drag header`, async ({ page }) => {
+    test(`opens Agent settings from the ${platform} avatar rail`, async ({ page }) => {
       await setup(page, '/#/hermes/group-chat/room/room-alpha', platform)
 
-      const trigger = page.getByRole('button', { name: 'Agents (1)' })
+      const trigger = page.getByRole('button', { name: 'Worker' })
       await expect(trigger).toBeVisible()
       await expect(trigger).toHaveCSS('-webkit-app-region', 'no-drag')
       await trigger.click()
 
-      const popover = page.locator('.n-popover .agent-popover')
-      await expect(popover).toBeVisible()
-      await expect(popover.locator('.agent-popover-name', { hasText: 'Worker' })).toBeVisible()
+      const modal = page.locator('.modal').filter({ hasText: 'Edit Worker' })
+      await expect(modal).toBeVisible()
+      await expect(modal.getByText('Avatar', { exact: true })).toBeVisible()
+      await expect(modal.getByText('Agent Name', { exact: true })).toBeVisible()
     })
   }
+
+  test('member count collapses the default-open scrollable avatar rail', async ({ page }) => {
+    await setup(page, '/#/hermes/group-chat/room/room-alpha')
+
+    const rail = page.locator('.agent-avatar-rail')
+    const memberToggle = page.locator('.member-count-toggle')
+    await expect(rail).toBeVisible()
+    await expect(memberToggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(rail.locator('.agent-avatar-rail-trigger')).toHaveCSS('overflow-y', 'auto')
+
+    await memberToggle.click()
+    await expect(rail).toHaveCount(0)
+    await expect(memberToggle).toHaveAttribute('aria-expanded', 'false')
+
+    await memberToggle.click()
+    await expect(rail).toBeVisible()
+    await page.getByRole('button', { name: 'Your Name' }).click()
+    await expect(page.locator('.n-modal').filter({ hasText: 'Your Name' })).toBeVisible()
+  })
 
   test('room settings rotate invite codes only after the update API succeeds', async ({ page }) => {
     const api = await setup(page, '/#/hermes/group-chat/room/room-alpha')
@@ -326,10 +355,10 @@ test.describe('group chat room deep links', () => {
     const settingsButton = page.locator('.chat-header .header-info .compression-settings-button')
     await settingsButton.click()
 
-    const modal = page.locator('.room-settings-modal')
-    await expect(modal.getByRole('heading', { name: 'Room Settings' })).toBeVisible()
-    const inviteInput = modal.getByPlaceholder('Enter a new invite code')
-    const updateButton = modal.getByRole('button', { name: 'Update' })
+    const drawer = page.locator('.n-drawer').filter({ has: page.locator('.room-settings-drawer') })
+    await expect(drawer.getByText('Room Settings', { exact: true })).toBeVisible()
+    const inviteInput = drawer.getByPlaceholder('Enter a new invite code')
+    const updateButton = drawer.getByRole('button', { name: 'Update' }).nth(1)
 
     await expect(inviteInput).toHaveValue('ALPHA1')
     await expect(updateButton).toBeDisabled()
@@ -350,9 +379,10 @@ test.describe('group chat room deep links', () => {
     await updateButton.click()
     await expect((await failureResponse).status()).toBe(409)
 
-    await modal.getByRole('button', { name: 'Cancel' }).click()
+    await page.keyboard.press('Escape')
+    await expect(drawer).toBeHidden()
     await settingsButton.click()
-    await expect(modal.getByPlaceholder('Enter a new invite code')).toHaveValue('NEW456')
+    await expect(drawer.getByPlaceholder('Enter a new invite code')).toHaveValue('NEW456')
   })
 
   test('read-only room members cannot open room settings', async ({ page }) => {

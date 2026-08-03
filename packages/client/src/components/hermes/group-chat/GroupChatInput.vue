@@ -11,7 +11,15 @@ import type { Attachment } from '@/stores/hermes/chat'
 import { clampChatInputHeight, isMobileChatInputViewport } from '@/utils/chat-input-height'
 
 const { t } = useI18n()
-const emit = defineEmits<{ send: [content: string, attachments?: Attachment[]] }>()
+const props = withDefaults(defineProps<{
+    sendBlocked?: boolean
+}>(), {
+    sendBlocked: false,
+})
+const emit = defineEmits<{
+    send: [content: string, attachments?: Attachment[]]
+    'send-blocked': []
+}>()
 const store = useGroupChatStore()
 const settingsStore = useSettingsStore()
 const { toolTraceVisible, toggleToolTraceVisible } = useToolTraceVisibility()
@@ -286,6 +294,34 @@ function selectMention(name: string) {
     })
 }
 
+function insertMention(name: string) {
+    const mentionName = String(name || '').trim()
+    if (!mentionName) return
+
+    const el = textareaRef.value
+    const selectionStart = el?.selectionStart ?? inputText.value.length
+    const selectionEnd = el?.selectionEnd ?? selectionStart
+    const before = inputText.value.slice(0, selectionStart)
+    const after = inputText.value.slice(selectionEnd)
+    const leadingSpace = before && !/\s$/.test(before) ? ' ' : ''
+    const trailingSpace = after && /^\s/.test(after) ? '' : ' '
+    const inserted = `${leadingSpace}@${mentionName}${trailingSpace}`
+    inputText.value = `${before}${inserted}${after}`
+    mentionActive.value = false
+    mentionStartIndex.value = -1
+    mentionQuery.value = ''
+    store.emitTyping()
+
+    nextTick(() => {
+        if (!el) return
+        const existingWhitespaceOffset = !trailingSpace && /^[ \t]/.test(after) ? 1 : 0
+        const nextPosition = before.length + inserted.length + existingWhitespaceOffset
+        el.setSelectionRange(nextPosition, nextPosition)
+        el.focus()
+        autoSizeTextarea(el)
+    })
+}
+
 // ─── Event Handlers ──────────────────────────────────────
 
 function handleKeydown(e: KeyboardEvent) {
@@ -324,6 +360,10 @@ function handleKeydown(e: KeyboardEvent) {
 function handleSend() {
     const content = inputText.value.trim()
     if (!content && attachments.value.length === 0) return
+    if (props.sendBlocked) {
+        emit('send-blocked')
+        return
+    }
 
     emit('send', content, attachments.value.length > 0 ? attachments.value : undefined)
     inputText.value = ''
@@ -445,7 +485,7 @@ function handleDrop(e: DragEvent) {
     addFiles(Array.from(e.dataTransfer?.files || []))
 }
 
-defineExpose({ addFiles })
+defineExpose({ addFiles, insertMention })
 
 function removeAttachment(id: string) {
     const idx = attachments.value.findIndex(a => a.id === id)
