@@ -552,9 +552,25 @@ function isExpiredInteractionError(value: unknown): boolean {
 }
 
 export const GROUP_CHAT_MESSAGE_WINDOW = 500
+const GROUP_CHAT_CONTEXT_MESSAGE_WINDOW = GROUP_CHAT_MESSAGE_WINDOW
 const GROUP_CHAT_TIMESTAMP_BOUNDARY_OVERFLOW = 100
 const GROUP_CHAT_SUMMARY_SCAN_LIMIT = 10_000
 const GROUP_CHAT_TOKEN_ACCOUNTING_VERSION = 1
+
+function storedGroupAgentRunIdentity(row: any): {
+    ownerId: string
+    runId?: string
+    idPrefix?: string
+} | null {
+    const role = String(row?.role || '')
+    if (role !== 'assistant' && role !== 'tool') return null
+    const ownerId = String(row?.senderAgentRecordId || row?.senderId || '').trim()
+    if (!ownerId) return null
+    const runId = String(row?.run_id || '').trim()
+    if (runId) return { ownerId, runId }
+    const match = String(row?.id || '').match(/^(.+)_part_\d+(?:_tool(?:call|result)_.+)?$/)
+    return match?.[1] ? { ownerId, idPrefix: `${match[1]}_part_` } : null
+}
 
 class ChatStorage {
     private readonly trustedAgentMessageMetadata = new Map<string, { mentionDepth: number; handoffChainId: string; continuationAttemptId: string }>()
@@ -691,6 +707,7 @@ class ChatStorage {
             // Tables are now created centrally in initAllHermesTables()
             // Only create indexes here
             try { db.exec('CREATE INDEX IF NOT EXISTS idx_gc_messages_room ON gc_messages(roomId, timestamp)') } catch { /* ignore */ }
+            try { db.exec('CREATE INDEX IF NOT EXISTS idx_gc_messages_history_page ON gc_messages(roomId, timestamp DESC, id DESC)') } catch { /* ignore */ }
             try { db.exec('CREATE INDEX IF NOT EXISTS idx_gc_room_agents_room ON gc_room_agents(roomId)') } catch { /* ignore */ }
             try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_gc_room_members_unique ON gc_room_members(roomId, userId)') } catch { /* ignore */ }
             try { db.exec('CREATE INDEX IF NOT EXISTS idx_gc_pending_session_deletes_profile ON gc_pending_session_deletes(profile_name, status, next_attempt_at, created_at)') } catch { /* ignore */ }
@@ -1716,7 +1733,7 @@ class ChatStorage {
         options: { excludeWorkspaceDiff?: boolean; throughMessageId?: string } = {},
     ): any[] {
         const db = this.db()
-        const boundedLimit = Math.min(GROUP_CHAT_MESSAGE_WINDOW, Math.max(0, Math.floor(limit)))
+        const boundedLimit = Math.max(0, Math.floor(limit))
         if (!db || boundedLimit === 0) return []
 
         const where = ['roomId = ?']
@@ -1765,8 +1782,94 @@ class ChatStorage {
         ).map(buildOutboundGroupMessage)
     }
 
+    getHistoryPageForUI(
+        roomId: string,
+        limit = 150,
+        beforeMessageId?: string,
+    ): { messages: ChatMessage[]; hasMore: boolean; cursorFound: boolean } {
+        const db = this.db()
+        const safeLimit = Math.min(150, Math.max(1, Math.floor(Number(limit) || 150)))
+        if (!db) return { messages: [], hasMore: false, cursorFound: !beforeMessageId }
+
+        const params: Array<string | number> = [roomId]
+        let cursorFound = true
+        let cursorPredicate = ''
+        if (beforeMessageId) {
+            const cursor = db.prepare(
+                'SELECT timestamp, id FROM gc_messages WHERE roomId = ? AND id = ?',
+            ).get(roomId, beforeMessageId) as { timestamp: number; id: string } | undefined
+            cursorFound = Boolean(cursor)
+            if (!cursor) return { messages: [], hasMore: false, cursorFound: false }
+            cursorPredicate = ' AND (timestamp < ? OR (timestamp = ? AND id < ?))'
+            params.push(cursor.timestamp, cursor.timestamp, cursor.id)
+        }
+
+        let pageRowsDescending = db.prepare(
+            `SELECT ${MESSAGE_SELECT_COLUMNS} FROM gc_messages
+             WHERE roomId = ?${cursorPredicate}
+             ORDER BY timestamp DESC, id DESC
+             LIMIT ?`,
+        ).all(...params, safeLimit) as any[]
+
+        const boundary = pageRowsDescending.at(-1)
+        const runIdentity = storedGroupAgentRunIdentity(boundary)
+        if (boundary && runIdentity) {
+            const runPredicate = runIdentity.runId
+                ? 'run_id = ?'
+                : "(COALESCE(run_id, '') = '' AND INSTR(id, ?) = 1)"
+            const oldestRunRow = db.prepare(
+                `SELECT timestamp, id FROM gc_messages
+                 WHERE roomId = ?${cursorPredicate}
+                   AND role IN ('assistant', 'tool')
+                   AND COALESCE(NULLIF(senderAgentRecordId, ''), senderId) = ?
+                   AND ${runPredicate}
+                 ORDER BY timestamp ASC, id ASC
+                 LIMIT 1`,
+            ).get(
+                ...params,
+                runIdentity.ownerId,
+                runIdentity.runId || runIdentity.idPrefix!,
+            ) as { timestamp: number; id: string } | undefined
+
+            if (
+                oldestRunRow
+                && (
+                    oldestRunRow.timestamp !== boundary.timestamp
+                    || oldestRunRow.id !== boundary.id
+                )
+            ) {
+                pageRowsDescending = db.prepare(
+                    `SELECT ${MESSAGE_SELECT_COLUMNS} FROM gc_messages
+                     WHERE roomId = ?${cursorPredicate}
+                       AND (timestamp > ? OR (timestamp = ? AND id >= ?))
+                     ORDER BY timestamp DESC, id DESC`,
+                ).all(
+                    ...params,
+                    oldestRunRow.timestamp,
+                    oldestRunRow.timestamp,
+                    oldestRunRow.id,
+                ) as any[]
+            }
+        }
+
+        const oldestPageRow = pageRowsDescending.at(-1)
+        const hasMore = Boolean(oldestPageRow && db.prepare(
+            `SELECT 1 FROM gc_messages
+             WHERE roomId = ?
+               AND (timestamp < ? OR (timestamp = ? AND id < ?))
+             LIMIT 1`,
+        ).get(roomId, oldestPageRow.timestamp, oldestPageRow.timestamp, oldestPageRow.id))
+        const pageRows = pageRowsDescending.reverse()
+        const agentCache = new Map<string, RoomAgent | null>()
+        const roomCache = new Map<string, RoomInfo | undefined>()
+        const messages = this.compactMessageAgentMetadata(
+            pageRows.map(row => this.mapStoredMessageRow(row, agentCache, roomCache)),
+        ).map(buildOutboundGroupMessage)
+        return { messages, hasMore, cursorFound }
+    }
+
     getMessagesForContext(roomId: string, cutoff?: GroupMessageCursorCutoff): ChatMessage[] {
-        const rows = this.getRecentMessageRows(roomId, GROUP_CHAT_MESSAGE_WINDOW, {
+        const rows = this.getRecentMessageRows(roomId, GROUP_CHAT_CONTEXT_MESSAGE_WINDOW, {
             excludeWorkspaceDiff: true,
             throughMessageId: cutoff?.throughMessageId,
         })
@@ -2037,7 +2140,7 @@ class ChatStorage {
              WHERE roomId = ? AND COALESCE(tool_name, '') <> 'workspace_diff'
              ORDER BY timestamp DESC, id DESC
              LIMIT 1 OFFSET ?`,
-        ).get(roomId, GROUP_CHAT_MESSAGE_WINDOW - 1) as { timestamp: number } | undefined
+        ).get(roomId, GROUP_CHAT_CONTEXT_MESSAGE_WINDOW - 1) as { timestamp: number } | undefined
         const rows = db.prepare(
             `SELECT id FROM gc_messages
              WHERE roomId = ? AND COALESCE(tool_name, '') <> 'workspace_diff'${boundary ? ' AND timestamp >= ?' : ''}
@@ -2046,7 +2149,7 @@ class ChatStorage {
         ).all(
             roomId,
             ...(boundary ? [boundary.timestamp] : []),
-            GROUP_CHAT_MESSAGE_WINDOW + GROUP_CHAT_TIMESTAMP_BOUNDARY_OVERFLOW,
+            GROUP_CHAT_CONTEXT_MESSAGE_WINDOW + GROUP_CHAT_TIMESTAMP_BOUNDARY_OVERFLOW,
         ) as Array<{ id: string }>
         return rows.map(row => String(row.id))
     }
@@ -4094,6 +4197,7 @@ export class GroupChatServer {
             GROUP_CHAT_MESSAGE_WINDOW,
             this.storage.getMessageCount?.(roomId) ?? messages.length,
         )
+        const historyTruncated = (this.storage.getMessageCount?.(roomId) ?? messages.length) > GROUP_CHAT_MESSAGE_WINDOW
         const agents = this.getRoomAgentViews(
             roomId,
             this.canSocketManageRoom(socket, roomId),
@@ -4111,6 +4215,7 @@ export class GroupChatServer {
             offset: 0,
             limit: messages.length,
             hasMore: messages.length < total,
+            historyTruncated,
             typingUsers: this.getTypingUsers(roomId),
             contextStatuses: this.getContextStatuses(roomId),
             executionQueue: this.executionQueueSnapshot(roomId),
@@ -4138,16 +4243,15 @@ export class GroupChatServer {
         const offset = Math.max(0, Number.isFinite(data?.offset) ? Math.floor(Number(data?.offset)) : 0)
         const limit = Math.min(150, Math.max(1, Number.isFinite(data?.limit) ? Math.floor(Number(data?.limit)) : 150))
         const messages = this.storage.getRecentMessagesForUI(roomId, limit, offset)
-        const total = Math.min(
-            GROUP_CHAT_MESSAGE_WINDOW,
-            this.storage.getMessageCount?.(roomId) ?? messages.length,
-        )
+        const storedTotal = this.storage.getMessageCount?.(roomId) ?? messages.length
+        const total = Math.min(GROUP_CHAT_MESSAGE_WINDOW, storedTotal)
         ack?.({
             messages,
             total,
             offset,
             limit,
             hasMore: offset + messages.length < total,
+            historyTruncated: storedTotal > GROUP_CHAT_MESSAGE_WINDOW,
         })
     }
 
