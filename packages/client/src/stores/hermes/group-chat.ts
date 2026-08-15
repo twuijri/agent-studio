@@ -19,6 +19,7 @@ import {
     type RoomSummaryState,
     type ChatMessage,
     type GroupChatMention,
+    type GroupExecutionQueueItem,
     type GroupWorkspaceDiffPayload,
     type MemberInfo,
     createRoom,
@@ -90,6 +91,7 @@ const GROUP_CHAT_JOIN_TIMEOUT_MS = 30000
 const GROUP_CHAT_TYPING_HEARTBEAT_MS = 2500
 const GROUP_CHAT_TYPING_IDLE_MS = 4000
 const GROUP_CHAT_REMOTE_TYPING_TTL_MS = 5000
+const GROUP_CHAT_EXECUTION_QUEUE_CAPABILITY_PREFIX = 'gc_execution_queue_capability:'
 
 function normalizeLocalFilePath(path: string): string {
     return /^[a-zA-Z]:\\/.test(path) ? path.replace(/\\/g, '/') : path
@@ -97,6 +99,17 @@ function normalizeLocalFilePath(path: string): string {
 
 function hasText(value?: string | null): boolean {
     return !!value?.trim()
+}
+
+function executionQueueCapability(roomId: string): string {
+    const key = `${GROUP_CHAT_EXECUTION_QUEUE_CAPABILITY_PREFIX}${roomId}`
+    const stored = localStorage.getItem(key)
+    if (stored && /^[a-f0-9]{64}$/i.test(stored)) return stored.toLowerCase()
+    const bytes = new Uint8Array(32)
+    globalThis.crypto.getRandomValues(bytes)
+    const capability = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+    localStorage.setItem(key, capability)
+    return capability
 }
 
 function authenticatedGroupUserId(authUserId: number): string {
@@ -184,6 +197,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
     const contextStatuses = ref<Map<string, { agentName: string; status: string }>>(new Map())
     const roomSummaryStates = ref<Map<string, RoomSummaryState>>(new Map())
     const handoffChains = ref<Map<string, RoomAgentHandoffChain>>(new Map())
+    const executionQueue = ref<GroupExecutionQueueItem[]>([])
     const autoPlaySpeechEnabled = ref(false)
     const pendingApprovals = ref<Map<string, GroupPendingApproval>>(new Map())
     const pendingClarifies = ref<Map<string, GroupPendingClarify>>(new Map())
@@ -602,6 +616,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
         } else {
             contextStatuses.value.clear()
         }
+        executionQueue.value = Array.isArray(res.executionQueue) ? res.executionQueue : []
         if (typeof res.roomId === 'string' && res.roomId) {
             replaceRoomPendingInteractions(res.roomId, res.pendingApprovals, res.pendingClarifies)
         }
@@ -974,6 +989,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
             roomName.value = ''
             clearRemoteTypingState()
             contextStatuses.value.clear()
+            executionQueue.value = []
             pendingApprovals.value.clear()
             pendingClarifies.value.clear()
         })
@@ -1019,6 +1035,41 @@ export const useGroupChatStore = defineStore('groupChat', () => {
                     contextStatuses.value = new Map(contextStatuses.value)
                 }
             }
+        })
+
+        socket.on('execution_queue_updated', (data: { roomId: string; items?: GroupExecutionQueueItem[] }) => {
+            if (data.roomId !== currentRoomId.value) return
+            executionQueue.value = Array.isArray(data.items) ? data.items : []
+        })
+
+        socket.on('message_retracted', (data: {
+            roomId: string
+            messageId: string
+            messageCount?: number
+            totalTokens?: number
+            lastActiveAt?: number
+        }) => {
+            if (!data.roomId || !data.messageId) return
+            executionQueue.value = executionQueue.value.filter(item => item.messageId !== data.messageId)
+            const room = rooms.value.find(item => item.id === data.roomId)
+            if (room) {
+                if (typeof data.totalTokens === 'number') room.totalTokens = data.totalTokens
+                if (typeof data.lastActiveAt === 'number') room.lastActiveAt = data.lastActiveAt
+                sortRoomsByActivity()
+            }
+            roomSummaryStates.value.delete(data.roomId)
+            roomSummaryStates.value = new Map(roomSummaryStates.value)
+            const reference = messageReferences.value.get(data.roomId)
+            if (reference?.id === data.messageId) clearMessageReference(data.roomId)
+            if (data.roomId !== currentRoomId.value) return
+            flushPendingStreamDeltas(data.roomId, data.messageId)
+            const removed = messages.value.some(message => message.id === data.messageId)
+            messages.value = messages.value.filter(message => message.id !== data.messageId)
+            if (removed) loadedMessageCount.value = Math.max(0, loadedMessageCount.value - 1)
+            totalMessages.value = typeof data.messageCount === 'number'
+                ? Math.max(0, data.messageCount)
+                : Math.max(0, totalMessages.value - (removed ? 1 : 0))
+            hasMoreBefore.value = loadedMessageCount.value < totalMessages.value
         })
 
         socket.on('room_summary_updated', (summary: RoomSummaryState) => {
@@ -1074,10 +1125,15 @@ export const useGroupChatStore = defineStore('groupChat', () => {
             agentHandoffEnabled?: number
             agentHandoffMaxDepth?: number | null
             agentHandoffUnlimited?: number
+            lastActiveAt?: number
         }) => {
             const room = rooms.value.find(r => r.id === data.roomId)
             if (!room) return
             if (typeof data.totalTokens === 'number') room.totalTokens = data.totalTokens
+            if (typeof data.lastActiveAt === 'number') {
+                room.lastActiveAt = data.lastActiveAt
+                sortRoomsByActivity()
+            }
             if (typeof data.allowGuestAgents === 'number') room.allowGuestAgents = data.allowGuestAgents
             if (data.guestAgentApproval === 'owner') room.guestAgentApproval = data.guestAgentApproval
             if (typeof data.maxGuestAgentsPerMember === 'number') {
@@ -1127,6 +1183,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
                 resetMessagePaging()
                 clearRemoteTypingState()
                 contextStatuses.value.clear()
+                executionQueue.value = []
                 pendingApprovals.value.clear()
                 pendingClarifies.value.clear()
             }
@@ -1155,6 +1212,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
         agents.value = []
         roomName.value = ''
         contextStatuses.value.clear()
+        executionQueue.value = []
         roomSummaryStates.value.clear()
         handoffChains.value.clear()
         pendingApprovals.value.clear()
@@ -1320,7 +1378,13 @@ export const useGroupChatStore = defineStore('groupChat', () => {
 
         emitStopTyping(roomId)
         return new Promise<void>((resolve, reject) => {
-            socket.emit('message', { roomId, id: messageId, content: finalContent, mentions }, (res: { id?: string; error?: string }) => {
+            socket.emit('message', {
+                roomId,
+                id: messageId,
+                content: finalContent,
+                mentions,
+                executionQueueCapability: executionQueueCapability(roomId),
+            }, (res: { id?: string; error?: string }) => {
                 if (res.error) {
                     messages.value = messages.value.filter(m => m.id !== messageId)
                     reject(new Error(res.error))
@@ -1709,6 +1773,25 @@ export const useGroupChatStore = defineStore('groupChat', () => {
         await respondClarifyFor(pending.roomId, pending.clarifyId, response)
     }
 
+    async function cancelExecutionQueueItem(queueId: string) {
+        const roomId = currentRoomId.value
+        if (!roomId) return
+        const socket = await ensureRealtimeRoomReady(roomId)
+        await new Promise<void>((resolve, reject) => {
+            socket.emit('cancel_execution_queue_item', {
+                roomId,
+                queueId,
+                executionQueueCapability: executionQueueCapability(roomId),
+            }, (res: any) => {
+                if (res?.error) {
+                    reject(new Error(res.error))
+                    return
+                }
+                resolve()
+            })
+        })
+    }
+
     return {
         // State
         connected,
@@ -1725,6 +1808,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
         contextStatuses,
         roomSummaryStates,
         handoffChains,
+        executionQueue,
         pendingApprovals,
         pendingClarifies,
         activePendingApproval,
@@ -1768,6 +1852,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
         respondApprovalFor,
         respondClarify,
         respondClarifyFor,
+        cancelExecutionQueueItem,
         createNewRoom,
         joinByCode,
         deleteRoom,

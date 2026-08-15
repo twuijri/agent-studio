@@ -2885,6 +2885,9 @@ export default {
 
   // Group Chat
   groupChat: {
+    executionQueueTitle: 'Execution queue',
+    executionQueueCancel: 'Cancel queued work for {agent}',
+    executionQueueCancelFailed: 'Could not cancel queued work.',
     agentLinkButton: 'Bring your Agent',
     agentOwner: 'Owner: {name}',
     agentLinkTitle: 'Bring an Agent into this room',

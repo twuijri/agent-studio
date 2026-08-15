@@ -19,6 +19,7 @@ import {
 } from '@/api/hermes/group-chat-agent-link'
 import GroupMessageList from './GroupMessageList.vue'
 import GroupChatInput from './GroupChatInput.vue'
+import MessageQueueFloatPanel from '@/components/hermes/chat/MessageQueueFloatPanel.vue'
 import FolderPicker from '@/components/hermes/chat/FolderPicker.vue'
 import ProfileAvatar from '@/components/hermes/profiles/ProfileAvatar.vue'
 import PageSidebarNav from '@/components/layout/PageSidebarNav.vue'
@@ -1097,6 +1098,14 @@ async function handleSendMessage(content: string, attachments?: Attachment[], me
         await store.sendMessage(content, attachments, mentions)
     } catch (err: any) {
         message.error(err.message)
+    }
+}
+
+async function handleCancelQueuedExecution(queueId: string) {
+    try {
+        await store.cancelExecutionQueueItem(queueId)
+    } catch (err: any) {
+        message.error(err?.message || t('groupChat.executionQueueCancelFailed'))
     }
 }
 
@@ -2232,6 +2241,19 @@ function handleClarifyKeydown(event: KeyboardEvent) {
                             </span>
                         </div>
                     </Transition>
+                    <div v-if="store.executionQueue.length > 0" class="group-execution-queue-float-stack">
+                        <MessageQueueFloatPanel
+                            :items="store.executionQueue.map(item => ({
+                                id: item.id,
+                                text: item.textSummary,
+                                secondary: item.targetAgentName,
+                                position: item.position,
+                            }))"
+                            test-id="group-execution-queue"
+                            :remove-title="item => t('groupChat.executionQueueCancel', { agent: item.secondary || '' })"
+                            @remove="handleCancelQueuedExecution"
+                        />
+                    </div>
                     <GroupChatInput
                         ref="groupChatInputRef"
                         :send-blocked="currentRoomNeedsSummaryConfiguration"
@@ -2971,6 +2993,15 @@ export default defineComponent({ components: { CreateRoomForm } })
     min-width: 0;
     max-width: 100%;
     background-color: $bg-card;
+}
+
+.group-execution-queue-float-stack {
+    position: absolute;
+    right: 16px;
+    bottom: 82px;
+    z-index: 8;
+    width: min(380px, calc(100% - 32px));
+    pointer-events: none;
 }
 
 .sidebar-backdrop {
