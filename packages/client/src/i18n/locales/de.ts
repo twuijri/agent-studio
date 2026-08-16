@@ -625,6 +625,7 @@ export default {
     },
     slashCommands: {
       usage: 'Nutzung der aktuellen Sitzung berechnen',
+      context: 'Aktuelle Kontextnutzung anzeigen',
       status: 'Sitzungsstatus und Warteschlange anzeigen',
       yolo: 'YOLO-Modus der Sitzung umschalten und Freigaben für gefährliche Befehle überspringen',
       abort: 'Aktiven Bridge-Lauf stoppen',
@@ -642,6 +643,7 @@ export default {
       clearHistory: 'Gespeicherten Nachrichtenverlauf dieser Sitzung löschen',
       title: 'Diese Sitzung umbenennen',
       compress: 'Kontextkomprimierung im Leerlauf ausführen',
+      compact: 'Aktuellen Dialog mit nativem CLI /compact komprimieren',
       steer: 'Steuertext an den aktiven Bridge-Lauf senden',
       destroy: 'Bridge-Agent für diese Sitzung freigeben',
       reloadMcp: 'MCP-Server neu laden',
