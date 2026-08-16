@@ -27,6 +27,7 @@ export interface RoomInfo {
     agentHandoffUnlimited?: number
     createdAt?: number
     lastActiveAt?: number
+    agents?: RoomAgentSummary[]
 }
 
 export interface RoomAgentHandoffChain {
@@ -101,6 +102,23 @@ export interface RoomAgent {
     ownerMemberId?: string
     connectorId?: string
     historical?: boolean
+}
+
+export type RoomAgentSummary = Pick<
+    RoomAgent,
+    'id' | 'roomId' | 'agentId' | 'agent' | 'name' | 'avatar'
+>
+
+export interface GroupAgentActivity {
+    roomId: string
+    /** Stable gc_room_agents row identity. */
+    agentId: string
+    /** Stable response/run identity shared by every message in one Agent run. */
+    runId: string
+    agentName: string
+    agent: RoomAgent['agent']
+    avatar: string
+    status: 'compressing' | 'replying' | 'ready'
 }
 
 export interface RoomAgentInput {

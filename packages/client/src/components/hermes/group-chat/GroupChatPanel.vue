@@ -19,6 +19,7 @@ import {
 } from '@/api/hermes/group-chat-agent-link'
 import GroupMessageList from './GroupMessageList.vue'
 import GroupChatInput from './GroupChatInput.vue'
+import GroupRoomAgentAvatar from './GroupRoomAgentAvatar.vue'
 import MessageQueueFloatPanel from '@/components/hermes/chat/MessageQueueFloatPanel.vue'
 import FolderPicker from '@/components/hermes/chat/FolderPicker.vue'
 import ProfileAvatar from '@/components/hermes/profiles/ProfileAvatar.vue'
@@ -1758,9 +1759,11 @@ function handleClarifyKeydown(event: KeyboardEvent) {
                             @click="handleSelectRoom(room.id)"
                             @contextmenu="handleRoomContextMenu($event, room.id)"
                         >
-                            <svg class="room-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                            </svg>
+                            <GroupRoomAgentAvatar
+                                :agents="store.roomAgentsForRoom(room.id)"
+                                :active-agent-ids="store.activeAgentIdsForRoom(room.id)"
+                                :label="room.name || room.id"
+                            />
                             <div class="room-info">
                                 <span class="room-name">{{ room.name || room.id }}</span>
                                 <span v-if="room.inviteCode" class="room-code">{{ room.inviteCode }}</span>

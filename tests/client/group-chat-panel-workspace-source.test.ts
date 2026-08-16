@@ -364,6 +364,33 @@ describe('GroupChatPanel workspace save handling', () => {
     expect(source).not.toContain(':title="`${agent.name}\\n${agentRuntimeLabel(agent)}`"')
   })
 
+  it('renders the persistent room Agent grid in the stable leading room-list slot', () => {
+    const panel = readFileSync('packages/client/src/components/hermes/group-chat/GroupChatPanel.vue', 'utf8')
+    const roomAvatar = readFileSync('packages/client/src/components/hermes/group-chat/GroupRoomAgentAvatar.vue', 'utf8')
+    const list = readFileSync('packages/client/src/components/hermes/group-chat/GroupMessageList.vue', 'utf8')
+    const runCard = readFileSync('packages/client/src/components/hermes/group-chat/GroupAgentRunCard.vue', 'utf8')
+    const localRooms = panel.slice(
+      panel.indexOf('v-for="room in store.rooms"'),
+      panel.indexOf('<section v-if="remoteRooms.length"'),
+    )
+    const remoteRooms = panel.slice(panel.indexOf('<section v-if="remoteRooms.length"'))
+
+    expect(localRooms).toContain('<GroupRoomAgentAvatar')
+    expect(localRooms.indexOf('<GroupRoomAgentAvatar')).toBeLessThan(localRooms.indexOf('class="room-info"'))
+    expect(localRooms).not.toContain('class="room-icon"')
+    expect(remoteRooms).toContain('class="room-icon"')
+    expect(remoteRooms).not.toContain('<GroupRoomAgentAvatar')
+    expect(panel).toContain(':agents="store.roomAgentsForRoom(room.id)"')
+    expect(panel).toContain(':active-agent-ids="store.activeAgentIdsForRoom(room.id)"')
+    expect(roomAvatar).toContain('data-agent-count')
+    expect(roomAvatar).toContain('room-agent-grid-neutral')
+    expect(roomAvatar).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(list).toContain(':active="store.isAgentRunActive(')
+    expect(runCard).toContain("'run-avatar-active': active")
+    expect(runCard).toContain(':aria-busy="active"')
+    expect(runCard).toContain('@media (prefers-reduced-motion: reduce)')
+  })
+
   it('shows agent runtime details when hovering message avatars and can insert a mention into the group input', () => {
     const panelSource = readFileSync('packages/client/src/components/hermes/group-chat/GroupChatPanel.vue', 'utf8')
     const avatarSource = readFileSync('packages/client/src/components/hermes/group-chat/GroupAgentMessageAvatar.vue', 'utf8')
