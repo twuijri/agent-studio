@@ -1,4 +1,5 @@
 // Shared Responses payload translation for Coding Agent provider proxies.
+import { isGlm53Model, normalizeReasoningEffortForModel } from '../../../hermes/reasoning-effort'
 import { imageUrlToAnthropicSource, openAiImageUrl } from './multimodal'
 import { shouldPreserveReasoningContent } from './anthropic'
 
@@ -478,7 +479,8 @@ export function normalizeResponseFunctionCall(name: unknown, argumentsValue: unk
 
 export function targetReasoningEffort(target: any): string {
   const effort = String(target?.reasoningEffort || '').trim()
-  return ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(effort) ? effort : ''
+  if (!['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) return ''
+  return normalizeReasoningEffortForModel(target?.model, effort)
 }
 
 function stringifyContent(value: unknown): string {
@@ -854,6 +856,16 @@ function responsesToolsToAnthropicTools(tools: unknown): any[] | undefined {
 export function responsesToAnthropicMessages(body: any, target: ResponsesAdapterTarget, stream = false): any {
   const tools = responsesToolsToAnthropicTools(responsesAvailableTools(body))
   const reasoningEffort = targetReasoningEffort(target)
+  const glmOutputConfig = isGlm53Model(target.model) && reasoningEffort
+    ? {
+        output_config: {
+          ...(body?.output_config && typeof body.output_config === 'object' && !Array.isArray(body.output_config)
+            ? body.output_config
+            : {}),
+          effort: reasoningEffort,
+        },
+      }
+    : null
   return {
     model: target.model,
     messages: responsesInputToAnthropicMessages(body),
@@ -861,7 +873,7 @@ export function responsesToAnthropicMessages(body: any, target: ResponsesAdapter
     ...(typeof body?.max_output_tokens === 'number' ? { max_tokens: body.max_output_tokens } : { max_tokens: 4096 }),
     ...(typeof body?.temperature === 'number' ? { temperature: body.temperature } : {}),
     ...(typeof body?.top_p === 'number' ? { top_p: body.top_p } : {}),
-    ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+    ...(glmOutputConfig || (reasoningEffort ? { reasoning_effort: reasoningEffort } : {})),
     ...(tools?.length ? { tools } : {}),
     stream,
   }
