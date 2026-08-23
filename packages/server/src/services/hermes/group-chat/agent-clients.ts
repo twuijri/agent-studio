@@ -1158,7 +1158,12 @@ export class AgentClient implements GroupAgentExecutor {
                     } else if (event === 'tool.completed' || event === 'tool.failed') {
                         queueToolEventWrite(() => this.recordToolCompleted(roomId, sessionId, { ...payload, event }).then(() => undefined))
                     } else if (event === 'approval.requested') {
-                        this.emitApprovalRequested(roomId, { ...payload, agentSessionId: sessionId })
+                        const { run_id: _runtimeRunId, runId: _runtimeCamelRunId, ...approvalPayload } = payload
+                        this.emitApprovalRequested(roomId, {
+                            ...approvalPayload,
+                            agentSessionId: sessionId,
+                            runId: responseRunId,
+                        })
                     } else if (event === 'approval.resolved') {
                         this.emitApprovalResolved(roomId, { ...payload, agentSessionId: sessionId })
                     } else if (event === 'clarify.requested') {
@@ -1569,6 +1574,7 @@ export class AgentClient implements GroupAgentExecutor {
                 this.emitApprovalRequested(roomId, {
                     event: 'approval.requested',
                     agentSessionId: sessionId,
+                    runId: responseRunId,
                     approval_id: (ev as any).approval_id,
                     command: (ev as any).command,
                     description: (ev as any).description,
