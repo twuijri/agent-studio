@@ -1265,6 +1265,36 @@ export const useChatStore = defineStore('chat', () => {
       : null,
   )
   /** sessionId → queued message count */
+  /**
+   * When the run showing in each session began, as the server reported it.
+   * A client that opens the page mid-run needs this: without it the thinking
+   * timer counts from its own first render and restarts on every navigation.
+   */
+  const runStartedAt = ref<Map<string, number>>(new Map())
+
+  function setRunStartedAt(sessionId: string, startedAt: number) {
+    if (!sessionId || !(startedAt > 0)) return
+    if (runStartedAt.value.get(sessionId) === startedAt) return
+    runStartedAt.value = new Map(runStartedAt.value).set(sessionId, startedAt)
+  }
+
+  function clearRunStartedAt(sessionId: string) {
+    if (!sessionId || !runStartedAt.value.has(sessionId)) return
+    const next = new Map(runStartedAt.value)
+    next.delete(sessionId)
+    runStartedAt.value = next
+  }
+
+  /**
+   * Every resume path has to agree about the run clock, and every terminal path
+   * has to forget it — otherwise the next run in the same session inherits the
+   * previous run's start and reports a far larger elapsed time.
+   */
+  function applyResumedRunStartedAt(sessionId: string, data: { isWorking?: boolean; runStartedAt?: number }) {
+    const startedAt = Number(data?.runStartedAt) || 0
+    if (data?.isWorking && startedAt > 0) setRunStartedAt(sessionId, startedAt)
+    else clearRunStartedAt(sessionId)
+  }
   const queueLengths = ref<Map<string, number>>(new Map())
   /** sessionId → queued user messages not yet visible in the transcript */
   const queuedUserMessages = ref<Map<string, Message[]>>(new Map())
@@ -1901,6 +1931,7 @@ export const useChatStore = defineStore('chat', () => {
             replaceQueuedUserMessages(sessionId, [])
           }
           replaceQueueInsertionState(sessionId, data.queueInsertion)
+          applyResumedRunStartedAt(sessionId, data as any)
           if ((data as any).isAborting) {
             setAbortState(sessionId, { aborting: true, synced: null })
           } else if (!data.isWorking) {
@@ -2621,10 +2652,12 @@ export const useChatStore = defineStore('chat', () => {
     const command = String((evt as any).command || '').toLowerCase()
     if ((evt as any).started === true && (evt as any).terminal === false) {
       serverWorking.value.add(sid)
+      setRunStartedAt(sid, Date.now())
     }
     if ((evt as any).terminal === true) {
       streamStates.value.delete(sid)
       serverWorking.value.delete(sid)
+      clearRunStartedAt(sid)
       pendingForkCommands.value.delete(sid)
       const msgs = getSessionMsgs(sid)
       msgs.forEach((m, i) => {
@@ -2672,6 +2705,7 @@ export const useChatStore = defineStore('chat', () => {
     if (action === 'destroy') {
       streamStates.value.delete(sid)
       serverWorking.value.delete(sid)
+      clearRunStartedAt(sid)
       queueLengths.value.delete(sid)
       queuedUserMessages.value.delete(sid)
       queueInsertionStates.value.delete(sid)
@@ -3289,7 +3323,10 @@ export const useChatStore = defineStore('chat', () => {
     } else {
       addMessage(sid, userMsg)
       updateSessionTitle(sid)
-      if (shouldOptimisticallyShowRunStatus) serverWorking.value.add(sid)
+      if (shouldOptimisticallyShowRunStatus) {
+        setRunStartedAt(sid, Date.now())
+        serverWorking.value.add(sid)
+      }
     }
     clearMessageReference(sid)
 
@@ -3416,6 +3453,8 @@ export const useChatStore = defineStore('chat', () => {
       const cleanup = () => {
         streamStates.value.delete(sid)
         serverWorking.value.delete(sid)
+        // The run is over: its start must not leak into the next one.
+        clearRunStartedAt(sid)
       }
 
       // Per-active-run flags used to detect silently-swallowed errors at run.completed.
@@ -3450,6 +3489,7 @@ export const useChatStore = defineStore('chat', () => {
 
         if (data.isWorking) serverWorking.value.add(sid)
         else serverWorking.value.delete(sid)
+        applyResumedRunStartedAt(sid, data as any)
 
         if (data.queueLength && data.queueLength > 0) {
           queueLengths.value.set(sid, data.queueLength)
@@ -3599,6 +3639,7 @@ export const useChatStore = defineStore('chat', () => {
             case 'run.started':
               clearSessionCompletedUnread(sid)
               serverWorking.value.add(sid)
+              setRunStartedAt(sid, Date.now())
               clearAgentEventMessages(sid)
               setAbortState(sid, null)
               setCompressionState(sid, null)
@@ -3980,6 +4021,7 @@ export const useChatStore = defineStore('chat', () => {
             }
 
             case 'run.completed': {
+              clearRunStartedAt(sid)
               const msgs = getSessionMsgs(sid)
               const lastMsg = activeAssistantMessageId
                 ? msgs.find(m => m.id === activeAssistantMessageId)
@@ -4137,6 +4179,7 @@ export const useChatStore = defineStore('chat', () => {
             }
 
             case 'run.failed': {
+              clearRunStartedAt(sid)
               clearPendingInteractions(sid)
               const failedMessages = getSessionMsgs(sid)
               const failedAssistant = activeAssistantMessageId
@@ -4266,6 +4309,7 @@ export const useChatStore = defineStore('chat', () => {
       closed = true
       streamStates.value.delete(sid)
       serverWorking.value.delete(sid)
+      clearRunStartedAt(sid)
       // Unregister from global session handlers
       unregisterSessionHandlers(sid)
     }
@@ -4273,6 +4317,7 @@ export const useChatStore = defineStore('chat', () => {
     const markIdleKeepingBackgroundListener = () => {
       streamStates.value.delete(sid)
       serverWorking.value.delete(sid)
+      clearRunStartedAt(sid)
     }
 
     const ensureAbortHandle = () => {
@@ -4360,6 +4405,7 @@ export const useChatStore = defineStore('chat', () => {
         case 'run.started':
           clearSessionCompletedUnread(sid)
           serverWorking.value.add(sid)
+          setRunStartedAt(sid, Date.now())
           ensureAbortHandle()
           clearAgentEventMessages(sid)
           setAbortState(sid, null)
@@ -4697,6 +4743,7 @@ export const useChatStore = defineStore('chat', () => {
         }
 
         case 'run.completed': {
+          clearRunStartedAt(sid)
           clearAgentEventMessages(sid)
           const hasQueue = (evt as any).queue_remaining > 0
           const hasBackground = (evt.background_pending || 0) > 0
@@ -4852,6 +4899,7 @@ export const useChatStore = defineStore('chat', () => {
         }
 
         case 'run.failed': {
+          clearRunStartedAt(sid)
           clearPendingInteractions(sid)
           const failedMessages = getSessionMsgs(sid)
           const failedAssistant = activeAssistantMessageId
@@ -5067,6 +5115,7 @@ export const useChatStore = defineStore('chat', () => {
             } else {
               serverWorking.value.delete(sid)
             }
+            applyResumedRunStartedAt(sid, data as any)
             if (data.isAborting) {
               setAbortState(sid, { aborting: true, synced: null })
             } else if (!data.isWorking) {
@@ -5261,6 +5310,7 @@ export const useChatStore = defineStore('chat', () => {
     isForkPending,
     isRunActive,
     isSessionLive,
+    runStartedAt,
     isSessionCompletedUnread,
     clearSessionCompletedUnread,
     sessionProfileFilter,
