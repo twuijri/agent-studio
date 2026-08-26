@@ -15,20 +15,20 @@ const modelGroups = vi.hoisted(() => ({
     model_meta?: Record<string, { disabled?: boolean }>
   }>,
 }))
-vi.mock('../../packages/server/src/controllers/hermes/models', () => ({
-  getAvailableModelGroupsForProfile: vi.fn(async () => modelGroups.value),
+vi.mock('../../packages/server/src/modules/studio/public/group-chat-agent-runtime', () => ({
+  getGroupAvailableModelGroups: vi.fn(async () => modelGroups.value),
 }))
 
 afterAll(async () => {
-  const { closeDb } = await import('../../packages/server/src/db')
+  const { closeDb } = await import('../../packages/server/src/modules/studio/infrastructure/database/index')
   closeDb()
   rmSync(root, { recursive: true, force: true })
 })
 
 describe('group Agent presets', () => {
   it('returns an application conflict for owner-scoped duplicate names without leaking SQLite details', async () => {
-    const { initAllStores } = await import('../../packages/server/src/db/hermes/init')
-    const controller = await import('../../packages/server/src/controllers/hermes/group-agent-presets')
+    const { initAllStores } = await import('../../packages/server/src/modules/studio/infrastructure/database/init')
+    const controller = await import('../../packages/server/src/modules/studio/controllers/group-agent-presets')
     initAllStores()
     modelGroups.value = [{ provider: 'openai', models: ['gpt-test'] }]
 
@@ -90,14 +90,14 @@ describe('group Agent presets', () => {
   })
 
   it('persists owner-scoped CRUD snapshots without secret fields', async () => {
-    const { initAllStores } = await import('../../packages/server/src/db/hermes/init')
+    const { initAllStores } = await import('../../packages/server/src/modules/studio/infrastructure/database/init')
     const {
       createGroupAgentPreset,
       deleteGroupAgentPreset,
       getGroupAgentPreset,
       listGroupAgentPresets,
       updateGroupAgentPreset,
-    } = await import('../../packages/server/src/db/hermes/group-agent-preset-store')
+    } = await import('../../packages/server/src/modules/studio/repositories/group-agent-preset-store')
     initAllStores()
 
     const created = createGroupAgentPreset({
@@ -131,7 +131,7 @@ describe('group Agent presets', () => {
     const {
       normalizeGroupAgentPresetInput,
       validateGroupAgentPresetCapability,
-    } = await import('../../packages/server/src/services/hermes/group-chat/agent-presets')
+    } = await import('../../packages/server/src/modules/studio/services/group-chat/agent-presets')
 
     expect(() => normalizeGroupAgentPresetInput({
       agent: 'codex',
@@ -168,7 +168,7 @@ describe('group Agent presets', () => {
   })
 
   it('enforces owner/profile boundaries and fail-closes disabled models across CRUD and application', async () => {
-    const controller = await import('../../packages/server/src/controllers/hermes/group-agent-presets')
+    const controller = await import('../../packages/server/src/modules/studio/controllers/group-agent-presets')
     modelGroups.value = [{ provider: 'openai', models: ['gpt-test', 'gpt-new'] }]
     const createCtx: any = {
       state: { user: { id: 41, role: 'admin', profiles: ['research'] } },
