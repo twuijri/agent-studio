@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto'
+import { chmodSync, copyFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { EkkoDatabaseManager } from './database'
-import { dirname } from 'node:path'
 import {
   EkkoDirectoryManager,
   type EkkoDirectoryInitializationOptions,
@@ -10,6 +12,7 @@ import { resolveEkkoDataDirectory } from './memory/paths'
 import { SqliteMemoryStore } from './memory/store'
 import { EkkoToolApprovalService } from './tools/approval'
 import {
+  EkkoConfigError,
   EkkoConfigStore,
   type ConfiguredModelAuthorizationEntry,
   type ConfiguredModelProviderEntry,
@@ -80,6 +83,32 @@ export interface CreateEkkoRuntimeOptions extends Omit<AgentRuntimeOptions, 'mem
   memory?: AgentRuntimeOptions['memory'] | false
 }
 
+function ensureStartupConfig(config: EkkoConfigStore): EkkoConfig {
+  try {
+    return config.ensureDefaults()
+  } catch (error) {
+    if (!(error instanceof EkkoConfigError)) throw error
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const backupPath = join(
+      dirname(config.configPath),
+      `config.invalid-${timestamp}-${randomUUID()}.json`,
+    )
+    copyFileSync(config.configPath, backupPath)
+    try {
+      chmodSync(backupPath, 0o600)
+    } catch {
+      // Some filesystems do not expose POSIX permissions.
+    }
+
+    const recovered = config.reset()
+    console.warn(
+      `[ekko-agent] invalid config was backed up to ${backupPath}; defaults restored: ${error.message}`,
+    )
+    return recovered
+  }
+}
+
 /**
  * Process-level Ekko resources created before any agent run.
  *
@@ -121,9 +150,10 @@ export class EkkoAgentSetup {
       hermesRootDirectory: options.hermesRootDirectory,
     })
     this.config = new EkkoConfigStore({ configPath: this.layout.configPath })
+    const startupConfig = ensureStartupConfig(this.config)
     const config = options.config
       ? this.config.update(options.config)
-      : this.config.ensureDefaults()
+      : startupConfig
     this.authorizations = new EkkoModelAuthorizationManager({
       config: this.config,
       refresher: options.authorizationRefresher,
