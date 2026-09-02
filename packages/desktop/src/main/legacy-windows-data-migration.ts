@@ -1,12 +1,35 @@
-import { copyFile, lstat, mkdir, readdir, readFile, readlink, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { copyFile, lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { hermesHome as resolveHermesHome } from './paths'
 
 export const LEGACY_WINDOWS_DATA_MIGRATION_MARKER = '.studio-windows-appdata-migration.json'
 export const LEGACY_WINDOWS_DATA_MIGRATION_STAGING = '.hermes.studio-windows-appdata-migration-staging'
 export const LEGACY_WINDOWS_DATA_MIGRATION_BACKUP = '.hermes.studio-windows-appdata-migration-backup'
 const GATEWAY_RUNTIME_FILES = new Set(['gateway.pid', 'gateway.lock', 'gateway_state.json'])
+const LEGACY_PROFILE_FILES = new Set([
+  '.cursorrules',
+  '.env',
+  'AGENTS.md',
+  'CLAUDE.md',
+  'MEMORY.md',
+  'SOUL.md',
+  'USER.md',
+  '.anthropic_oauth.json',
+  'auth.json',
+  'channel_directory.json',
+  'config.yaml',
+  'system_prompt.md',
+  'todo.json',
+])
+const LEGACY_PROFILE_DIRECTORIES = new Set(['knowledge', 'memories', 'preferences', 'skills'])
+const LEGACY_ROOT_FILES = new Set([...LEGACY_PROFILE_FILES, 'active_profile'])
+const LEGACY_SHARED_FILES = new Set(['nous_auth.json'])
+const VERIFIED_CONFIGURATION_FILES = new Set([...LEGACY_ROOT_FILES, ...LEGACY_SHARED_FILES])
+const STATE_DATABASE_FILES = ['state.db', 'state.db-wal', 'state.db-shm', 'state.db-journal'] as const
+const STATE_DATABASE_STAGING = '.studio-windows-appdata-state-db-staging'
+const STATE_DATABASE_BACKUP = '.studio-windows-appdata-state-db-backup'
+const STATE_DATABASE_TRANSACTION = 'transaction.json'
 
 type MigrationAction = 'migrate' | 'decline'
 type MigrationState = 'completed' | 'failed' | 'pending'
@@ -21,6 +44,8 @@ export interface LegacyWindowsDataMigrationDecision {
   completedAt?: string
   failedAt?: string
   error?: string
+  copiedFiles?: number
+  skippedSymlinks?: string[]
 }
 
 export interface PendingLegacyWindowsDataMigrationResult {
@@ -32,6 +57,7 @@ export interface PendingLegacyWindowsDataMigrationResult {
 }
 
 interface MigrationFileSystem {
+  copyFilePath: (source: string, target: string) => Promise<void>
   isProcessAlive: (pid: number) => boolean
   renamePath: (source: string, target: string) => Promise<void>
 }
@@ -42,6 +68,7 @@ export interface PendingLegacyWindowsDataMigrationOptions {
   userHome?: string
   hermesHome?: string
   now?: () => Date
+  copyFilePath?: (source: string, target: string) => Promise<void>
   isProcessAlive?: (pid: number) => boolean
   renamePath?: (source: string, target: string) => Promise<void>
 }
@@ -73,6 +100,7 @@ function environment(options: PendingLegacyWindowsDataMigrationOptions): Migrati
     hermesHome: resolve(options.hermesHome || resolveHermesHome()),
     now: options.now || (() => new Date()),
     fs: {
+      copyFilePath: options.copyFilePath || copyFile,
       isProcessAlive: options.isProcessAlive || defaultIsProcessAlive,
       renamePath: options.renamePath || rename,
     },
@@ -158,8 +186,177 @@ function validateAcceptedMarker(
   }
 }
 
-async function copyEntry(source: string, target: string): Promise<void> {
+interface CopySummary {
+  copiedFiles: Array<{ source: string; target: string }>
+  skippedSymlinks: string[]
+}
+
+interface StateDatabaseTransaction {
+  schema: 1
+  phase: 'staged' | 'activating'
+  sourceDirectory: string
+  targetDirectory: string
+  sourceFiles: string[]
+  originalFiles: string[]
+}
+
+function isStateDatabaseTransaction(value: unknown): value is StateDatabaseTransaction {
+  if (!value || typeof value !== 'object') return false
+  const transaction = value as Partial<StateDatabaseTransaction>
+  return transaction.schema === 1
+    && (transaction.phase === 'staged' || transaction.phase === 'activating')
+    && typeof transaction.sourceDirectory === 'string'
+    && typeof transaction.targetDirectory === 'string'
+    && Array.isArray(transaction.sourceFiles)
+    && transaction.sourceFiles.every(name => STATE_DATABASE_FILES.includes(name as typeof STATE_DATABASE_FILES[number]))
+    && Array.isArray(transaction.originalFiles)
+    && transaction.originalFiles.every(name => STATE_DATABASE_FILES.includes(name as typeof STATE_DATABASE_FILES[number]))
+}
+
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await lstat(path)).isFile()
+  } catch {
+    return false
+  }
+}
+
+async function readStateDatabaseTransaction(directory: string): Promise<StateDatabaseTransaction | null> {
+  try {
+    const value = JSON.parse(await readFile(join(directory, STATE_DATABASE_TRANSACTION), 'utf8')) as unknown
+    return isStateDatabaseTransaction(value) ? value : null
+  } catch {
+    return null
+  }
+}
+
+async function writeStateDatabaseTransaction(
+  directory: string,
+  transaction: StateDatabaseTransaction,
+): Promise<void> {
+  await mkdir(directory, { recursive: true })
+  await writeFile(join(directory, STATE_DATABASE_TRANSACTION), `${JSON.stringify(transaction, null, 2)}\n`, 'utf8')
+}
+
+async function recoverStateDatabaseTransaction(targetDirectory: string, fs: MigrationFileSystem): Promise<void> {
+  const staging = join(targetDirectory, STATE_DATABASE_STAGING)
+  const backup = join(targetDirectory, STATE_DATABASE_BACKUP)
+  const stagingExists = await isDirectory(staging)
+  const backupExists = await isDirectory(backup)
+  if (!stagingExists && !backupExists) return
+
+  const transaction = await readStateDatabaseTransaction(backup)
+    || await readStateDatabaseTransaction(staging)
+  if (!transaction || !sameWindowsPath(transaction.targetDirectory, targetDirectory)) {
+    throw new Error(`Refusing to recover unrecognized Hermes state database migration in: ${targetDirectory}`)
+  }
+
+  if (transaction.phase === 'activating') {
+    for (const name of STATE_DATABASE_FILES) {
+      await rm(join(targetDirectory, name), { force: true })
+    }
+    for (const name of transaction.originalFiles) {
+      const backupFile = join(backup, name)
+      if (await isFile(backupFile)) await fs.copyFilePath(backupFile, join(targetDirectory, name))
+    }
+  }
+
+  await rm(staging, { recursive: true, force: true })
+  await rm(backup, { recursive: true, force: true })
+}
+
+async function copyStateDatabase(
+  sourceDirectory: string,
+  targetDirectory: string,
+  fs: MigrationFileSystem,
+  summary: CopySummary,
+): Promise<void> {
+  if (!(await isFile(join(sourceDirectory, 'state.db')))) return
+  await mkdir(targetDirectory, { recursive: true })
+  await recoverStateDatabaseTransaction(targetDirectory, fs)
+
+  const sourceFiles: string[] = []
+  const originalFiles: string[] = []
+  for (const name of STATE_DATABASE_FILES) {
+    if (await isFile(join(sourceDirectory, name))) sourceFiles.push(name)
+    if (await isFile(join(targetDirectory, name))) originalFiles.push(name)
+  }
+
+  const staging = join(targetDirectory, STATE_DATABASE_STAGING)
+  const backup = join(targetDirectory, STATE_DATABASE_BACKUP)
+  const staged: StateDatabaseTransaction = {
+    schema: 1,
+    phase: 'staged',
+    sourceDirectory,
+    targetDirectory,
+    sourceFiles,
+    originalFiles,
+  }
+
+  await writeStateDatabaseTransaction(staging, staged)
+  await writeStateDatabaseTransaction(backup, staged)
+  try {
+    for (const name of sourceFiles) {
+      await fs.copyFilePath(join(sourceDirectory, name), join(staging, name))
+    }
+    for (const name of originalFiles) {
+      await fs.copyFilePath(join(targetDirectory, name), join(backup, name))
+    }
+
+    const activating: StateDatabaseTransaction = { ...staged, phase: 'activating' }
+    await writeStateDatabaseTransaction(staging, activating)
+    await writeStateDatabaseTransaction(backup, activating)
+
+    for (const name of STATE_DATABASE_FILES) {
+      if (!sourceFiles.includes(name)) await rm(join(targetDirectory, name), { force: true })
+    }
+    for (const name of sourceFiles) {
+      await fs.copyFilePath(join(staging, name), join(targetDirectory, name))
+      const [sourceStat, targetStat] = await Promise.all([
+        stat(join(sourceDirectory, name)),
+        stat(join(targetDirectory, name)),
+      ])
+      if (sourceStat.size !== targetStat.size) {
+        throw new Error(`Legacy Windows Hermes state database verification failed: ${join(targetDirectory, name)}`)
+      }
+      summary.copiedFiles.push({
+        source: join(sourceDirectory, name),
+        target: join(targetDirectory, name),
+      })
+    }
+  } catch (error) {
+    await recoverStateDatabaseTransaction(targetDirectory, fs).catch(() => undefined)
+    throw error
+  }
+
+  await rm(staging, { recursive: true, force: true })
+  await rm(backup, { recursive: true, force: true })
+}
+
+async function copyEntry(
+  source: string,
+  target: string,
+  sourceRoot: string,
+  fs: MigrationFileSystem,
+  summary: CopySummary,
+): Promise<void> {
   const sourceStat = await lstat(source)
+  if (sourceStat.isSymbolicLink()) {
+    // Directory links in old packaged runtimes require Windows Developer Mode
+    // to recreate. Runtime directories are not selected for migration, and a
+    // user-data directory link should not make config/auth migration fail.
+    try {
+      if ((await stat(source)).isFile()) {
+        await mkdir(dirname(target), { recursive: true })
+        await fs.copyFilePath(source, target)
+        summary.copiedFiles.push({ source, target })
+        return
+      }
+    } catch { }
+    summary.skippedSymlinks.push(relative(sourceRoot, source).replace(/\\/g, '/'))
+    return
+  }
+
   if (sourceStat.isDirectory()) {
     try {
       const targetStat = await lstat(target)
@@ -170,26 +367,87 @@ async function copyEntry(source: string, target: string): Promise<void> {
     await mkdir(target, { recursive: true })
     for (const entry of await readdir(source)) {
       if (GATEWAY_RUNTIME_FILES.has(entry)) continue
-      await copyEntry(join(source, entry), join(target, entry))
+      await copyEntry(join(source, entry), join(target, entry), sourceRoot, fs, summary)
     }
     return
   }
 
   await mkdir(dirname(target), { recursive: true })
-  await rm(target, { recursive: true, force: true })
-  if (sourceStat.isSymbolicLink()) {
-    await symlink(await readlink(source), target)
-    return
-  }
-  await copyFile(source, target)
+  await fs.copyFilePath(source, target)
+  summary.copiedFiles.push({ source, target })
 }
 
-async function copyDirectoryContents(source: string, target: string, skipMarker = false): Promise<void> {
-  await mkdir(target, { recursive: true })
+async function copySelectedProfileData(
+  source: string,
+  target: string,
+  sourceRoot: string,
+  fs: MigrationFileSystem,
+  summary: CopySummary,
+): Promise<void> {
+  if (!(await isDirectory(source))) return
   for (const entry of await readdir(source)) {
-    if (GATEWAY_RUNTIME_FILES.has(entry)) continue
-    if (skipMarker && entry === LEGACY_WINDOWS_DATA_MIGRATION_MARKER) continue
-    await copyEntry(join(source, entry), join(target, entry))
+    if (!LEGACY_PROFILE_FILES.has(entry) && !LEGACY_PROFILE_DIRECTORIES.has(entry)) continue
+    await copyEntry(join(source, entry), join(target, entry), sourceRoot, fs, summary)
+  }
+  await copyStateDatabase(source, target, fs, summary)
+}
+
+async function copySelectedFiles(
+  source: string,
+  target: string,
+  sourceRoot: string,
+  names: Set<string>,
+  fs: MigrationFileSystem,
+  summary: CopySummary,
+): Promise<void> {
+  if (!(await isDirectory(source))) return
+  for (const entry of await readdir(source)) {
+    if (!names.has(entry)) continue
+    await copyEntry(join(source, entry), join(target, entry), sourceRoot, fs, summary)
+  }
+}
+
+async function copyLegacyUserData(
+  source: string,
+  target: string,
+  fs: MigrationFileSystem,
+): Promise<CopySummary> {
+  const summary: CopySummary = { copiedFiles: [], skippedSymlinks: [] }
+  await mkdir(target, { recursive: true })
+
+  for (const entry of await readdir(source)) {
+    if (!LEGACY_ROOT_FILES.has(entry) && !LEGACY_PROFILE_DIRECTORIES.has(entry)) continue
+    await copyEntry(join(source, entry), join(target, entry), source, fs, summary)
+  }
+  await copyStateDatabase(source, target, fs, summary)
+
+  const profilesSource = join(source, 'profiles')
+  if (await isDirectory(profilesSource)) {
+    for (const profile of await readdir(profilesSource, { withFileTypes: true })) {
+      if (!profile.isDirectory() || profile.isSymbolicLink()) continue
+      await copySelectedProfileData(
+        join(profilesSource, profile.name),
+        join(target, 'profiles', profile.name),
+        source,
+        fs,
+        summary,
+      )
+    }
+  }
+  await copySelectedFiles(join(source, 'shared'), join(target, 'shared'), source, LEGACY_SHARED_FILES, fs, summary)
+  return summary
+}
+
+async function verifyCopiedConfiguration(summary: CopySummary): Promise<void> {
+  for (const copied of summary.copiedFiles) {
+    if (!VERIFIED_CONFIGURATION_FILES.has(basename(copied.source))) continue
+    const [sourceValue, targetValue] = await Promise.all([
+      readFile(copied.source),
+      readFile(copied.target),
+    ])
+    if (!sourceValue.equals(targetValue)) {
+      throw new Error(`Legacy Windows Hermes configuration verification failed: ${copied.target}`)
+    }
   }
 }
 
@@ -281,13 +539,19 @@ async function recoverInterruptedSwap(env: MigrationEnvironment, paths: Migratio
   return completedRecovery
 }
 
-function completedMarker(marker: LegacyWindowsDataMigrationDecision, now: Date): LegacyWindowsDataMigrationDecision {
+function completedMarker(
+  marker: LegacyWindowsDataMigrationDecision,
+  now: Date,
+  summary: CopySummary,
+): LegacyWindowsDataMigrationDecision {
   return {
     ...marker,
     state: 'completed',
     completedAt: now.toISOString(),
     failedAt: undefined,
     error: undefined,
+    copiedFiles: summary.copiedFiles.length,
+    skippedSymlinks: summary.skippedSymlinks,
   }
 }
 
@@ -337,7 +601,6 @@ export async function migratePendingLegacyWindowsData(
     }
   }
 
-  let targetMoved = false
   try {
     validateAcceptedMarker(marker, env, paths)
     if (!(await isDirectory(marker.sourceDirectory))) {
@@ -348,38 +611,15 @@ export async function migratePendingLegacyWindowsData(
       throw new Error(`Legacy Windows Hermes gateway is still using the source directory (PID: ${sourceGatewayPids.join(', ')})`)
     }
 
-    await mkdir(paths.staging, { recursive: true })
-    await writeMarker(join(paths.staging, LEGACY_WINDOWS_DATA_MIGRATION_MARKER), marker)
-    await copyDirectoryContents(paths.target, paths.staging, true)
-    await copyDirectoryContents(marker.sourceDirectory, paths.staging, true)
-    await writeMarker(
-      join(paths.staging, LEGACY_WINDOWS_DATA_MIGRATION_MARKER),
-      completedMarker(marker, env.now()),
-    )
-
-    await env.fs.renamePath(paths.target, paths.backup)
-    targetMoved = true
-    try {
-      await env.fs.renamePath(paths.staging, paths.target)
-      targetMoved = false
-    } catch (error) {
-      await env.fs.renamePath(paths.backup, paths.target)
-      targetMoved = false
-      throw error
+    const summary = await copyLegacyUserData(marker.sourceDirectory, paths.target, env.fs)
+    if (summary.copiedFiles.length === 0) {
+      throw new Error(`Legacy Windows Hermes data directory contains no migratable user data: ${marker.sourceDirectory}`)
     }
-    // Activation has completed once staging becomes the target. Backup cleanup
-    // is best-effort here; startup recovery will remove it on the next launch.
-    try { await removeOwnedWorkingDirectory(paths.backup, paths) } catch { }
+    await verifyCopiedConfiguration(summary)
+    await writeMarker(paths.marker, completedMarker(marker, env.now(), summary))
 
     return { supported: true, attempted: true, completed: true, retryPending: false }
   } catch (error) {
-    if (targetMoved && !(await isDirectory(paths.target)) && await isDirectory(paths.backup)) {
-      try {
-        await env.fs.renamePath(paths.backup, paths.target)
-        targetMoved = false
-      } catch { }
-    }
-
     if (await isDirectory(paths.target)) {
       try {
         await writeMarker(paths.marker, failedMarker(marker, env.now(), error))
