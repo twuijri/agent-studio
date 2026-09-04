@@ -16,7 +16,9 @@ import {
   codexToolSearchConfig,
   migratePersistedPiRuntimeMcpConfigs,
   prepareCodingAgentLaunch,
+  restorePersistedCodexProxyTargets,
   restorePersistedPiProxyTargets,
+  writeCodingAgentConfigFile,
 } from '../../packages/server/src/bootstrap/coding-agents'
 import { getModelContextLength } from '../../packages/server/src/modules/hermes/services/models/context'
 import {
@@ -24,6 +26,8 @@ import {
   piModelSupportsThinking,
 } from '../../packages/server/src/modules/coding-agents/services/pi/thinking'
 import { codingAgentRunManager } from '../../packages/server/src/modules/coding-agents/services/runtime/run-manager'
+import { configureProfileConfig } from '../../packages/server/src/modules/studio/public/profile-config'
+import { upsertCodingAgentMcpServer } from '../../packages/server/src/modules/coding-agents/services/mcp-manager'
 
 const homes: string[] = []
 
@@ -39,6 +43,29 @@ function makeHome() {
   homes.push(home)
   process.env.HERMES_WEB_UI_HOME = home
   process.env.HERMES_CODING_AGENT_GLOBAL_HOME = join(home, 'global-home')
+  process.env.CODEX_HOME = join(home, 'global-home', '.codex')
+  configureProfileConfig({
+    buildModelGroups: () => ({ default: '', groups: [] }),
+    getProfilesBaseDir: () => join(home, 'profiles'),
+    getProfileDir: profile => join(home, 'profiles', profile),
+    getActiveProfileName: () => 'default',
+    listProfileNames: () => ['default'],
+    providerEnvironmentMap: {},
+    readConfigYaml: async () => ({}),
+    readConfigYamlForProfile: async () => ({
+      custom_providers: [{
+        name: 'test',
+        base_url: 'https://api.example.com/v1',
+        api_key: 'sk-restored-upstream',
+        api_mode: 'codex_responses',
+      }],
+    }),
+    safeReadFile: async filePath => existsSync(filePath) ? readFileSync(filePath, 'utf-8') : null,
+    saveEnvValue: async () => undefined,
+    saveEnvValueForProfile: async () => undefined,
+    updateConfigYaml: async () => undefined,
+    updateConfigYamlForProfile: async () => undefined,
+  })
   return home
 }
 
@@ -49,6 +76,7 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.HERMES_WEB_UI_HOME
   delete process.env.HERMES_CODING_AGENT_GLOBAL_HOME
+  delete process.env.CODEX_HOME
   delete process.env.HERMES_AGENT_NODE
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -57,6 +85,7 @@ afterEach(() => {
 
 function makeProxyContext(routeKey: string, token: string, body: any): any {
   return {
+    path: `/api/codex-proxy/${routeKey}/v1/responses`,
     params: { key: routeKey },
     request: { body },
     responseHeaders: {} as Record<string, string>,
@@ -117,6 +146,143 @@ describe('coding agent launch preparation', () => {
     expect(codexToolSearchConfig('0.141.0')).toEqual({ toolSearch: true, alwaysDefer: true })
     expect(codexToolSearchConfig('0.142.0')).toEqual({ toolSearch: true, alwaysDefer: false })
     expect(codexToolSearchConfig('')).toEqual({ toolSearch: true, alwaysDefer: true })
+  })
+
+  it('restores persisted Codex and Grok profile proxy targets after a server restart', async () => {
+    const home = makeHome()
+    for (const [agentId, suffix] of [['codex', 'codex-restart'], ['grok', 'grok-restart']] as const) {
+      const routeKey = Buffer.from(JSON.stringify([
+        'default',
+        'custom:test',
+        `${agentId}-model`,
+        'codex_responses',
+        'https://api.example.com/v1',
+        `${agentId}-agent-session`,
+        `${agentId}-chat-session`,
+      ])).toString('base64url')
+      const token = `hwui_${suffix}`
+      const configPath = join(
+        home,
+        'coding-agent',
+        'model',
+        'default',
+        'custom_test',
+        agentId,
+        'runs',
+        suffix,
+        'config.toml',
+      )
+      mkdirSync(dirname(configPath), { recursive: true })
+      writeFileSync(configPath, [
+        'model_provider = "custom"',
+        '',
+        '[model_providers.custom]',
+        `base_url = "http://127.0.0.1:8648/api/codex-proxy/${routeKey}/v1"`,
+        'requires_openai_auth = false',
+        `experimental_bearer_token = ${JSON.stringify(token)}`,
+        '',
+        '[mcp_servers.unrelated]',
+        'base_url = "https://mcp.example.com/not-a-codex-proxy"',
+        'experimental_bearer_token = "not-a-runtime-token"',
+        '',
+      ].join('\n'))
+    }
+
+    await expect(restorePersistedCodexProxyTargets()).resolves.toBe(2)
+
+    for (const [agentId, suffix] of [['codex', 'codex-restart'], ['grok', 'grok-restart']] as const) {
+      const routeKey = Buffer.from(JSON.stringify([
+        'default',
+        'custom:test',
+        `${agentId}-model`,
+        'codex_responses',
+        'https://api.example.com/v1',
+        `${agentId}-agent-session`,
+        `${agentId}-chat-session`,
+      ])).toString('base64url')
+      expect(isAuthorizedCodexProxyRequest(makeProxyContext(routeKey, `hwui_${suffix}`, {}))).toBe(true)
+    }
+  })
+
+  it('applies edited Studio-managed MCP configuration to the scoped Codex runtime', async () => {
+    const home = makeHome()
+    await upsertCodingAgentMcpServer('codex', 'hermes-studio-api', {
+      url: 'https://mcp.example.com/api',
+      enabled: true,
+    }, { profile: 'default', provider: 'custom:test' })
+
+    const launch = await prepareCodingAgentLaunch('codex', {
+      profile: 'default',
+      provider: 'custom:test',
+      model: 'codex-model',
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-runtime',
+      apiMode: 'codex_responses',
+      sessionId: 'managed-mcp-session',
+      agentSessionId: 'managed-mcp-agent-session',
+    })
+    const config = readFileSync(join(launch.rootDir, 'config.toml'), 'utf-8')
+    const managedBlock = config.match(/\[mcp_servers\.hermes-studio-api\][\s\S]*?(?=\n\[|$)/)?.[0] || ''
+    expect(managedBlock).toContain('url = "https://mcp.example.com/api"')
+    expect(managedBlock).not.toContain('command =')
+  })
+
+  it('keeps Studio-managed Codex settings at TOML root when user config contains tables', async () => {
+    const home = makeHome()
+    const globalConfigPath = join(home, 'global-home', '.codex', 'config.toml')
+    mkdirSync(dirname(globalConfigPath), { recursive: true })
+    writeFileSync(globalConfigPath, [
+      'sandbox_mode = "workspace-write"',
+      '',
+      '[hooks.state."state-id"]',
+      'command = "state-hook"',
+      '',
+    ].join('\n'))
+
+    const launch = await prepareCodingAgentLaunch('codex', {
+      profile: 'default',
+      provider: 'custom:test',
+      model: 'codex-model',
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-runtime',
+      apiMode: 'codex_responses',
+      sessionId: 'codex-table-order-session',
+      agentSessionId: 'codex-table-order-agent-session',
+    })
+    const config = readFileSync(join(launch.rootDir, 'config.toml'), 'utf-8')
+    const providerIndex = config.indexOf('model_provider = "custom"')
+    const providerSectionIndex = config.indexOf('[model_providers.custom]')
+    const hooksSectionIndex = config.indexOf('[hooks.state."state-id"]')
+
+    expect(providerIndex).toBeGreaterThanOrEqual(0)
+    expect(providerIndex).toBeLessThan(providerSectionIndex)
+    expect(providerSectionIndex).toBeLessThan(hooksSectionIndex)
+    expect(config.slice(0, config.indexOf('\n['))).toContain('model = "codex-model"')
+  })
+
+  it('invalidates all scoped runtimes when a shared Coding Agent config changes', async () => {
+    makeHome()
+    const matched: string[] = []
+    vi.spyOn(codingAgentRunManager, 'invalidateMatching').mockImplementation((predicate) => {
+      for (const launch of [
+        { agentId: 'codex', profile: 'default', provider: 'custom:first' },
+        { agentId: 'codex', profile: 'other', provider: 'custom:second' },
+        { agentId: 'claude-code', profile: 'default', provider: 'custom:first' },
+      ] as any[]) {
+        if (predicate(launch)) matched.push(`${launch.agentId}/${launch.profile}/${launch.provider}`)
+      }
+      return { invalidated: matched.length, deferred: 0 }
+    })
+
+    await writeCodingAgentConfigFile('codex', 'agents', 'Updated shared instructions.\n', {
+      profile: 'default',
+      provider: 'custom:first',
+    })
+
+    expect(matched).toEqual([
+      'codex/default/custom:first',
+      'codex/other/custom:second',
+    ])
   })
 
   it('translates Studio reasoning choices into Pi thinking levels', () => {
@@ -905,9 +1071,23 @@ describe('coding agent launch preparation', () => {
     writeFileSync(claudeGlobalSettingsPath, `${JSON.stringify({
       enabledMcpjsonServers: ['nowledge-mem'],
       plugins: { 'nowledge-mem@nowledge-community': true },
+      forceLoginMethod: 'claudeai',
+      apiKeyHelper: '/tmp/native-claude-key-helper',
+      env: {
+        SAFE_USER_SETTING: 'preserved',
+        CLAUDE_CODE_OAUTH_TOKEN: 'stale-native-oauth-token',
+        ANTHROPIC_AUTH_TOKEN: 'stale-native-auth-token',
+        ANTHROPIC_API_KEY: 'stale-native-api-key',
+        ANTHROPIC_BASE_URL: 'https://native-login.example',
+      },
     }, null, 2)}
 `)
     writeFileSync(codexGlobalConfigPath, [
+      'preferred_auth_method = "chatgpt"',
+      'forced_login_method = "chatgpt"',
+      'chatgpt_base_url = "https://native-login.example"',
+      'experimental_bearer_token = "stale-native-token"',
+      '',
       '[mcp_servers.nowledge-mem]',
       'type = "streamableHttp"',
       'url = "https://nowledge-mem.example/remote-api/mcp/"',
@@ -921,6 +1101,9 @@ describe('coding agent launch preparation', () => {
       '',
       '[model_providers.unrelated]',
       'name = "should-not-be-copied"',
+      '',
+      '[auth]',
+      'access_token = "stale-native-token"',
       '',
     ].join('\n'))
     writeFileSync(codexScopedConfigPath, [
@@ -953,6 +1136,13 @@ describe('coding agent launch preparation', () => {
     const claudeMcp = JSON.parse(readFileSync(join(claude.rootDir, 'mcp.json'), 'utf-8'))
     expect(claudeSettings.enabledMcpjsonServers).toEqual(['nowledge-mem'])
     expect(claudeSettings.plugins).toMatchObject({ 'nowledge-mem@nowledge-community': true })
+    expect(claudeSettings).not.toHaveProperty('forceLoginMethod')
+    expect(claudeSettings).not.toHaveProperty('apiKeyHelper')
+    expect(claudeSettings.env.SAFE_USER_SETTING).toBe('preserved')
+    expect(claudeSettings.env).not.toHaveProperty('CLAUDE_CODE_OAUTH_TOKEN')
+    expect(claudeSettings.env).not.toHaveProperty('ANTHROPIC_AUTH_TOKEN')
+    expect(claudeSettings.env.ANTHROPIC_API_KEY).toMatch(/^hwui_/)
+    expect(claudeSettings.env.ANTHROPIC_BASE_URL).toMatch(/^http:\/\/127\.0\.0\.1:/)
     expect(claudeMcp.mcpServers['nowledge-mem']).toMatchObject({
       type: 'http',
       url: 'https://nowledge-mem.example/remote-api/mcp/',
@@ -971,6 +1161,11 @@ describe('coding agent launch preparation', () => {
     expect(codexConfig.match(/^\[mcp_servers\.nowledge-mem\.http_headers\]$/gm)).toHaveLength(1)
     expect(codexConfig).toContain('url = "https://nowledge-mem.scoped-latest.example/remote-api/mcp/"')
     expect(codexConfig).toContain('APP = "codex-scoped-latest"')
+    expect(codexConfig).not.toContain('preferred_auth_method')
+    expect(codexConfig).not.toContain('forced_login_method')
+    expect(codexConfig).not.toContain('chatgpt_base_url')
+    expect(codexConfig).not.toContain('stale-native-token')
+    expect(codexConfig).not.toContain('[auth]')
     expect(codexConfig).not.toContain('APP = "codex"')
     expect(codexConfig).not.toContain('APP = "codex-scoped"')
     expect(codexConfig).not.toContain('command = "stale-managed"')
@@ -1298,7 +1493,10 @@ describe('coding agent launch preparation', () => {
     expect(config).toContain('HERMES_MCP_TOOLSET = "use"')
     expect(config).toContain('HERMES_WEB_UI_MANAGED_MCP = "1"')
 
-    expect(result.files.some(file => file.key === 'agents')).toBe(false)
+    expect(result.files.some(file => file.key === 'agents')).toBe(true)
+    const agents = readFileSync(join(result.rootDir, 'AGENTS.md'), 'utf-8')
+    expect(agents).toContain('Hermes Studio MCP usage')
+    expect(agents).toContain('# 输出格式规范')
 
     const catalog = JSON.parse(readFileSync(join(result.rootDir, 'codex-model-catalog.json'), 'utf-8'))
     expect(catalog.models.some((entry: any) => entry.slug === 'openai/gpt-oss-20b:free')).toBe(true)

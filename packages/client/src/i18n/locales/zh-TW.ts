@@ -2896,6 +2896,8 @@ export default {
     deleteSuccess: "刪除完成",
     deleteFailed: "刪除失敗",
     configFiles: "設定檔",
+    preference: "偏好",
+    configuration: "設定",
     profileScope: "設定",
     providerScope: "提供商",
     providerPlaceholder: "例如 custom:glm",

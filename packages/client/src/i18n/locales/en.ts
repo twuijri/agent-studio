@@ -2965,6 +2965,8 @@ export default {
     newVersionAvailable: "New version available",
     checkUpdateFailed: "Failed to check for update",
     configFiles: "Config files",
+    preference: "Preferences",
+    configuration: "Configuration",
     profileScope: "Profile",
     providerScope: "Provider",
     providerPlaceholder: "e.g. custom:glm",

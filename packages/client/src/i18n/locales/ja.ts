@@ -2454,6 +2454,8 @@ export default {
     deleteSuccess: "削除しました",
     deleteFailed: "削除に失敗しました",
     configFiles: "設定ファイル",
+    preference: "プリファレンス",
+    configuration: "構成",
     profileScope: "プロファイル",
     providerScope: "プロバイダー",
     providerPlaceholder: "例: custom:glm",
