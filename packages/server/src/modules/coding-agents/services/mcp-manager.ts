@@ -1,5 +1,5 @@
-import { Client, SSEClientTransport, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { parse as parseToml } from 'smol-toml'
 import {
   getCodingAgentManagedMcpServerConfigs,
@@ -10,8 +10,8 @@ import {
   type CodingAgentConfigScope,
 } from './index'
 import { setManagedMcpServerEnabled, setManagedMcpServerOverride } from './mcp-overrides'
-import { isolatedCodingAgentChildEnv } from './runtime/child-env'
-import { killOwnedProcessTree } from '../../studio/public/process-tree'
+import { getWebUiHome } from '../../studio/public/config'
+import { probeCodingAgentMcpConfig } from './mcp-runtime-isolation'
 
 const CODING_AGENT_IDS = new Set(['claude-code', 'codex', 'pi', 'grok'])
 const STUDIO_MANAGED_NAMES = new Set([
@@ -77,14 +77,6 @@ function normalizeConfig(value: unknown): Record<string, any> {
   if (isRecord(config.http_headers) && !isRecord(config.headers)) config.headers = config.http_headers
   delete config.http_headers
   return config
-}
-
-function stringRecord(value: unknown): Record<string, string> {
-  if (!isRecord(value)) return {}
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
-  )
 }
 
 function parseJsonDocument(content: string): { root: Record<string, any>; servers: Map<string, Record<string, any>> } {
@@ -277,6 +269,75 @@ async function writeServer(
   await writeCodingAgentConfigFile(id, configKey(id), content, scope)
 }
 
+function removeServerFromContent(id: string, content: string, name: string): string | null {
+  if (id === 'claude-code' || id === 'pi') {
+    const { root } = parseJsonDocument(content)
+    const persistedServers = isRecord(root.mcpServers) ? { ...root.mcpServers } : {}
+    if (!Object.prototype.hasOwnProperty.call(persistedServers, name)) return null
+    delete persistedServers[name]
+    root.mcpServers = persistedServers
+    return `${JSON.stringify(root, null, 2)}\n`
+  }
+
+  const { other, blocks } = splitTomlDocument(content)
+  if (!blocks.delete(name)) return null
+  const mcp = [...blocks.values()].join('\n\n')
+  return [other, mcp].filter(Boolean).join('\n\n').concat('\n')
+}
+
+async function pruneScopedServerCopies(id: string, name: string): Promise<number> {
+  const modelRoot = join(getWebUiHome(), 'coding-agent', 'model')
+  const fileName = id === 'claude-code' || id === 'pi' ? 'mcp.json' : 'config.toml'
+  const candidates: string[] = []
+
+  const directories = async (path: string) => {
+    try {
+      return (await readdir(path, { withFileTypes: true })).filter(entry => entry.isDirectory())
+    } catch {
+      return []
+    }
+  }
+  const visit = async (path: string): Promise<void> => {
+    let entries
+    try {
+      entries = await readdir(path, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const child = join(path, entry.name)
+      if (entry.isDirectory()) await visit(child)
+      else if (entry.isFile() && entry.name === fileName) candidates.push(child)
+    }
+  }
+
+  for (const profile of await directories(modelRoot)) {
+    for (const provider of await directories(join(modelRoot, profile.name))) {
+      await visit(join(modelRoot, profile.name, provider.name, id))
+    }
+  }
+
+  let pruned = 0
+  for (const path of candidates) {
+    let content
+    try {
+      content = await readFile(path, 'utf-8')
+    } catch {
+      continue
+    }
+    let updated
+    try {
+      updated = removeServerFromContent(id, content, name)
+    } catch {
+      continue
+    }
+    if (updated == null || updated === content) continue
+    await writeFile(path, updated, 'utf-8')
+    pruned += 1
+  }
+  return pruned
+}
+
 export async function listCodingAgentMcpServers(
   id: string,
   scope: CodingAgentConfigScope = {},
@@ -377,6 +438,7 @@ export async function removeCodingAgentMcpServer(
   }
   const current = await readServers(id, scope)
   await writeServer(id, current.content, name, null, scope)
+  await pruneScopedServerCopies(id, name)
   return { ok: true }
 }
 
@@ -396,44 +458,5 @@ export async function testCodingAgentMcpServer(
   if (!config) return { ok: false, error: `MCP server not found: ${name}` }
   if (config.enabled === false) return { ok: false, error: 'Enable the MCP server before testing it' }
 
-  const transportType = normalizeTransport(config)
-  const client = new Client({ name: 'hermes-studio-coding-agent-mcp-test', version: '1.0.0' })
-  let stdioTransport: StdioClientTransport | null = null
-  try {
-    const transport = transportType === 'sse'
-      ? new SSEClientTransport(new URL(String(config.url || '')), {
-          requestInit: { headers: stringRecord(config.headers) },
-        })
-      : transportType === 'http'
-        ? new StreamableHTTPClientTransport(new URL(String(config.url || '')), {
-            requestInit: { headers: stringRecord(config.headers) },
-          })
-        : (stdioTransport = new StdioClientTransport({
-          command: String(config.command || ''),
-          args: Array.isArray(config.args) ? config.args.map(String) : [],
-          env: isolatedCodingAgentChildEnv(stringRecord(config.env)),
-          stderr: 'ignore',
-        }))
-    await client.connect(transport, { timeout: 5_000 })
-    const result = await client.listTools(undefined, { timeout: 5_000, cacheMode: 'refresh' })
-    const toolDetails = result.tools.map(tool => ({
-      name: String(tool.name),
-      description: typeof tool.description === 'string' ? tool.description : '',
-      input_schema: isRecord(tool.inputSchema)
-        ? tool.inputSchema
-        : { type: 'object', properties: {} },
-    }))
-    return {
-      ok: true,
-      tools: toolDetails.map(tool => tool.name),
-      tool_details: toolDetails,
-    }
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
-  } finally {
-    if (process.platform === 'win32' && stdioTransport?.pid) {
-      killOwnedProcessTree(stdioTransport.pid, () => undefined)
-    }
-    await client.close().catch(() => undefined)
-  }
+  return probeCodingAgentMcpConfig(config)
 }
