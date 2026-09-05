@@ -590,6 +590,7 @@ export default {
       viewMessages: 'メッセージ送信',
       downloadTitle: 'スマートフォンで HStudio を使う',
       downloadDescription: '現在クローズドベータ中です。登録には登録コードが必要で、今後ソーシャルメディアで一部のコードを配布します。',
+      downloadPaidDescription: 'Hermes Studio App は正式にリリースされ、現在は有料でご利用いただけます。ご利用になるには、料金・購入ページで最適なプランを選び、購入手続きを完了してください。',
       downloadScan: 'スマートフォンでスキャン',
       downloadScanHint: 'Android 版をダウンロードできます',
       available: 'ダウンロード可能',
