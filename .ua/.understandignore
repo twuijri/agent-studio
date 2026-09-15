@@ -1,0 +1,147 @@
+# .understandignore — patterns for files/dirs to exclude from analysis
+# Syntax: same as .gitignore (globs, # comments, ! negation, trailing / for dirs)
+# Pilot scope: runtime contracts, composition, and chat entry points only.
+# This is development knowledge, not a full-codebase analysis.
+*
+!*/
+!/package.json
+!/ARCHITECTURE.md
+!packages/server/src/index.ts
+!packages/server/src/bootstrap/http.ts
+!packages/server/src/bootstrap/chat-agent-runtime-adapter.ts
+!packages/server/src/modules/studio/public/chat-agent-runtime.ts
+!packages/server/src/modules/studio/contracts/agents/runtime.ts
+!packages/server/src/modules/studio/contracts/agents/family.ts
+!packages/server/src/modules/studio/sockets/chat-run.ts
+!packages/server/src/modules/studio/routes/chat-run.ts
+!packages/server/src/modules/studio/controllers/chat-run.ts
+!packages/client/src/api/client.ts
+
+# Safety exclusions override all inclusions, including future changes.
+**/.env*
+**/*credentials*
+**/*secret*
+**/*.pem
+**/*.key
+**/*.db*
+**/*.sqlite*
+**/auth.json
+**/config.yaml
+.hermes/
+.hermes-web-ui/
+hermes_data/
+.ua/
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+coverage/
+test-results/
+playwright-report/
+# Lines below are suggestions — uncomment to activate.
+# Use ! prefix to force-include something excluded by defaults.
+#
+# Built-in defaults (always excluded unless negated):
+#   node_modules/, .git/, dist/, build/, obj/, *.lock, *.min.js, etc.
+#
+
+# --- From .gitignore (uncomment to exclude) ---
+
+# logs
+# npm-debug.log*
+# yarn-debug.log*
+# yarn-error.log*
+# pnpm-debug.log*
+# lerna-debug.log*
+# playwright-report
+# test-results
+# dist-ssr
+# *.py[cod]
+# server/dist
+# packages/server/dist
+# *.local
+# ROADMAP.md
+# pnpm-workspace.yaml
+# packages/server/data/
+# packages/server/node_modules/
+# .hermes-web-ui/
+# packages/desktop/dist/
+# packages/desktop/release/
+# packages/desktop/resources/
+# packages/desktop/resources/python/
+# packages/desktop/node_modules/
+# packages/*/.pio/
+# packages/*/*/.pio/
+# config.yaml
+# .env
+# hermes_data/
+# hermes-dependencies.md
+# .vscode/*
+# !.vscode/extensions.json
+# .DS_Store
+# *.suo
+# *.ntvs*
+# *.njsproj
+# *.sln
+# *.sw?
+# .superpowers/
+# CLAUDE.md
+# packages/client/src/**/*.js
+# .hermes/
+
+# --- Detected directories (uncomment to exclude) ---
+
+# docs/
+# scripts/
+# tests/
+
+# --- Test file patterns (uncomment to exclude) ---
+
+# JS / TS
+# *.test.*
+# *.spec.*
+# *.snap
+# C# / .NET
+# **/*Tests.cs
+# **/*Test.cs
+# **/*Fixture.cs
+# **/*.Tests.csproj
+# Java / Kotlin
+# **/src/test/**
+# **/*Test.java
+# **/*IT.java
+# **/*Spec.kt
+# Go
+# **/*_test.go
+# C++
+# **/*_test.cc
+# **/*_test.cpp
+# **/*_test.cxx
+# **/*Test.cc
+# **/*Test.cpp
+# **/*_unittest.cc
+# **/*_unittest.cpp
+# **/*_browsertest.cc
+# **/*_benchmark.cc
+# **/*Benchmark.cpp
+# Python
+# **/test_*.py
+# **/*_test.py
+# **/tests.py
+# **/conftest.py
+# Rust
+# **/tests.rs
+# **/test_*.rs
+# **/*_test.rs
+# **/bench_*.rs
+# **/*_bench.rs
+# Ruby
+# **/*_spec.rb
+# **/*_test.rb
+# **/test_*.rb
+# **/spec_helper.rb
+# **/test_helper.rb
+# **/rails_helper.rb
+# Swift
+# **/Tests/**/*.swift
+# **/Specs/**/*.swift

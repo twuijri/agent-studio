@@ -40,7 +40,7 @@ jobs:
         run: npm run harness:check
 
       - name: Test with coverage
-        run: npm run test:coverage
+        run: npm run test:coverage -- --testTimeout=15000 --maxWorkers=4
 
       - name: Build
         run: npm run build

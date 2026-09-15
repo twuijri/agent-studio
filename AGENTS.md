@@ -16,6 +16,7 @@ and keep this file small enough to fit into every task context.
 
 ## First Reads
 
+- `docs/KNOWLEDGE-WORKFLOW.md` - durable personal-fork decisions and scoped code knowledge. Reuse verified knowledge; do not repeat whole-repo analysis by default. Understand-Anything is an external developer aid, NEVER a Studio runtime dependency. Check graph freshness and current source before relying on it.
 - `DEVELOPMENT.md` - project commands, coding rules, test rules, and PR shape.
 - `ARCHITECTURE.md` - package boundaries, data ownership, and runtime flow.
 - `docs/harness/README.md` - how this repository is prepared for agent work.
