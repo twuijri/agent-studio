@@ -13,6 +13,11 @@ on:
         default: false
         required: false
         type: boolean
+      promote_latest:
+        description: Also promote the verified existing image to latest when verify_only is selected
+        default: false
+        required: false
+        type: boolean
 
 permissions:
   contents: read
@@ -121,3 +126,16 @@ jobs:
           if (!response.ok || (await response.json()).visibility !== 'private') throw new Error('Published package privacy could not be verified. Do not mark this release ready.');
           console.log('Verified: the published image package is private.');
           NODE
+      - name: Promote the tested image to latest
+        if: ${{ !inputs.verify_only || inputs.promote_latest }}
+        env:
+          IMAGE: ghcr.io/twuijri/agent-studio:sha-${{ steps.source.outputs.sha }}
+          LATEST: ghcr.io/twuijri/agent-studio:latest
+        run: |
+          expected_digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
+          docker tag "$IMAGE" "$LATEST"
+          docker push "$LATEST"
+          docker pull "$LATEST"
+          actual_digest=$(docker image inspect "$LATEST" --format '{{index .RepoDigests 0}}')
+          test "$actual_digest" = "$expected_digest"
+          printf 'Verified latest points to %s\n' "$actual_digest" >> "$GITHUB_STEP_SUMMARY"
