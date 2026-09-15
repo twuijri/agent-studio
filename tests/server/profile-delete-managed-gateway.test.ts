@@ -27,6 +27,7 @@ let fakeChildren: FakeChild[] = []
 
 vi.mock('../../packages/server/src/modules/hermes/services/runtime/process', () => ({
   execHermesWithBin: vi.fn().mockResolvedValue({ stdout: '', stderr: '' }),
+  resolveHermesBin: vi.fn(() => 'hermes'),
   spawnHermesWithBin: vi.fn(() => {
     const child = new FakeChild(20000 + fakeChildren.length)
     fakeChildren.push(child)

@@ -7,7 +7,7 @@ import { readAppConfig, type GatewayAutoStartConfig } from '../../../studio/publ
 import { logger } from '../../../studio/public/logging'
 import { getHermesBaseDir, getProfileDir, listProfileNamesFromDisk } from '../profiles/profile'
 import { parseGatewayStatusesFromProfileList } from '../profiles/profile-list-parser'
-import { execHermesWithBin } from '../runtime/process'
+import { execHermesWithBin, resolveHermesBin } from '../runtime/process'
 import { retireManagedGatewayForProfile, startGatewayRunManaged } from './runner'
 
 const execFileAsync = promisify(execFile)
@@ -39,10 +39,6 @@ const HERMES_SUBCOMMAND_PROFILE_NAMES = new Set([
   'mcp', 'sessions', 'insights', 'version', 'update', 'uninstall',
   'profile', 'plugins', 'honcho', 'acp',
 ])
-
-function resolveHermesBin(): string {
-  return process.env.HERMES_BIN?.trim() || 'hermes'
-}
 
 function isReservedProfileName(profile: string): boolean {
   const normalized = String(profile || '').trim().toLowerCase()

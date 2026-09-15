@@ -11,7 +11,7 @@ import { startGatewayRunManaged } from '../gateway/runner'
 import { getActiveProfileDir, getActiveProfileName, getProfileDir, listProfileNamesFromDisk } from '../profiles/profile'
 import { parseProfileListRuntimeInfo, type ProfileListRuntimeInfo } from '../profiles/profile-list-parser'
 import { probeHermesCliVersion } from './discovery'
-import { execHermesWithBin, spawnHermesWithBin } from './process'
+import { execHermesWithBin, resolveHermesBin, spawnHermesWithBin } from './process'
 
 const execFileAsync = promisify(execFile)
 
@@ -25,9 +25,6 @@ const isTermux = !!process.env.TERMUX_VERSION ||
  * 解析 Hermes CLI 二进制路径
  * 优先使用环境变量 HERMES_BIN，否则使用 PATH 中的 'hermes' 命令
  */
-function resolveHermesBin(): string {
-  return process.env.HERMES_BIN?.trim() || 'hermes'
-}
 
 async function waitForGatewayRunning(profileDir: string, timeoutMs = 15000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
