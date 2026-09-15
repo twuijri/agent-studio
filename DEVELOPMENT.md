@@ -50,6 +50,7 @@ npm run build
 - Add user-facing strings to all locale files.
 - Keep component styles scoped with SCSS unless the style is intentionally global.
 - Match existing Naive UI patterns and avoid adding a new UI library.
+- Follow [the content direction contract](docs/CONTENT-DIRECTION.md) for every new or changed user/agent text surface. Reuse `ContentText` and shared native-input props, classify technical values separately, and extend the adoption and browser tests. Locale direction alone is not sufficient for multilingual content.
 
 ## Server Rules
 
