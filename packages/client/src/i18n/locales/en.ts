@@ -1,4 +1,5 @@
 import { socialMessagesEn } from '../social-messages'
+import { incomingWebhooksEn } from '../incoming-webhooks'
 
 export default {
   dshPresets: {"sessionMode": "DSH mode", "selectMode": "Select an Agent preset", "sessionHint": "Applies only to this new session. Tools and session plugins follow the selected preset.", "title": "Agent presets", "unavailable": "Unable to load DSH Agent presets. Check the DSH installation and refresh.", "hint": "Defaults apply to new DSH sessions. Existing sessions keep their original preset.", "copy": "Duplicate", "view": "View", "setDefault": "Set as default", "default": "Default", "delete": "Delete", "deleteConfirm": "Delete preset “{name}” and its directory?", "identifier": "Identifier", "name": "Name", "idHint": "Use a unique identifier with lowercase letters, numbers and hyphens.", "empty": "No Agent presets", "copyTitle": "Duplicate preset: {name}", "create": "Create", "location": "Open folder"},
@@ -164,6 +165,7 @@ export default {
     "missingCommand": "Must include a non-empty command"
   },
   socialMessages: socialMessagesEn,
+  incomingWebhooks: incomingWebhooksEn,
   browser: {
     title: 'Browser', settings: 'Browser Settings', desktopOnly: 'The embedded browser is available only in Ekko Studio Desktop.', newTab: 'New Tab',
     back: 'Back', forward: 'Forward', reload: 'Reload', stop: 'Stop', addressPlaceholder: 'Search or enter an address',

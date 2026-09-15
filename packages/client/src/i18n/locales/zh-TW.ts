@@ -1,4 +1,5 @@
 import { socialMessagesZhTw } from '../social-messages'
+import { incomingWebhooksEn } from '../incoming-webhooks'
 
 export default {
   dshPresets: {"sessionMode": "DSH 模式", "selectMode": "選擇 Agent 預設", "sessionHint": "僅用於本次新工作階段，依所選預設載入工具與工作階段層級外掛。", "title": "Agent 預設", "unavailable": "無法載入 DSH Agent 預設，請檢查 DSH 安裝後重新整理。", "hint": "預設套用於新的 DSH 對話，既有對話保留原來的預設。", "copy": "複製", "view": "檢視", "setDefault": "設為預設", "default": "預設", "delete": "刪除", "deleteConfirm": "刪除預設「{name}」及其目錄？", "identifier": "識別碼", "name": "名稱", "idHint": "使用不重複的小寫字母、數字和連字號作為識別碼。", "empty": "尚無 Agent 預設", "copyTitle": "複製預設：{name}", "create": "建立", "location": "開啟目錄"},
@@ -164,6 +165,7 @@ export default {
     "missingCommand": "必須包含非空的 command"
   },
   socialMessages: socialMessagesZhTw,
+  incomingWebhooks: incomingWebhooksEn,
   browser: {
     title: '瀏覽器', settings: '瀏覽器設定', desktopOnly: '內建瀏覽器僅在 Ekko Studio 桌面版可用。', newTab: '新分頁',
     back: '上一頁', forward: '下一頁', reload: '重新整理', stop: '停止', addressPlaceholder: '搜尋或輸入網址',

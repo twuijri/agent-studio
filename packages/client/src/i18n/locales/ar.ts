@@ -1,4 +1,5 @@
 import { socialMessagesAr } from '../social-messages-locales'
+import { incomingWebhooksAr } from '../incoming-webhooks'
 
 export default {
   dshPresets: {"sessionMode": "وضع DSH", "selectMode": "اختر إعداد Agent مسبقًا", "sessionHint": "ينطبق على هذه الجلسة الجديدة فقط. تُحمّل الأدوات وإضافات الجلسة وفق الإعداد المحدد.", "title": "إعدادات Agent المسبقة", "unavailable": "تعذر تحميل إعدادات DSH Agent المسبقة. تحقق من تثبيت DSH ثم حدّث الصفحة.", "hint": "تُطبق الإعدادات الافتراضية على جلسات DSH الجديدة. تحتفظ الجلسات الحالية بإعداداتها الأصلية.", "copy": "نسخ", "view": "عرض", "setDefault": "تعيين كافتراضي", "default": "افتراضي", "delete": "حذف", "deleteConfirm": "حذف الإعداد «{name}» ومجلده؟", "identifier": "المعرّف", "name": "الاسم", "idHint": "استخدم معرّفًا فريدًا من أحرف لاتينية صغيرة وأرقام وشرطات.", "empty": "لا توجد إعدادات Agent مسبقة", "copyTitle": "نسخ الإعداد: {name}", "create": "إنشاء", "location": "فتح المجلد"},
@@ -164,6 +165,7 @@ export default {
     "missingCommand": "يجب تضمين command غير فارغ"
   },
   socialMessages: socialMessagesAr,
+  incomingWebhooks: incomingWebhooksAr,
   browser: {
     title: 'المتصفح', settings: 'إعدادات المتصفح', desktopOnly: 'المتصفح المدمج متوفر فقط في Ekko Studio Desktop.', newTab: 'تبويب جديد',
     back: 'رجوع', forward: 'تقدّم', reload: 'إعادة تحميل', stop: 'إيقاف', addressPlaceholder: 'ابحث أو أدخل عنوانًا',

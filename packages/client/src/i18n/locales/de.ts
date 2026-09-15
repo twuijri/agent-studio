@@ -1,4 +1,5 @@
 import { socialMessagesDe } from '../social-messages-locales'
+import { incomingWebhooksEn } from '../incoming-webhooks'
 
 export default {
   dshPresets: {"sessionMode": "DSH-Modus", "selectMode": "Agent-Voreinstellung wählen", "sessionHint": "Gilt nur für diese neue Sitzung. Werkzeuge und Sitzungsplugins folgen der gewählten Voreinstellung.", "title": "Agent-Vorlagen", "unavailable": "DSH-Agent-Vorlagen konnten nicht geladen werden. Prüfen Sie die DSH-Installation und aktualisieren Sie die Seite.", "hint": "Die Vorgabe gilt für neue DSH-Sitzungen. Bestehende Sitzungen behalten ihre Vorlage.", "copy": "Duplizieren", "view": "Anzeigen", "setDefault": "Als Standard setzen", "default": "Standard", "delete": "Löschen", "deleteConfirm": "Vorlage „{name}“ und ihr Verzeichnis löschen?", "identifier": "Kennung", "name": "Name", "idHint": "Verwenden Sie eine eindeutige Kennung aus Kleinbuchstaben, Ziffern und Bindestrichen.", "empty": "Keine Agent-Vorlagen", "copyTitle": "Vorlage duplizieren: {name}", "create": "Erstellen", "location": "Ordner öffnen"},
@@ -164,6 +165,7 @@ export default {
     "missingCommand": "Ein nicht leerer command ist erforderlich"
   },
   socialMessages: socialMessagesDe,
+  incomingWebhooks: incomingWebhooksEn,
   browser: {
     title: 'Browser', settings: 'Browser-Einstellungen', desktopOnly: 'Der integrierte Browser ist nur in Ekko Studio Desktop verfügbar.', newTab: 'Neuer Tab',
     back: 'Zurück', forward: 'Vor', reload: 'Neu laden', stop: 'Stopp', addressPlaceholder: 'Suchen oder Adresse eingeben',
