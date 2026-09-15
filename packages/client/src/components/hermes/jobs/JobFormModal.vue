@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { contentInputProps, technicalInputProps } from '@/utils/content-direction'
 import { ref, onMounted, computed } from 'vue'
 import { NModal, NForm, NFormItem, NInput, NButton, NSelect, NInputNumber, useMessage } from 'naive-ui'
 import { useJobsStore } from '@/stores/hermes/jobs'
@@ -336,6 +337,7 @@ function handleClose() {
       <NFormItem :label="t('jobs.name')" required>
         <NInput
           v-model:value="formData.name"
+          :input-props="contentInputProps"
           :placeholder="t('jobs.namePlaceholder')"
           maxlength="200"
           show-count
@@ -404,6 +406,7 @@ function handleClose() {
         <NInput
           data-testid="job-schedule-custom"
           v-model:value="formData.schedule"
+          :input-props="technicalInputProps"
           :placeholder="t('jobs.schedulePlaceholder')"
         />
       </NFormItem>
@@ -432,6 +435,7 @@ function handleClose() {
       <NFormItem :label="t('jobs.prompt')" required>
         <NInput
           v-model:value="formData.prompt"
+          :input-props="contentInputProps"
           type="textarea"
           :placeholder="t('jobs.promptPlaceholder')"
           :rows="4"

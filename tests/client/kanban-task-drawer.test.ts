@@ -104,7 +104,7 @@ vi.mock('naive-ui', () => ({
   NDrawerContent: defineComponent({
     name: 'NDrawerContent',
     props: { title: { type: String, required: false }, closable: { type: Boolean, required: false } },
-    template: '<div class="n-drawer-content-stub"><slot /></div>',
+    template: '<div class="n-drawer-content-stub"><header><slot name="header" /></header><slot /></div>',
   }),
   NButton: defineComponent({
     name: 'NButton',
@@ -131,7 +131,7 @@ vi.mock('naive-ui', () => ({
     name: 'NModal',
     props: { show: { type: Boolean, required: false }, title: { type: String, required: false } },
     emits: ['close'],
-    template: '<div v-if="show" class="n-modal-stub" :data-title="title"><slot /></div>',
+    template: '<div v-if="show" class="n-modal-stub"><header><slot name="header">{{ title }}</slot></header><slot /></div>',
   }),
   useDialog: () => ({
     warning: mockDialogWarning,
@@ -204,7 +204,8 @@ describe('KanbanTaskDrawer', () => {
 
     const modal = wrapper.find('.n-modal-stub')
     expect(modal.exists()).toBe(true)
-    expect(modal.attributes('data-title')).toBe('Ship kanban')
+    expect(modal.get('header').text()).toBe('Ship kanban')
+    expect(modal.get('header .content-text').attributes('dir')).toBe('auto')
 
     const history = wrapper.find('.history-message-list-stub')
     expect(history.exists()).toBe(true)

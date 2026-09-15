@@ -65,6 +65,14 @@ Use the smallest relevant check while iterating. Before a broad PR, run
 - Do not claim a task is merged, published, deployed, or tested without evidence for that exact state. Never overwrite another contributor's work or approve your own high-risk changes.
 - Work on task branches and submit PRs; only owner `twuijri` decides and performs merges into `main`. Assistants must not merge or enable auto-merge. Before owner review, verify the latest base/head, conflict-free integration, and passing checks; no textual conflict alone is not evidence of behavioral compatibility.
 
+## Content Direction Contract
+
+Read `docs/CONTENT-DIRECTION.md` before changing user/agent text or inputs. Use
+`ContentText` and shared `contentInputProps` / `technicalInputProps`; UI locale
+direction is not content direction. Keep the existing Markdown/code rendering.
+New surfaces must add adoption/regression coverage; do not weaken guards or
+assume they can classify every dynamic string. Owner review remains required.
+
 ## When The Agent Gets Stuck
 
 Improve the harness instead of repeating the same prompt. Add missing docs,

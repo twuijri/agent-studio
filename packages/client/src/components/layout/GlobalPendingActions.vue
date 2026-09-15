@@ -2,6 +2,8 @@
 import { h, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { NButton, NInput, useMessage, useNotification, type NotificationReactive } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import ContentText from '@/components/common/ContentText.vue'
+import { contentInputProps } from '@/utils/content-direction'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore, type PendingApproval, type PendingClarify } from '@/stores/hermes/chat'
 import { useGroupChatStore, type GroupPendingApproval, type GroupPendingClarify } from '@/stores/hermes/group-chat'
@@ -254,16 +256,17 @@ async function submitApproval(action: Extract<GlobalPendingAction, { kind: 'chat
 function clarifyContent(action: Extract<GlobalPendingAction, { kind: 'chat-clarify' | 'group-clarify' }>) {
   return h('div', { class: 'global-clarify-content' }, [
     interactionCountdown(action),
-    h('div', { class: 'global-clarify-question' }, action.pending.question),
+    h(ContentText, { as: 'div', class: 'global-clarify-question' }, { default: () => action.pending.question }),
     action.pending.choices?.length
       ? h('div', { class: 'global-clarify-choices' }, action.pending.choices.map(choice => h(NButton, {
           size: 'small', secondary: clarifyDrafts[action.key] !== choice,
           type: clarifyDrafts[action.key] === choice ? 'primary' : 'default',
           onClick: () => { clarifyDrafts[action.key] = choice },
-        }, { default: () => choice })))
+        }, { default: () => h(ContentText, null, { default: () => choice }) })))
       : null,
     h(NInput, {
       value: clarifyDrafts[action.key] || '',
+      inputProps: contentInputProps,
       placeholder: t('chat.clarifyPlaceholder'),
       'onUpdate:value': (value: string) => { clarifyDrafts[action.key] = value },
       onKeydown: (event: KeyboardEvent) => {

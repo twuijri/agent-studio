@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { contentInputProps, technicalInputProps } from '@/utils/content-direction'
 import { ref, computed, onMounted } from 'vue'
 import { NModal, NForm, NFormItem, NInput, NInputNumber, NSelect, NButton, NCheckbox, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -15,11 +16,6 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const message = useMessage()
 const kanbanStore = useKanbanStore()
-
-// Task text is written by people in whatever language they think in, while the
-// UI language is a separate choice. `dir="auto"` lets each field follow its own
-// first strong character, the same way the chat composer already does.
-const autoDirectionInputProps = { dir: 'auto' } as const
 
 const title = ref('')
 const body = ref('')
@@ -135,10 +131,10 @@ async function handleSubmit() {
   <NModal :show="true" preset="dialog" :title="t('kanban.createTask')" style="width: 480px;" @close="emit('close')">
     <NForm label-placement="top">
       <NFormItem :label="t('kanban.form.title')">
-        <NInput v-model:value="title" :input-props="autoDirectionInputProps" :placeholder="t('kanban.form.titlePlaceholder')" />
+        <NInput v-model:value="title" :input-props="contentInputProps" :placeholder="t('kanban.form.titlePlaceholder')" />
       </NFormItem>
       <NFormItem :label="t('kanban.form.body')">
-        <NInput v-model:value="body" type="textarea" :rows="3" :input-props="autoDirectionInputProps" :placeholder="t('kanban.form.bodyPlaceholder')" />
+        <NInput v-model:value="body" type="textarea" :rows="3" :input-props="contentInputProps" :placeholder="t('kanban.form.bodyPlaceholder')" />
       </NFormItem>
       <NFormItem :label="t('kanban.form.assignee')">
         <NSelect v-model:value="assignee" :options="assigneeOptions" :placeholder="t('kanban.form.selectAssignee')" clearable />
@@ -147,16 +143,16 @@ async function handleSubmit() {
         <NSelect v-model:value="priority" :options="priorityOptions" :placeholder="t('kanban.form.selectPriority')" clearable />
       </NFormItem>
       <NFormItem :label="t('kanban.form.tenant')">
-        <NInput v-model:value="tenant" :placeholder="t('kanban.form.tenantPlaceholder')" />
+        <NInput v-model:value="tenant" :input-props="technicalInputProps" :placeholder="t('kanban.form.tenantPlaceholder')" />
       </NFormItem>
       <NFormItem :label="t('kanban.form.workspace')">
         <NSelect v-model:value="workspaceKind" :options="workspaceOptions" />
       </NFormItem>
       <NFormItem v-if="workspaceKind !== 'scratch'" :label="t('kanban.form.workspacePath')">
-        <NInput v-model:value="workspacePath" :placeholder="t('kanban.form.workspacePathPlaceholder')" />
+        <NInput v-model:value="workspacePath" :input-props="technicalInputProps" :placeholder="t('kanban.form.workspacePathPlaceholder')" />
       </NFormItem>
       <NFormItem v-if="workspaceKind === 'worktree'" :label="t('kanban.form.branch')">
-        <NInput v-model:value="branch" :placeholder="t('kanban.form.branchPlaceholder')" />
+        <NInput v-model:value="branch" :input-props="technicalInputProps" :placeholder="t('kanban.form.branchPlaceholder')" />
       </NFormItem>
       <NFormItem :label="t('kanban.form.skills')">
         <NSelect
@@ -175,7 +171,7 @@ async function handleSubmit() {
       </div>
       <div class="advanced-grid">
         <NFormItem :label="t('kanban.form.maxRuntime')">
-          <NInput v-model:value="maxRuntime" :placeholder="t('kanban.form.maxRuntimePlaceholder')" />
+          <NInput v-model:value="maxRuntime" :input-props="technicalInputProps" :placeholder="t('kanban.form.maxRuntimePlaceholder')" />
         </NFormItem>
         <NFormItem :label="t('kanban.form.maxRetries')">
           <NInputNumber
