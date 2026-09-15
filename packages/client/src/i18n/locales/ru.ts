@@ -1,4 +1,5 @@
 import { socialMessagesRu } from '../social-messages-locales'
+import { incomingWebhooksEn } from '../incoming-webhooks'
 
 export default {
   dshPresets: {"sessionMode": "Режим DSH", "selectMode": "Выберите пресет Agent", "sessionHint": "Применяется только к новому сеансу. Инструменты и плагины сеанса загружаются согласно выбранному пресету.", "title": "Пресеты Agent", "unavailable": "Не удалось загрузить пресеты DSH Agent. Проверьте установку DSH и обновите страницу.", "hint": "Пресет по умолчанию применяется к новым сеансам DSH. Существующие сеансы сохраняют исходный пресет.", "copy": "Дублировать", "view": "Просмотр", "setDefault": "По умолчанию", "default": "По умолчанию", "delete": "Удалить", "deleteConfirm": "Удалить пресет «{name}» и его каталог?", "identifier": "Идентификатор", "name": "Название", "idHint": "Используйте уникальный идентификатор из строчных латинских букв, цифр и дефисов.", "empty": "Нет пресетов Agent", "copyTitle": "Дублировать пресет: {name}", "create": "Создать", "location": "Открыть папку"},
@@ -164,6 +165,7 @@ export default {
     "missingCommand": "Требуется непустой command"
   },
   socialMessages: socialMessagesRu,
+  incomingWebhooks: incomingWebhooksEn,
   browser: {
     title: 'Браузер', settings: 'Настройки браузера', desktopOnly: 'Встроенный браузер доступен только в Ekko Studio Desktop.', newTab: 'Новая вкладка',
     back: 'Назад', forward: 'Вперёд', reload: 'Обновить', stop: 'Остановить', addressPlaceholder: 'Поиск или адрес',

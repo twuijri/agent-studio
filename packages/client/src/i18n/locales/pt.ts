@@ -1,4 +1,5 @@
 import { socialMessagesPt } from '../social-messages-locales'
+import { incomingWebhooksEn } from '../incoming-webhooks'
 
 export default {
   dshPresets: {"sessionMode": "Modo DSH", "selectMode": "Selecionar uma predefinição de Agent", "sessionHint": "Aplica-se apenas a esta nova sessão. As ferramentas e os plugins de sessão seguem a predefinição selecionada.", "title": "Predefinições do Agent", "unavailable": "Não foi possível carregar as predefinições do DSH Agent. Verifique a instalação do DSH e atualize.", "hint": "O padrão aplica-se a novas sessões DSH. As sessões existentes mantêm a predefinição original.", "copy": "Duplicar", "view": "Ver", "setDefault": "Definir como padrão", "default": "Padrão", "delete": "Excluir", "deleteConfirm": "Excluir a predefinição “{name}” e seu diretório?", "identifier": "Identificador", "name": "Nome", "idHint": "Use um identificador único com letras minúsculas, números e hífens.", "empty": "Nenhuma predefinição do Agent", "copyTitle": "Duplicar predefinição: {name}", "create": "Criar", "location": "Abrir pasta"},
@@ -164,6 +165,7 @@ export default {
     "missingCommand": "É necessário incluir um command não vazio"
   },
   socialMessages: socialMessagesPt,
+  incomingWebhooks: incomingWebhooksEn,
   browser: {
     title: 'Navegador', settings: 'Configurações do navegador', desktopOnly: 'O navegador integrado está disponível apenas no Ekko Studio Desktop.', newTab: 'Nova aba',
     back: 'Voltar', forward: 'Avançar', reload: 'Recarregar', stop: 'Parar', addressPlaceholder: 'Pesquisar ou inserir endereço',

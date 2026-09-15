@@ -1,4 +1,5 @@
 import { socialMessagesEs } from '../social-messages-locales'
+import { incomingWebhooksEn } from '../incoming-webhooks'
 
 export default {
   dshPresets: {"sessionMode": "Modo DSH", "selectMode": "Seleccionar un ajuste de Agent", "sessionHint": "Solo se aplica a esta nueva sesión. Las herramientas y los plugins de sesión siguen el ajuste seleccionado.", "title": "Preajustes de Agent", "unavailable": "No se pudieron cargar los preajustes de DSH Agent. Comprueba la instalación de DSH y actualiza.", "hint": "El valor predeterminado se aplica a nuevas sesiones DSH. Las sesiones existentes conservan su preajuste.", "copy": "Duplicar", "view": "Ver", "setDefault": "Establecer por defecto", "default": "Predeterminado", "delete": "Eliminar", "deleteConfirm": "¿Eliminar el preajuste «{name}» y su directorio?", "identifier": "Identificador", "name": "Nombre", "idHint": "Usa un identificador único con minúsculas, números y guiones.", "empty": "No hay preajustes de Agent", "copyTitle": "Duplicar preajuste: {name}", "create": "Crear", "location": "Abrir carpeta"},
@@ -164,6 +165,7 @@ export default {
     "missingCommand": "Debe incluir un command no vacío"
   },
   socialMessages: socialMessagesEs,
+  incomingWebhooks: incomingWebhooksEn,
   browser: {
     title: 'Navegador', settings: 'Ajustes del navegador', desktopOnly: 'El navegador integrado solo está disponible en Ekko Studio Desktop.', newTab: 'Nueva pestaña',
     back: 'Atrás', forward: 'Adelante', reload: 'Recargar', stop: 'Detener', addressPlaceholder: 'Buscar o escribir una dirección',
