@@ -54,7 +54,7 @@ vi.mock('@/api/studio/workflow-socket', () => ({
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('naive-ui', async () => {
   const button = defineComponent({ name: 'NButton', emits: ['click'], template: '<button @click="$emit(\'click\')"><slot /></button>' })
-  const input = defineComponent({ name: 'NInput', props: ['value'], emits: ['update:value'], template: '<input :value="value" @input="$emit(\'update:value\', $event.target.value)" />' })
+  const input = defineComponent({ name: 'NInput', props: ['value', 'inputProps'], emits: ['update:value'], template: '<input v-bind="inputProps" :value="value" @input="$emit(\'update:value\', $event.target.value)" />' })
   return {
     NButton: button,
     NInput: input,
@@ -84,6 +84,22 @@ function notificationTitleText(entry: any): string {
 }
 
 describe('GlobalPendingActions', () => {
+  it('isolates Arabic and English clarification choices and the native answer field', async () => {
+    chatState.pendingClarifies = new Map([['session-b', {
+      sessionId: 'session-b', clarifyId: 'direction-question', question: 'أي مجلد نستخدم؟',
+      choices: ['المشروع الحالي', 'Another project'], countdownDeadline: Date.now() + 60_000,
+    }]])
+    const wrapper = mount(GlobalPendingActions)
+    await nextTick()
+    const content = await render(created[0].options.content)
+    expect(content.get('.global-clarify-question').attributes('dir')).toBe('auto')
+    const choices = content.findAll('.global-clarify-choices .content-text')
+    expect(choices.map(choice => choice.text())).toEqual(['المشروع الحالي', 'Another project'])
+    expect(choices.every(choice => choice.attributes('dir') === 'auto')).toBe(true)
+    expect(content.get('input').attributes('dir')).toBe('auto')
+    content.unmount()
+    wrapper.unmount()
+  })
   beforeEach(() => {
     created.splice(0)
     chatState.pendingApprovals = new Map()
