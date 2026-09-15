@@ -1,7 +1,8 @@
 {
-  "name": "hermes-web-ui",
+  "name": "agent-studio-personal",
+  "private": true,
   "version": "0.7.21",
-  "description": "Ekko Studio is a local-first AI workspace for multi-agent chat, coding, and visual workflows, available on desktop and the web.",
+  "description": "Agent Studio: a personal non-commercial fork of Ekko Studio for multi-agent chat, coding, and visual workflows.",
   "repository": {
     "type": "git",
     "url": "https://github.com/EKKOLearnAI/hermes-studio.git"
@@ -41,6 +42,9 @@
     "ekko-studio-mcp": "./bin/ekko-studio-mcp.mjs"
   },
   "scripts": {
+    "license:check": "node scripts/check-personal-license.mjs",
+    "prebuild": "npm run license:check",
+    "prepack": "npm run license:check",
     "start": "vite --host --port 8648",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "cross-env HERMES_WEB_UI_BACKEND_PORT=8647 vite --host --port 8649 --strictPort",
@@ -56,6 +60,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:personal": "node --test tests/personal/*.test.mjs",
     "test:pi-rpc-real": "cross-env PI_REAL_RPC_E2E=1 vitest run tests/server/pi-rpc-real.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",

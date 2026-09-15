@@ -31,6 +31,7 @@ import { profileRoutes } from '../modules/hermes/routes/profiles'
 import { skillRoutes } from '../modules/hermes/routes/skills'
 import { skillBundleRoutes } from '../modules/hermes/routes/skill-bundles'
 import { pluginRoutes } from '../modules/hermes/routes/plugins'
+import { incomingWebhookRoutes } from '../modules/hermes/routes/incoming-webhooks'
 import { memoryRoutes } from '../modules/hermes/routes/memory'
 import { modelRoutes } from '../modules/hermes/routes/models'
 import { providerRoutes } from '../modules/hermes/routes/providers'
@@ -117,6 +118,7 @@ export function registerRoutes(app: any, authMiddleware: Array<(ctx: Context, ne
   app.use(skillRoutes.routes())
   app.use(skillBundleRoutes.routes())
   app.use(pluginRoutes.routes())
+  app.use(incomingWebhookRoutes.routes())
   app.use(memoryRoutes.routes())
   app.use(modelRoutes.routes())
   app.use(providerRoutes.routes())

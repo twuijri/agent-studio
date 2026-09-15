@@ -1,4 +1,5 @@
 import type { Context } from 'koa'
+import { PERSONAL_FORK } from '../../studio/public/personal-fork'
 import {
   activateInstalledRuntimeVersion,
   activateDownloadedWebUiVersion,
@@ -77,6 +78,11 @@ export function restartWebUi(ctx: Context) {
 }
 
 export async function activateWebUi(ctx: Context) {
+  if (PERSONAL_FORK) {
+    ctx.status = 409
+    ctx.body = { error: 'manual_fork_update_required' }
+    return
+  }
   const body = ctx.request.body as { version?: unknown }
   const version = typeof body?.version === 'string' ? body.version : ''
   try {
@@ -114,6 +120,11 @@ export async function downloadRuntime(ctx: Context) {
 }
 
 export async function downloadWebUi(ctx: Context) {
+  if (PERSONAL_FORK) {
+    ctx.status = 409
+    ctx.body = { error: 'manual_fork_update_required' }
+    return
+  }
   const body = ctx.request.body as { version?: unknown; source?: unknown }
   const version = typeof body?.version === 'string' ? body.version : ''
   const source = parseDownloadSource(body?.source)

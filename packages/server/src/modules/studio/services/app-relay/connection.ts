@@ -1,4 +1,5 @@
 import { config } from '../../public/config'
+import { PERSONAL_FORK } from '../../public/personal-fork'
 import { getLanEndpointKind } from '../network/lan-discovery'
 import {
   createAppRelayDeviceSignature,
@@ -27,6 +28,7 @@ export function shouldReplaceExistingAppRelayHost(
 }
 
 export async function ensureAppRelayHostClient(requestedRoute?: AppRelayRoute): Promise<AppRelayClient | null> {
+  if (PERSONAL_FORK) return null
   const route = requestedRoute || await getAppRelayRoute()
   if (requestedRoute) await setAppRelayRoute(requestedRoute)
   const relayUrl = appRelayUrlForRoute(route)

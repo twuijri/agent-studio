@@ -38,6 +38,9 @@ it.each([
   const settings = JSON.stringify({ packages: hasUserAdapter ? ['npm:pi-mcp-adapter@2.32.1'] : [] })
   writeFileSync(settingsPath, settings)
   execution.run.mockImplementation(async (_command: string, args: string[]) => {
+    if (_command === 'which' || _command === 'where') {
+      return { stdout: `/test-bin/${args.at(-1)}\n`, stderr: '' }
+    }
     if (args.includes('--prefix')) {
       const adapterRoot = args[args.indexOf('--prefix') + 1]
       const adapter = join(adapterRoot, 'node_modules', 'pi-mcp-adapter', 'index.ts')

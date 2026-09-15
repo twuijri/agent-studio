@@ -8,6 +8,7 @@ import { t } from './desktop-i18n'
 import { isWindowsUpdaterLockError, pendingUpdateDirectories } from './updater-helpers'
 
 let initialized = false
+const PERSONAL_FORK = true
 let checking = false
 let downloadedUpdate: UpdateDownloadedEvent | null = null
 let tryingFallbackFeed = false
@@ -183,6 +184,7 @@ async function promptDownloadAvailableUpdate(info: UpdateInfo): Promise<void> {
 }
 
 export function initAutoUpdater(nextOptions: AutoUpdaterOptions = {}) {
+  if (PERSONAL_FORK) return
   options = { ...options, ...nextOptions }
   if (initialized) return
   initialized = true
@@ -226,6 +228,15 @@ export function initAutoUpdater(nextOptions: AutoUpdaterOptions = {}) {
 }
 
 export async function checkForDesktopUpdates(manual: boolean): Promise<void> {
+  if (PERSONAL_FORK) {
+    if (manual) await dialog.showMessageBox({
+      type: 'info', title: 'Agent Studio',
+      message: 'Updates are installed from your personal fork after review.',
+      detail: 'See docs/PERSONAL-FORK.md in the source checkout.',
+      buttons: [t('common.ok')],
+    })
+    return
+  }
   if (!app.isPackaged) {
     if (manual) {
       await dialog.showMessageBox({

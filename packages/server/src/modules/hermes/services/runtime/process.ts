@@ -76,8 +76,6 @@ export function resetHermesBinCache(): void {
   cachedBin = null
 }
 
-function bundledCliPythonForWindows(hermesBin: string): string | null {
-
 function comparableWindowsCommand(command: string): string {
   return normalizeWindowsCommandPath(command.trim()).replace(/\//g, '\\').toLowerCase()
 }

@@ -53,8 +53,8 @@ describe('server config', () => {
     expect(getLanAdvertiseUrl({ HERMES_LAN_ADVERTISE_URL: 'file:///tmp/studio' })).toBe('')
   })
 
-  it('enforces App entitlements by default and allows an explicit compatibility opt-out', () => {
-    expect(isAppEntitlementRequired({})).toBe(true)
+  it('uses local user authentication by default and supports explicit entitlement verification', () => {
+    expect(isAppEntitlementRequired({})).toBe(false)
     expect(isAppEntitlementRequired({ HERMES_APP_ENTITLEMENT_REQUIRED: 'true' })).toBe(true)
     expect(isAppEntitlementRequired({ HERMES_APP_ENTITLEMENT_REQUIRED: 'off' })).toBe(false)
   })

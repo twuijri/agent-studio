@@ -19,6 +19,7 @@ describe('MCU login controller', () => {
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
     vi.stubEnv('AUTH_JWT_SECRET', 'test-secret')
+    vi.stubEnv('HERMES_REMOTE_RELAY_URL', 'https://relay.example.com')
 
     const { DatabaseSync } = await import('node:sqlite')
     db = new DatabaseSync(':memory:')
@@ -188,7 +189,7 @@ describe('MCU login controller', () => {
   })
 
   it('uses the fixed remote relay when remote login is requested', async () => {
-    const remoteRelayUrl = 'https://api.ekkostudio.xyz'
+    const remoteRelayUrl = 'https://relay.example.com'
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })))
     startOutboundRelayClientMock.mockReturnValue({ start: vi.fn() })
     const { ctrl, users } = await loadModules()

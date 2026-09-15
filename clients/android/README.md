@@ -1,5 +1,10 @@
 # Hermes Studio for Android
 
+> Historical personal contribution restored into Agent Studio. The API contract
+> below predates the current server modules. Treat this client as experimental
+> until its HTTP/socket contract and device build are revalidated. Use the direct
+> web interface on mobile in the meantime. This is not the official paid App.
+
 A native Android client for Hermes Studio. It talks to the same HTTP API and
 Socket.IO namespaces the web UI uses, so it needs no server-side component of
 its own.

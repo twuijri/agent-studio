@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { io, type Socket } from 'socket.io-client'
 import { config } from '../../public/config'
+import { isOfficialStudioService } from '../../public/personal-fork'
 import { clearSessionMessages } from '../../repositories/session-store'
 import { getChatRunServer } from '../../public/chat-run'
 import { logger } from '../../public/logging'
@@ -2253,6 +2254,7 @@ function normalizeOutboundRelayConnectionId(options: StartOutboundRelayClientOpt
 
 export function startOutboundRelayClient(options: StartOutboundRelayClientOptions = {}): RelayClient | null {
   const relayUrl = (options.relayUrl ?? '').trim()
+  if (isOfficialStudioService(relayUrl)) return null
   if (!relayUrl) return null
   const connectionId = normalizeOutboundRelayConnectionId(options, relayUrl)
   const activeClient = activeClients.get(connectionId)

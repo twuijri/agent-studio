@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { io, type Socket } from 'socket.io-client'
 import { config } from '../../public/config'
+import { isOfficialStudioService } from '../../public/personal-fork'
 import {
   assignLegacyCloudAppConnectionUser,
   listAppConnections,
@@ -949,6 +950,8 @@ export class AppRelayClient {
 const activeAppRelayClients = new Map<string, AppRelayClient>()
 
 export function startAppRelayClient(options: StartAppRelayClientOptions): AppRelayClient | null {
+  // Agent Studio does not connect to the official mobile cloud service.
+  if (isOfficialStudioService(options.relayUrl)) return null
   const relayUrl = String(options.relayUrl || '').trim()
   const machineId = String(options.machineId || '').trim()
   // The stable machine id is derived from the exact PEM bytes. Preserve the

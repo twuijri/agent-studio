@@ -675,7 +675,7 @@ onUnmounted(() => {
                 <img src="/logo.png" alt="">
               </div>
               <div>
-                <span>Ekko Studio Mobile</span>
+                <span>Agent Studio Mobile</span>
                 <h3>{{ t('connections.app.downloadTitle') }}</h3>
               </div>
             </div>

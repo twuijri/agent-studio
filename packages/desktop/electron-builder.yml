@@ -1,14 +1,12 @@
-appId: com.hermeswebui.studio
-productName: Ekko Studio
+appId: us.i3u.agentstudio
+productName: Agent Studio
 copyright: Copyright © 2026
 
 directories:
   output: release
   buildResources: build
 
-publish:
-  provider: generic
-  url: https://download.ekkolearnai.com
+publish: null
 
 # Don't auto-prune our root node_modules; we curate `files` and `extraResources` ourselves.
 buildDependenciesFromSource: false
@@ -19,7 +17,7 @@ afterPack: "./scripts/verify-packaged-webui.mjs"
 files:
   - "dist/**/*"
   - "package.json"
-  - "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme,LICENSE,LICENSE.txt,license,*.d.ts}"
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme,*.d.ts}"
   - "!**/node_modules/.bin"
   - "!**/{.DS_Store,.git,.gitignore,.eslintrc*,.prettierrc*,*.map,tsconfig.json}"
 
@@ -42,6 +40,8 @@ extraResources:
     to: "webui"
     filter:
       - "package.json"
+      - "LICENSE"
+      - "NOTICE.personal.md"
       - "bin/**"
       - "dist/**"
       - "!packages/desktop/**"

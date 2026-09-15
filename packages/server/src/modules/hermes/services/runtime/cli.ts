@@ -21,11 +21,6 @@ const isTermux = !!process.env.TERMUX_VERSION ||
   (process.env.PREFIX || '').includes('/com.termux/') ||
   existsSync('/data/data/com.termux/files/usr')
 
-/**
- * 解析 Hermes CLI 二进制路径
- * 优先使用环境变量 HERMES_BIN，否则使用 PATH 中的 'hermes' 命令
- */
-
 async function waitForGatewayRunning(profileDir: string, timeoutMs = 15000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
