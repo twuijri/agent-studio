@@ -68,9 +68,8 @@ async function loadPdf(): Promise<void> {
     const previousLoadTask = loadTask
     loadTask = null
     try { await previousLoadTask?.destroy?.() } catch { /* replacing a stale load */ }
-    const previousDocument = documentProxy
+    if (currentGeneration !== generation) return
     documentProxy = null
-    try { await previousDocument?.destroy?.() } catch { /* replacing a stale document */ }
     const [pdfjs, workerModule] = await Promise.all([
       import('pdfjs-dist'),
       import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
@@ -84,9 +83,9 @@ async function loadPdf(): Promise<void> {
     })
     loadTask = task
     const loaded = await task.promise
-    if (loadTask === task) loadTask = null
+    // PDF.js 6 owns document/worker cleanup on the loading task, even after load.
     if (currentGeneration !== generation) {
-      await loaded.destroy()
+      await task.destroy()
       return
     }
     documentProxy = loaded
@@ -113,8 +112,7 @@ onMounted(loadPdf)
 onBeforeUnmount(() => {
   generation += 1
   renderTask?.cancel?.()
-  loadTask?.destroy?.()
-  void documentProxy?.destroy?.()
+  void loadTask?.destroy?.().catch(() => { /* component is already unmounted */ })
 })
 </script>
 
