@@ -16,6 +16,7 @@ and keep this file small enough to fit into every task context.
 
 ## First Reads
 
+- `docs/TEAM-RULES.md` - mandatory shared team/AI development policy. Explain the problem and plan before implementation; record each task under `docs/changes/`; isolate concurrent work; get owner approval before opening a PR, merging, publishing, or deploying. A request to write code alone does not authorize these external actions.
 - `docs/KNOWLEDGE-WORKFLOW.md` - durable personal-fork decisions and scoped code knowledge. Reuse verified knowledge; do not repeat whole-repo analysis by default. Understand-Anything is an external developer aid, NEVER a Studio runtime dependency. Check graph freshness and current source before relying on it.
 - `DEVELOPMENT.md` - project commands, coding rules, test rules, and PR shape.
 - `ARCHITECTURE.md` - package boundaries, data ownership, and runtime flow.
@@ -60,6 +61,9 @@ Use the smallest relevant check while iterating. Before a broad PR, run
 - Use structured APIs and argument arrays instead of shell string construction.
 - Add user-facing strings to every locale file.
 - Do not mix unrelated refactors into a bug fix.
+- Every task needs a maintained change record: human owner, branch, evidence, affected files, actual checks, limitations, and next step. Read only relevant prior records, not every historical note.
+- Do not claim a task is merged, published, deployed, or tested without evidence for that exact state. Never overwrite another contributor's work or approve your own high-risk changes.
+- Work on task branches and submit PRs; only owner `twuijri` decides and performs merges into `main`. Assistants must not merge or enable auto-merge. Before owner review, verify the latest base/head, conflict-free integration, and passing checks; no textual conflict alone is not evidence of behavioral compatibility.
 
 ## When The Agent Gets Stuck
 
