@@ -19,6 +19,10 @@ const mockGetDiagnostics = vi.hoisted(() => vi.fn())
 const mockReclaimTask = vi.hoisted(() => vi.fn())
 const mockReassignTask = vi.hoisted(() => vi.fn())
 const mockSpecifyTask = vi.hoisted(() => vi.fn())
+const mockPromoteTask = vi.hoisted(() => vi.fn())
+const mockScheduleTask = vi.hoisted(() => vi.fn())
+const mockRequestReview = vi.hoisted(() => vi.fn())
+const mockReopenReview = vi.hoisted(() => vi.fn())
 const mockRouterPush = vi.hoisted(() => vi.fn())
 const mockDialogWarning = vi.hoisted(() => vi.fn())
 const mockUseMessage = vi.hoisted(() => vi.fn(() => ({
@@ -83,6 +87,10 @@ vi.mock('@/stores/hermes/kanban', () => ({
     reclaimTask: mockReclaimTask,
     reassignTask: mockReassignTask,
     specifyTask: mockSpecifyTask,
+    promoteTask: mockPromoteTask,
+    scheduleTask: mockScheduleTask,
+    requestReview: mockRequestReview,
+    reopenReview: mockReopenReview,
   }),
 }))
 
@@ -549,5 +557,62 @@ describe('KanbanTaskDrawer', () => {
     await wrapper.findAll('.n-button-stub').find(node => node.text() === 'kanban.action.assign')?.trigger('click')
     await flushPromises()
     expect(mockAssignTask).toHaveBeenCalledWith('task-4', 'bob')
+  })
+
+  it('exposes the bridged manual transitions per status and passes the optional note', async () => {
+    const baseTask = {
+      title: 'Task',
+      body: null,
+      assignee: null,
+      priority: 1,
+      created_at: 100,
+      started_at: null,
+      completed_at: null,
+      tenant: null,
+      result: null,
+    }
+    const detail = (id: string, status: string) => ({ task: { ...baseTask, id, status }, latest_summary: null, comments: [], events: [], runs: [] })
+    mockPromoteTask.mockResolvedValue(undefined)
+    mockRequestReview.mockResolvedValue(undefined)
+    mockReopenReview.mockResolvedValue(undefined)
+
+    mockGetTask.mockResolvedValueOnce(detail('task-todo', 'todo'))
+    const wrapper = mount(KanbanTaskDrawer, { props: { taskId: 'task-todo' } })
+    await flushPromises()
+
+    const labels = () => wrapper.findAll('.n-button-stub').map(node => node.text())
+    expect(labels()).toContain('kanban.action.promote')
+    expect(labels()).toContain('kanban.action.schedule')
+    expect(labels()).not.toContain('kanban.action.requestReview')
+    expect(labels()).not.toContain('kanban.action.reopenReview')
+
+    await wrapper.find('.transition-group .n-input-stub').setValue('ready for work')
+    await wrapper.findAll('.n-button-stub').find(node => node.text() === 'kanban.action.promote')?.trigger('click')
+    await flushPromises()
+    expect(mockPromoteTask).toHaveBeenCalledWith('task-todo', 'ready for work')
+    expect(wrapper.emitted('updated')).toHaveLength(1)
+
+    mockGetTask.mockResolvedValueOnce(detail('task-ready', 'ready'))
+    await wrapper.setProps({ taskId: 'task-ready' })
+    await flushPromises()
+    expect(labels()).toContain('kanban.action.requestReview')
+    expect(labels()).not.toContain('kanban.action.promote')
+    await wrapper.findAll('.n-button-stub').find(node => node.text() === 'kanban.action.requestReview')?.trigger('click')
+    await flushPromises()
+    expect(mockRequestReview).toHaveBeenCalledWith('task-ready', undefined)
+
+    mockGetTask.mockResolvedValueOnce(detail('task-review', 'review'))
+    await wrapper.setProps({ taskId: 'task-review' })
+    await flushPromises()
+    expect(labels()).toContain('kanban.action.reopenReview')
+    expect(labels()).not.toContain('kanban.action.schedule')
+    await wrapper.findAll('.n-button-stub').find(node => node.text() === 'kanban.action.reopenReview')?.trigger('click')
+    await flushPromises()
+    expect(mockReopenReview).toHaveBeenCalledWith('task-review', undefined)
+
+    mockGetTask.mockResolvedValueOnce(detail('task-done', 'done'))
+    await wrapper.setProps({ taskId: 'task-done' })
+    await flushPromises()
+    expect(wrapper.find('.transition-group').exists()).toBe(false)
   })
 })

@@ -186,15 +186,29 @@ export default {
     deleteProfileTitle: 'Browserprofil löschen?', deleteProfileWarning: 'Verwaltete Daten werden in den Papierkorb verschoben. Benutzerdefinierte Ordner bleiben erhalten.', clearCache: 'Cache leeren', clearPermissionAudit: 'Berechtigungsprotokoll leeren', clearSiteData: 'Websitedaten löschen', clearSiteDataWarning: 'Löscht Anmeldungen, Cookies und lokalen Speicher des gewählten Profils.', dataCleared: 'Browserdaten gelöscht', loadFailed: 'Der eingebettete Browser konnte nicht gestartet werden',
   },
   kanban: {
+    dnd: {
+      dropNotAllowed: 'Hierher nicht verschiebbar',
+      resetLayout: 'Layout zurücksetzen',
+      layoutHint: 'Die Reihenfolge von Spalten und Karten wird nur in diesem Browser gespeichert und ändert nicht, was der Agent zuerst ausführt.',
+    },
     board: {
       defaultArchiveUnavailable: 'Das Standard-Kanban kann nicht archiviert werden',
     },
     action: {
       archive: 'Aufgabe archivieren',
       archiveConfirm: 'Diese abgeschlossene Aufgabe archivieren?',
+      promote: 'Auf Bereit setzen',
+      schedule: 'Einplanen',
+      requestReview: 'Review anfordern',
+      reopenReview: 'Review erneut öffnen',
+      transitionNote: 'Notiz (optional)',
     },
     message: {
       taskArchived: 'Aufgabe archiviert',
+      taskPromoted: 'Aufgabe auf Bereit gesetzt',
+      taskScheduled: 'Aufgabe eingeplant',
+      reviewRequested: 'Review angefordert',
+      reviewReopened: 'Review erneut geöffnet',
     },
   },
   // Login

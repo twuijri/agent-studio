@@ -186,15 +186,29 @@ export default {
     deleteProfileTitle: 'Supprimer le profil ?', deleteProfileWarning: 'Les données gérées seront placées dans la corbeille. Les dossiers personnalisés sont conservés.', clearCache: 'Vider le cache', clearPermissionAudit: 'Effacer le journal des autorisations', clearSiteData: 'Effacer les données des sites', clearSiteDataWarning: 'Efface les connexions, cookies et le stockage local du profil sélectionné.', dataCleared: 'Données du navigateur effacées', loadFailed: 'Impossible de démarrer le navigateur intégré',
   },
   kanban: {
+    dnd: {
+      dropNotAllowed: 'Déplacement impossible ici',
+      resetLayout: 'Réinitialiser la disposition',
+      layoutHint: 'L\'ordre des colonnes et des cartes est enregistré uniquement dans ce navigateur et ne change pas ce que l\'agent exécute en premier.',
+    },
     board: {
       defaultArchiveUnavailable: 'Le tableau par défaut ne peut pas être archivé',
     },
     action: {
       archive: 'Archiver la tâche',
       archiveConfirm: 'Archiver cette tâche terminée ?',
+      promote: 'Passer en Prêt',
+      schedule: 'Planifier',
+      requestReview: 'Demander une revue',
+      reopenReview: 'Rouvrir la revue',
+      transitionNote: 'Note (facultatif)',
     },
     message: {
       taskArchived: 'Tâche archivée',
+      taskPromoted: 'Tâche passée en prêt',
+      taskScheduled: 'Tâche planifiée',
+      reviewRequested: 'Revue demandée',
+      reviewReopened: 'Revue rouverte',
     },
   },
   // Login
