@@ -13,6 +13,8 @@ const sessionScrollPositions = new Map<string, MessageViewportScrollSnapshot>();
 import { ref, computed, nextTick, onBeforeUnmount, onMounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { NButton, NInput } from "naive-ui";
+import ContentText from "@/components/common/ContentText.vue";
+import { contentInputProps } from "@/utils/content-direction";
 import VirtualMessageList from "./VirtualMessageList.vue";
 import MessageItem from "./MessageItem.vue";
 import LiveReasoningStatus from "./LiveReasoningStatus.vue";
@@ -1018,7 +1020,7 @@ defineExpose({
             <PendingInteractionCountdown :deadline="visibleClarify.countdownDeadline" />
           </div>
           <div class="approval-float-title">{{ t("chat.clarifyTitle") }}</div>
-          <div class="approval-float-desc">{{ visibleClarify.question }}</div>
+          <ContentText as="div" class="approval-float-desc">{{ visibleClarify.question }}</ContentText>
           <div v-if="visibleClarify.choices && visibleClarify.choices.length" class="approval-float-actions">
             <NButton
               v-for="choice in visibleClarify.choices"
@@ -1027,7 +1029,7 @@ defineExpose({
               type="primary"
               @click="handleClarify(choice)"
             >
-              {{ choice }}
+              <ContentText>{{ choice }}</ContentText>
             </NButton>
             <NButton size="small" type="error" secondary @click="handleClarify('')">
               {{ t("chat.clarifyDismiss") }}
@@ -1036,6 +1038,7 @@ defineExpose({
           <div class="clarify-float-input-row">
             <NInput
               v-model:value="clarifyResponse"
+              :input-props="contentInputProps"
               size="small"
               :type="visibleClarify.responseMode === 'editor' ? 'textarea' : 'text'"
               :placeholder="t('chat.clarifyPlaceholder')"

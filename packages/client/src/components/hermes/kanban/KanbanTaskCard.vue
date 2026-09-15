@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ContentText from '@/components/common/ContentText.vue'
 import { computed } from 'vue'
 import { NTooltip } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -52,7 +53,7 @@ const priorityText = computed(() => {
         {{ priorityText }}
       </span>
     </div>
-    <div class="card-title" dir="auto">{{ task.title }}</div>
+    <ContentText as="div" class="card-title">{{ task.title }}</ContentText>
     <div class="card-footer">
       <NTooltip v-if="task.assignee" trigger="hover">
         <template #trigger>

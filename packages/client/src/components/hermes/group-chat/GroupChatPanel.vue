@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import DshSessionPresetSelect from "@/components/coding-agents/dsh/DshSessionPresetSelect.vue"
+import ContentText from '@/components/common/ContentText.vue'
+import { contentInputProps } from '@/utils/content-direction'
 import { ref, computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -2553,17 +2555,17 @@ function handleClarifyKeydown(event: KeyboardEvent) {
                                 <div class="approval-float-title">
                                     <span v-if="visibleClarify.agentName">@{{ visibleClarify.agentName }} · </span>{{ t('chat.clarifyTitle') }}
                                 </div>
-                                <div class="approval-float-desc">{{ visibleClarify.question }}</div>
+                                <ContentText as="div" class="approval-float-desc">{{ visibleClarify.question }}</ContentText>
                                 <div v-if="visibleClarify.choices?.length" class="approval-float-actions">
                                     <NButton v-for="choice in visibleClarify.choices" :key="choice" size="small" type="primary" @click="handleClarify(choice)">
-                                        {{ choice }}
+                                        <ContentText>{{ choice }}</ContentText>
                                     </NButton>
                                     <NButton size="small" type="error" secondary @click="handleClarify('')">
                                         {{ t('chat.clarifyDismiss') }}
                                     </NButton>
                                 </div>
                                 <div class="clarify-float-input-row">
-                                    <NInput v-model:value="clarifyResponse" size="small" :type="visibleClarify.responseMode === 'editor' ? 'textarea' : 'text'" :placeholder="t('chat.clarifyPlaceholder')" @keydown.enter="handleClarifyKeydown" />
+                                    <NInput v-model:value="clarifyResponse" :input-props="contentInputProps" size="small" :type="visibleClarify.responseMode === 'editor' ? 'textarea' : 'text'" :placeholder="t('chat.clarifyPlaceholder')" @keydown.enter="handleClarifyKeydown" />
                                     <NButton size="small" type="primary" :disabled="visibleClarify.responseMode !== 'editor' && !clarifyResponse.trim()" @click="handleClarify()">
                                         {{ t('chat.clarifySubmit') }}
                                     </NButton>
