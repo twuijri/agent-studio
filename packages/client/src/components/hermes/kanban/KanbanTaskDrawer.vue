@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ContentText from '@/components/common/ContentText.vue'
+import { contentInputProps } from '@/utils/content-direction'
 import { ref, computed, watch } from 'vue'
 import { NDrawer, NDrawerContent, NButton, NSelect, NInput, NSpin, NModal, useDialog, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -489,7 +491,8 @@ function handleNavigateTask(taskId: string) {
 
 <template>
   <NDrawer :show="!!taskId" :width="420" placement="right" @update:show="(v: boolean) => { if (!v) emit('close') }">
-    <NDrawerContent :title="detail?.task.title || ''" closable>
+    <NDrawerContent closable>
+      <template #header><ContentText>{{ detail?.task.title || '' }}</ContentText></template>
       <NSpin :show="loading">
         <template v-if="detail">
           <!-- Metadata -->
@@ -543,13 +546,13 @@ function handleNavigateTask(taskId: string) {
           <!-- Body -->
           <div v-if="detail.task.body" class="detail-section">
             <div class="section-title">{{ t('kanban.form.body') }}</div>
-            <div class="detail-body" dir="auto">{{ detail.task.body }}</div>
+            <ContentText as="div" class="detail-body">{{ detail.task.body }}</ContentText>
           </div>
 
           <!-- Result / Summary -->
           <div v-if="completionSummary" class="detail-section">
             <div class="section-title">{{ t('kanban.detail.result') }}</div>
-            <div class="result-summary" dir="auto" @click="openResultDetail">{{ completionSummary }}</div>
+            <ContentText as="div" class="result-summary" @click="openResultDetail">{{ completionSummary }}</ContentText>
           </div>
 
           <!-- Actions for active tasks and the terminal done-to-archived transition -->
@@ -565,7 +568,7 @@ function handleNavigateTask(taskId: string) {
                 </NButton>
               </template>
               <div v-else-if="canCompleteTask" class="complete-input">
-                <NInput v-model:value="completeSummary" size="small" :placeholder="t('kanban.action.completeSummary')" />
+                <NInput v-model:value="completeSummary" :input-props="contentInputProps" size="small" :placeholder="t('kanban.action.completeSummary')" />
                 <NButton size="small" type="primary" @click="handleComplete">{{ t('common.ok') }}</NButton>
                 <NButton size="small" @click="showCompleteInput = false; completeSummary = ''">{{ t('common.cancel') }}</NButton>
               </div>
@@ -575,7 +578,7 @@ function handleNavigateTask(taskId: string) {
               <template v-else-if="canBlockTask">
                 <NButton v-if="!showBlockInput" size="small" @click="showBlockInput = true">{{ t('kanban.action.block') }}</NButton>
                 <div v-else class="block-input">
-                  <NInput v-model:value="blockReason" size="small" :placeholder="t('kanban.action.blockReason')" />
+                  <NInput v-model:value="blockReason" :input-props="contentInputProps" size="small" :placeholder="t('kanban.action.blockReason')" />
                   <NButton size="small" type="primary" @click="handleBlock">{{ t('common.ok') }}</NButton>
                 </div>
               </template>
@@ -585,7 +588,7 @@ function handleNavigateTask(taskId: string) {
               <NButton size="small" :disabled="!assignProfile" @click="handleAssign">{{ t('kanban.action.assign') }}</NButton>
             </div>
             <div v-if="canReclaimTask || canReassignTask || canSpecifyTask" class="recovery-group">
-              <NInput v-model:value="recoveryReason" size="small" :placeholder="t('kanban.action.recoveryReason')" />
+              <NInput v-model:value="recoveryReason" :input-props="contentInputProps" size="small" :placeholder="t('kanban.action.recoveryReason')" />
               <NButton v-if="canReclaimTask" size="small" secondary @click="handleReclaim">{{ t('kanban.action.reclaim') }}</NButton>
               <NButton v-if="canReassignTask" size="small" secondary :disabled="!assignProfile" @click="handleReassign">{{ t('kanban.action.reassign') }}</NButton>
               <NButton v-if="canSpecifyTask" size="small" secondary @click="handleSpecify">{{ t('kanban.action.specify') }}</NButton>
@@ -609,7 +612,7 @@ function handleNavigateTask(taskId: string) {
               class="attachment-item"
               @click="handleAttachment(attachment)"
             >
-              <span class="attachment-name">{{ attachment.filename }}</span>
+              <ContentText technical class="attachment-name">{{ attachment.filename }}</ContentText>
               <span class="attachment-size">{{ formatSize(attachment.size) }}</span>
             </button>
           </div>
@@ -622,7 +625,7 @@ function handleNavigateTask(taskId: string) {
             </div>
             <div v-if="showSessions && sessionResults.length > 0" class="session-list">
               <div v-for="session in sessionResults" :key="session.id" class="session-item" @click="router.push({ name: 'hermes.chat', query: { session: session.id } })">
-                <div class="session-title" dir="auto">{{ session.title || session.id }}</div>
+                <ContentText as="div" class="session-title">{{ session.title || session.id }}</ContentText>
                 <div class="session-meta">
                   <span>{{ session.source }}</span>
                   <span>{{ session.model }}</span>
@@ -649,8 +652,8 @@ function handleNavigateTask(taskId: string) {
                 <span class="run-profile">{{ run.profile || '—' }}</span>
                 <span class="run-time">{{ formatTime(run.started_at) }}</span>
               </div>
-              <div v-if="run.summary" class="run-summary">{{ run.summary }}</div>
-              <div v-if="run.error" class="run-error">{{ run.error }}</div>
+              <ContentText as="div" v-if="run.summary" class="run-summary">{{ run.summary }}</ContentText>
+              <ContentText as="div" v-if="run.error" class="run-error">{{ run.error }}</ContentText>
             </div>
           </div>
 
@@ -659,16 +662,16 @@ function handleNavigateTask(taskId: string) {
             <div class="section-title">{{ t('kanban.detail.comments') }}</div>
             <div v-for="comment in detail.comments" :key="comment.id" class="comment-item">
               <div class="comment-header">
-                <span class="comment-author">{{ comment.author }}</span>
+                <ContentText class="comment-author">{{ comment.author }}</ContentText>
                 <span class="comment-time">{{ formatTime(comment.created_at) }}</span>
               </div>
-              <div class="comment-body">{{ comment.body }}</div>
+              <ContentText as="div" class="comment-body">{{ comment.body }}</ContentText>
             </div>
           </div>
           <div v-if="canMutateTask" class="detail-section">
             <div class="section-title">{{ t('kanban.detail.addComment') }}</div>
             <div class="comment-input">
-              <NInput v-model:value="commentBody" type="textarea" :rows="3" :placeholder="t('kanban.detail.commentPlaceholder')" />
+              <NInput v-model:value="commentBody" :input-props="contentInputProps" type="textarea" :rows="3" :placeholder="t('kanban.detail.commentPlaceholder')" />
               <NButton size="small" type="primary" :disabled="!commentBody.trim()" @click="handleAddComment">{{ t('common.add') }}</NButton>
             </div>
           </div>
@@ -679,8 +682,8 @@ function handleNavigateTask(taskId: string) {
               <NButton size="small" secondary :loading="taskLogLoading" @click="handleLoadLog">{{ t('kanban.action.loadLog') }}</NButton>
               <NButton size="small" secondary :loading="diagnosticsLoading" @click="handleLoadDiagnostics">{{ t('kanban.action.loadDiagnostics') }}</NButton>
             </div>
-            <pre v-if="taskLog !== null" class="log-output">{{ taskLog }}</pre>
-            <pre v-if="diagnostics !== null" class="log-output">{{ JSON.stringify(diagnostics, null, 2) }}</pre>
+            <ContentText as="pre" technical v-if="taskLog !== null" class="log-output">{{ taskLog }}</ContentText>
+            <ContentText as="pre" technical v-if="diagnostics !== null" class="log-output">{{ JSON.stringify(diagnostics, null, 2) }}</ContentText>
           </div>
 
           <!-- Events -->
@@ -697,7 +700,8 @@ function handleNavigateTask(taskId: string) {
   </NDrawer>
 
   <!-- Session messages modal (click result summary) -->
-  <NModal v-if="historySession" :show="showMessagesModal" preset="card" :title="detail?.task.title || ''" :style="{ width: '900px', maxWidth: 'calc(100vw - 48px)' }" @close="showMessagesModal = false">
+  <NModal v-if="historySession" :show="showMessagesModal" preset="card" :style="{ width: '900px', maxWidth: 'calc(100vw - 48px)' }" @close="showMessagesModal = false">
+    <template #header><ContentText>{{ detail?.task.title || '' }}</ContentText></template>
     <div class="messages-modal-body">
       <HistoryMessageList :session="historySession" scroll-scope="kanban" />
     </div>
@@ -706,11 +710,11 @@ function handleNavigateTask(taskId: string) {
   <NModal
     :show="showAttachmentPreview"
     preset="card"
-    :title="filesStore.previewFile?.name || ''"
     :style="{ width: 'min(1100px, calc(100vw - 48px))', height: 'min(820px, calc(100vh - 48px))' }"
     content-style="padding: 0; height: 100%; overflow: hidden;"
     @close="closeAttachmentPreview"
   >
+    <template #header><ContentText technical>{{ filesStore.previewFile?.name || '' }}</ContentText></template>
     <FilePreview v-if="filesStore.previewFile" :custom-close="closeAttachmentPreview" />
   </NModal>
 </template>

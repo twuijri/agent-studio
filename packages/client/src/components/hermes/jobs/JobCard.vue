@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ContentText from '@/components/common/ContentText.vue'
 import { computed, ref } from 'vue'
 import { NButton, NTooltip, useMessage } from 'naive-ui'
 import type { Job } from '@/api/hermes/jobs'
@@ -96,22 +97,22 @@ function handleCardClick(e: MouseEvent) {
 <template>
   <div class="job-card" :class="{ selected }" @click="handleCardClick">
     <div class="card-header">
-      <h3 class="job-name">{{ job.name }}</h3>
+      <ContentText as="h3" class="job-name">{{ job.name }}</ContentText>
       <span class="status-badge" :class="statusType">{{ statusLabel }}</span>
     </div>
 
     <div class="card-body">
       <div class="info-row">
         <span class="info-label">{{ t('jobs.info.schedule') }}</span>
-        <code class="info-value mono">{{ scheduleExpr }}</code>
+        <ContentText as="code" technical class="info-value mono">{{ scheduleExpr }}</ContentText>
       </div>
       <div class="info-row">
         <span class="info-label">{{ t('jobs.info.provider') }}</span>
-        <span class="info-value mono">{{ providerLabel }}</span>
+        <ContentText technical class="info-value mono">{{ providerLabel }}</ContentText>
       </div>
       <div class="info-row">
         <span class="info-label">{{ t('jobs.info.model') }}</span>
-        <span class="info-value mono">{{ modelLabel }}</span>
+        <ContentText technical class="info-value mono">{{ modelLabel }}</ContentText>
       </div>
       <div class="info-row">
         <span class="info-label">{{ t('jobs.info.lastRun') }}</span>
