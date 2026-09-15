@@ -35,7 +35,6 @@ function componentStyles(component: string): string[] {
   const source = readFileSync(component, 'utf8')
   return parse(source, { filename: component }).descriptor.styles.map(style => style.content)
 }
-
 describe('client components use direction-aware CSS', () => {
   const components = collectComponents(CLIENT_ROOT)
 
