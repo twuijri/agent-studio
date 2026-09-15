@@ -2,6 +2,10 @@
 
 This document defines project-level development rules for Ekko Studio. It is tool-agnostic and applies to all contributors and coding agents.
 
+For this personal fork, read [the shared team policy](docs/TEAM-RULES.md) first.
+It governs approvals, branches, change records, and publishing, taking precedence
+over inherited upstream contribution defaults below. No automatic upstream PRs.
+
 ## Commands
 
 ```bash
