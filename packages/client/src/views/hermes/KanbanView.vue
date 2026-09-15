@@ -10,6 +10,7 @@ import KanbanCreateForm from '@/components/hermes/kanban/KanbanCreateForm.vue'
 import { DEFAULT_KANBAN_BOARD, useKanbanStore } from '@/stores/hermes/kanban'
 import { useProfilesStore } from '@/stores/hermes/profiles'
 import { withDefaultAssignee } from '@/utils/hermes/kanban-assignees'
+import { contentInputProps, technicalInputProps } from '@/utils/content-direction'
 import { KANBAN_BOARD_STATUSES, resolveKanbanTransition, type KanbanTransitionAction } from '@/utils/hermes/kanban-board'
 import type { KanbanTask, KanbanTaskStatus } from '@/api/hermes/kanban'
 import type { ProfileAvatar } from '@/api/hermes/profiles'
@@ -504,6 +505,7 @@ async function handleDispatch() {
       <div
         class="kanban-board"
         :class="{ filtered: isFiltered, dragging: draggingStatus !== null }"
+        :data-busy="transitionBusy ? 'true' : 'false'"
         data-testid="kanban-board"
         @wheel="handleBoardWheel"
       >
@@ -549,6 +551,7 @@ async function handleDispatch() {
       <div class="board-form">
         <NInput
           v-model:value="dropReason"
+          :input-props="contentInputProps"
           :placeholder="t('kanban.action.blockReason')"
           data-testid="kanban-drop-reason"
           @keyup.enter="confirmPendingDrop"
@@ -565,8 +568,8 @@ async function handleDispatch() {
     <!-- Board management -->
     <NModal v-model:show="showCreateBoardForm" preset="dialog" :title="t('kanban.board.create')" style="width: 420px;">
       <div class="board-form">
-        <NInput v-model:value="newBoardSlug" :placeholder="t('kanban.board.slugPlaceholder')" />
-        <NInput v-model:value="newBoardName" :placeholder="t('kanban.board.namePlaceholder')" />
+        <NInput v-model:value="newBoardSlug" :input-props="technicalInputProps" :placeholder="t('kanban.board.slugPlaceholder')" />
+        <NInput v-model:value="newBoardName" :input-props="contentInputProps" :placeholder="t('kanban.board.namePlaceholder')" />
       </div>
       <template #action>
         <NButton @click="showCreateBoardForm = false">{{ t('common.cancel') }}</NButton>

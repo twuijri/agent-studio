@@ -139,6 +139,11 @@ async function scrollColumnToStart(page: Page, status: string) {
 }
 
 async function dragCardToColumn(page: Page, taskId: string, targetStatus: string) {
+  // Never start a drag while a previous transition is still refreshing the board,
+  // and let Sortable's 150ms reorder animation settle: it ignores a press on an
+  // item that is still animating.
+  await expect(page.getByTestId('kanban-board')).toHaveAttribute('data-busy', 'false')
+  await page.waitForTimeout(250)
   const card = page.locator(`.task-slot[data-task-id="${taskId}"]`)
   const sourceStatus = await card.evaluate(element => element.closest('.kanban-column')!.getAttribute('data-status'))
   // Keep both the source card and the target column inside the viewport so the
@@ -153,8 +158,10 @@ async function dragCardToColumn(page: Page, taskId: string, targetStatus: string
   await page.mouse.down()
   // Sortable's fallback needs to pass its tolerance before the drag begins.
   await page.mouse.move(startX + 12, startY + 12, { steps: 4 })
+  await expect(page.getByTestId('kanban-board')).toHaveClass(/dragging/)
   await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + Math.min(60, targetBox.height / 2), { steps: 16 })
   await page.mouse.up()
+  await expect(page.getByTestId('kanban-board')).not.toHaveClass(/dragging/)
 }
 
 test('scrolls the board sideways, keeps columns scrollable, and opens cards', async ({ page }) => {

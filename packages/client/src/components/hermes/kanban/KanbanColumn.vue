@@ -27,23 +27,27 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-// Sortable mutates the bound list directly, so keep a local copy and resync it
-// from the store whenever no drag is in flight.
+// Sortable mutates the bound list directly, so keep a local copy. Store updates
+// that arrive mid-drag are deferred until the drag ends; a drop keeps its
+// optimistic position until the store answers (every drop triggers a refresh).
 const localTasks = ref<KanbanTask[]>([...props.tasks])
+let syncPending = false
 
 function syncFromProps() {
+  syncPending = false
   localTasks.value = [...props.tasks]
 }
 
 watch(() => props.tasks, () => {
-  if (!props.draggingStatus) syncFromProps()
+  if (props.draggingStatus) syncPending = true
+  else syncFromProps()
 })
 
 watch(() => props.draggingStatus, (dragging) => {
-  if (!dragging) syncFromProps()
+  if (!dragging && syncPending) syncFromProps()
 })
 
-const title = computed(() => t(`kanban.columns.${props.status}`, props.status))
+const columnLabel = computed(() => t(`kanban.columns.${props.status}`, props.status))
 const dropBlocked = computed(() => !!props.draggingStatus && !isKanbanDropTarget(props.draggingStatus, props.status))
 const dropOpen = computed(() => !!props.draggingStatus && props.draggingStatus !== props.status && !dropBlocked.value)
 
@@ -96,11 +100,11 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
   <section
     :class="['kanban-column', `status-${status}`, { 'drop-blocked': dropBlocked, 'drop-open': dropOpen }]"
     :data-status="status"
-    :aria-label="title"
+    :aria-label="columnLabel"
   >
     <header class="column-header">
       <span class="status-dot" aria-hidden="true" />
-      <span class="column-title">{{ title }}</span>
+      <span class="column-title">{{ columnLabel }}</span>
       <span class="column-count">{{ localTasks.length }}</span>
     </header>
     <div class="column-body">
