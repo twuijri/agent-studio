@@ -12,6 +12,10 @@ const mockCompleteTasks = vi.hoisted(() => vi.fn())
 const mockBlockTask = vi.hoisted(() => vi.fn())
 const mockUnblockTasks = vi.hoisted(() => vi.fn())
 const mockAssignTask = vi.hoisted(() => vi.fn())
+const mockPromoteTask = vi.hoisted(() => vi.fn())
+const mockScheduleTask = vi.hoisted(() => vi.fn())
+const mockRequestReview = vi.hoisted(() => vi.fn())
+const mockReopenReviewTasks = vi.hoisted(() => vi.fn())
 const mockAddComment = vi.hoisted(() => vi.fn())
 const mockLinkTasks = vi.hoisted(() => vi.fn())
 const mockUnlinkTasks = vi.hoisted(() => vi.fn())
@@ -62,6 +66,10 @@ vi.mock('../../packages/server/src/modules/hermes/services/kanban/kanban-service
   blockTask: mockBlockTask,
   unblockTasks: mockUnblockTasks,
   assignTask: mockAssignTask,
+  promoteTask: mockPromoteTask,
+  scheduleTask: mockScheduleTask,
+  requestReview: mockRequestReview,
+  reopenReviewTasks: mockReopenReviewTasks,
   addComment: mockAddComment,
   linkTasks: mockLinkTasks,
   unlinkTasks: mockUnlinkTasks,
@@ -673,6 +681,66 @@ describe('kanban controller', () => {
     const exactSearchCtx = ctx({ query: { task_id: 'task-1', profile: 'alice' } })
     await ctrl.searchSessions(exactSearchCtx)
     expect(exactSearchCtx.body.results[0]).toMatchObject({ id: 'session-2', title: 'Matched session' })
+  })
+
+  it('bridges promote, schedule, and review transitions with source-status guards', async () => {
+    const statusById: Record<string, string> = { 'task-todo': 'todo', 'task-ready': 'ready', 'task-review': 'review' }
+    mockGetTask.mockImplementation(async (id: string) => ({
+      task: { id, assignee: null, status: statusById[id] || 'ready' },
+      comments: [],
+      events: [],
+      runs: [],
+    }))
+    mockPromoteTask.mockResolvedValue(undefined)
+    mockScheduleTask.mockResolvedValue(undefined)
+    mockRequestReview.mockResolvedValue(undefined)
+    mockReopenReviewTasks.mockResolvedValue(undefined)
+
+    const promoteCtx = ctx({ query: { board: 'project-a' }, params: { id: 'task-todo' }, request: { body: { reason: 'manual' } } })
+    await ctrl.promote(promoteCtx)
+    expect(mockPromoteTask).toHaveBeenCalledWith('task-todo', { board: 'project-a', reason: 'manual' })
+    expect(promoteCtx.body).toEqual({ ok: true })
+
+    const scheduleCtx = ctx({ query: { board: 'project-a' }, params: { id: 'task-ready' }, request: { body: {} } })
+    await ctrl.schedule(scheduleCtx)
+    expect(mockScheduleTask).toHaveBeenCalledWith('task-ready', { board: 'project-a', reason: undefined })
+    expect(scheduleCtx.body).toEqual({ ok: true })
+
+    const reviewCtx = ctx({ query: { board: 'project-a' }, params: { id: 'task-ready' }, request: { body: { summary: 'implemented' } } })
+    await ctrl.requestReview(reviewCtx)
+    expect(mockRequestReview).toHaveBeenCalledWith('task-ready', { board: 'project-a', summary: 'implemented' })
+    expect(reviewCtx.body).toEqual({ ok: true })
+
+    const reopenCtx = ctx({ query: { board: 'project-a' }, params: { id: 'task-review' }, request: { body: { reason: 'needs tests' } } })
+    await ctrl.reopenReview(reopenCtx)
+    expect(mockReopenReviewTasks).toHaveBeenCalledWith(['task-review'], { board: 'project-a', reason: 'needs tests' })
+    expect(reopenCtx.body).toEqual({ ok: true })
+
+    mockPromoteTask.mockClear()
+    const badPromote = ctx({ params: { id: 'task-ready' }, request: { body: {} } })
+    await ctrl.promote(badPromote)
+    expect(badPromote.status).toBe(409)
+    expect(badPromote.body).toEqual({ error: 'Cannot promote task "task-ready" from status "ready"' })
+    expect(mockPromoteTask).not.toHaveBeenCalled()
+
+    mockReopenReviewTasks.mockClear()
+    const badReopen = ctx({ params: { id: 'task-ready' }, request: { body: {} } })
+    await ctrl.reopenReview(badReopen)
+    expect(badReopen.status).toBe(409)
+    expect(badReopen.body).toEqual({ error: 'Cannot reopen review for task "task-ready" from status "ready"' })
+    expect(mockReopenReviewTasks).not.toHaveBeenCalled()
+
+    mockRequestReview.mockClear()
+    const badReview = ctx({ params: { id: 'task-review' }, request: { body: {} } })
+    await ctrl.requestReview(badReview)
+    expect(badReview.status).toBe(409)
+    expect(mockRequestReview).not.toHaveBeenCalled()
+
+    mockScheduleTask.mockClear()
+    const badBody = ctx({ params: { id: 'task-todo' }, request: { body: { reason: 5 } } })
+    await ctrl.schedule(badBody)
+    expect(badBody.status).toBe(400)
+    expect(mockScheduleTask).not.toHaveBeenCalled()
   })
 
   it('rejects invalid transitions before invoking mutating CLI commands', async () => {

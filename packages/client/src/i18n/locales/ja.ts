@@ -186,15 +186,29 @@ export default {
     deleteProfileTitle: 'プロファイルを削除しますか？', deleteProfileWarning: '管理対象データはゴミ箱へ移動します。カスタムディレクトリは残ります。', clearCache: 'キャッシュを消去', clearPermissionAudit: '権限ログを消去', clearSiteData: 'サイトデータを消去', clearSiteDataWarning: '選択したプロファイルのログイン、Cookie、ローカルストレージを消去します。', dataCleared: 'ブラウザーデータを消去しました', loadFailed: '内蔵ブラウザーを起動できませんでした',
   },
   kanban: {
+    dnd: {
+      dropNotAllowed: 'ここには移動できません',
+      resetLayout: 'レイアウトをリセット',
+      layoutHint: '列とカードの並び順はこのブラウザにのみ保存され、エージェントの実行順には影響しません。',
+    },
     board: {
       defaultArchiveUnavailable: 'デフォルトのカンバンはアーカイブできません',
     },
     action: {
       archive: 'タスクをアーカイブ',
       archiveConfirm: 'この完了済みタスクをアーカイブしますか？',
+      promote: '準備完了へ昇格',
+      schedule: 'スケジュール',
+      requestReview: 'レビューを依頼',
+      reopenReview: 'レビューを再開',
+      transitionNote: 'メモ（任意）',
     },
     message: {
       taskArchived: 'タスクをアーカイブしました',
+      taskPromoted: 'タスクを準備完了に昇格しました',
+      taskScheduled: 'タスクをスケジュールしました',
+      reviewRequested: 'レビューを依頼しました',
+      reviewReopened: 'レビューを再開しました',
     },
   },
   // ログイン

@@ -186,15 +186,29 @@ export default {
     deleteProfileTitle: 'Excluir perfil?', deleteProfileWarning: 'Dados gerenciados irão para a Lixeira. Diretórios personalizados serão mantidos.', clearCache: 'Limpar cache', clearPermissionAudit: 'Limpar registro de permissões', clearSiteData: 'Limpar dados de sites', clearSiteDataWarning: 'Remove logins, cookies e armazenamento local do perfil selecionado.', dataCleared: 'Dados do navegador limpos', loadFailed: 'Não foi possível iniciar o navegador integrado',
   },
   kanban: {
+    dnd: {
+      dropNotAllowed: 'Não é possível mover para cá',
+      resetLayout: 'Redefinir layout',
+      layoutHint: 'A ordem de colunas e cartões é salva apenas neste navegador e não muda o que o agente executa primeiro.',
+    },
     board: {
       defaultArchiveUnavailable: 'O quadro padrão não pode ser arquivado',
     },
     action: {
       archive: 'Arquivar tarefa',
       archiveConfirm: 'Arquivar esta tarefa concluída?',
+      promote: 'Promover para Pronto',
+      schedule: 'Agendar',
+      requestReview: 'Solicitar revisão',
+      reopenReview: 'Reabrir revisão',
+      transitionNote: 'Nota (opcional)',
     },
     message: {
       taskArchived: 'Tarefa arquivada',
+      taskPromoted: 'Tarefa promovida para pronto',
+      taskScheduled: 'Tarefa agendada',
+      reviewRequested: 'Revisão solicitada',
+      reviewReopened: 'Revisão reaberta',
     },
   },
   // Login

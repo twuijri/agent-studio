@@ -1,25 +1,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { NButton, NSelect, NSpin, NModal, NInput, NTooltip, useDialog, useMessage } from 'naive-ui'
-import { VueFlow, type Node } from '@vue-flow/core'
-import { Background } from '@vue-flow/background'
-import { Controls } from '@vue-flow/controls'
-import { MiniMap } from '@vue-flow/minimap'
+import { VueDraggable } from 'vue-draggable-plus'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import KanbanTaskCard from '@/components/hermes/kanban/KanbanTaskCard.vue'
+import KanbanColumn from '@/components/hermes/kanban/KanbanColumn.vue'
 import KanbanTaskDrawer from '@/components/hermes/kanban/KanbanTaskDrawer.vue'
 import KanbanCreateForm from '@/components/hermes/kanban/KanbanCreateForm.vue'
 import { DEFAULT_KANBAN_BOARD, useKanbanStore } from '@/stores/hermes/kanban'
 import { useProfilesStore } from '@/stores/hermes/profiles'
 import { withDefaultAssignee } from '@/utils/hermes/kanban-assignees'
+import { KANBAN_BOARD_STATUSES, resolveKanbanTransition, type KanbanTransitionAction } from '@/utils/hermes/kanban-board'
 import type { KanbanTask, KanbanTaskStatus } from '@/api/hermes/kanban'
 import type { ProfileAvatar } from '@/api/hermes/profiles'
-
-import '@vue-flow/core/dist/style.css'
-import '@vue-flow/core/dist/theme-default.css'
-import '@vue-flow/controls/dist/style.css'
-import '@vue-flow/minimap/dist/style.css'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -38,15 +31,29 @@ const boardActionLoading = ref(false)
 const refreshTimer = ref<ReturnType<typeof setInterval> | null>(null)
 const routeReady = ref(false)
 
-const boardStatuses: KanbanTaskStatus[] = ['triage', 'todo', 'scheduled', 'ready', 'running', 'blocked', 'review', 'done', 'archived']
-const kanbanCanvasViewport = { x: 24, y: 24, zoom: 0.92 }
-const kanbanColumnWidth = 320
-const kanbanColumnGap = 24
+const boardStatuses = KANBAN_BOARD_STATUSES
 
-interface KanbanCanvasNodeData {
-  status: KanbanTaskStatus
-  title: string
-  tasks: KanbanTask[]
+interface PendingDrop {
+  taskId: string
+  from: KanbanTaskStatus
+  to: KanbanTaskStatus
+  action: KanbanTransitionAction
+}
+
+const draggingStatus = ref<KanbanTaskStatus | null>(null)
+const transitionBusy = ref(false)
+const pendingDrop = ref<PendingDrop | null>(null)
+const dropReason = ref('')
+
+const TRANSITION_MESSAGE_KEY: Record<KanbanTransitionAction, string> = {
+  complete: 'kanban.message.taskCompleted',
+  block: 'kanban.message.taskBlocked',
+  unblock: 'kanban.message.taskUnblocked',
+  promote: 'kanban.message.taskPromoted',
+  schedule: 'kanban.message.taskScheduled',
+  requestReview: 'kanban.message.reviewRequested',
+  reopenReview: 'kanban.message.reviewReopened',
+  archive: 'kanban.message.taskArchived',
 }
 
 function firstQueryString(value: unknown): string | null {
@@ -96,41 +103,26 @@ const selectedBoardValue = computed({
 })
 
 const tasksByStatus = computed(() => {
-  const grouped: Record<string, typeof kanbanStore.tasks> = {}
+  const grouped: Record<string, KanbanTask[]> = {}
   for (const status of boardStatuses) {
-    grouped[status] = kanbanStore.tasks
-      .filter(t => t.status === status)
-      .sort((a, b) => b.created_at - a.created_at)
+    grouped[status] = kanbanStore.orderedTasksForStatus(status)
   }
   return grouped
 })
 
 const visibleBoardStatuses = computed(() => {
   const status = kanbanStore.filterStatus as KanbanTaskStatus | null
-  return status && boardStatuses.includes(status) ? [status] : boardStatuses
+  return status && boardStatuses.includes(status) ? [status] : kanbanStore.columnOrder
 })
 
-const kanbanCanvasNodes = computed<Node<KanbanCanvasNodeData>[]>(() => {
-  return visibleBoardStatuses.value.map((status, index) => ({
-    id: `kanban-status-${status}`,
-    type: 'status',
-    position: { x: index * (kanbanColumnWidth + kanbanColumnGap), y: 0 },
-    width: kanbanColumnWidth,
-    height: 'max(360px, calc(100cqh - 48px))',
-    draggable: false,
-    selectable: false,
-    connectable: false,
-    focusable: false,
-    style: { pointerEvents: 'all' },
-    data: {
-      status,
-      title: t(`kanban.columns.${status}`, status),
-      tasks: tasksByStatus.value[status],
-    },
-  }))
+// Sortable mutates the bound array, so the column order lives in a local copy
+// that is written back to the store (and the browser) after each drag.
+const columns = ref<KanbanTaskStatus[]>([...visibleBoardStatuses.value])
+watch(visibleBoardStatuses, (next) => {
+  columns.value = [...next]
 })
 
-const kanbanCanvasKey = computed(() => `${kanbanStore.selectedBoard}:${kanbanStore.filterStatus || 'all'}`)
+const isFiltered = computed(() => visibleBoardStatuses.value.length === 1)
 
 const visibleAssignees = computed(() => withDefaultAssignee(kanbanStore.assignees, kanbanStore.stats?.by_assignee || {}))
 
@@ -157,21 +149,6 @@ const filterAssigneeValue = computed({
   get: () => kanbanStore.filterAssignee || '',
   set: (v: string) => kanbanStore.setFilter('assignee', v || null),
 })
-
-function kanbanNodeColor(node: { data: KanbanCanvasNodeData }): string {
-  const colors: Record<KanbanTaskStatus, string> = {
-    triage: '#8b8f95',
-    todo: '#6f7782',
-    scheduled: '#667681',
-    ready: '#a66d23',
-    running: '#5b7f95',
-    blocked: '#b95d5d',
-    review: '#7b6f8b',
-    done: '#5f8b70',
-    archived: '#777b81',
-  }
-  return colors[node.data.status]
-}
 
 watch(() => route.query.board, async () => {
   if (!routeReady.value) return
@@ -226,6 +203,143 @@ async function handleStatusChipClick(status: KanbanTaskStatus | null) {
 
 async function handleTaskCreated() {
   await Promise.all([kanbanStore.fetchTasks(), kanbanStore.fetchStats(), kanbanStore.fetchBoards()])
+}
+
+// ─── Drag and drop ───────────────────────────────────────────────
+
+function handleDragStart(status: KanbanTaskStatus) {
+  draggingStatus.value = status
+}
+
+function handleDragEnd() {
+  draggingStatus.value = null
+}
+
+function handleColumnsReordered() {
+  if (isFiltered.value) return
+  kanbanStore.setColumnOrder([...columns.value])
+}
+
+function handleCardsReordered(status: KanbanTaskStatus, ids: string[]) {
+  kanbanStore.setCardOrder(status, ids)
+}
+
+function handleResetLayout() {
+  kanbanStore.resetLayout()
+}
+
+/** Puts every column back to what the server reports after a cancelled or failed move. */
+async function revertBoard() {
+  await kanbanStore.fetchTasks(true)
+}
+
+async function runTransition(taskId: string, action: KanbanTransitionAction, note?: string) {
+  transitionBusy.value = true
+  try {
+    switch (action) {
+      case 'complete':
+        await kanbanStore.completeTasks([taskId])
+        break
+      case 'block':
+        await kanbanStore.blockTask(taskId, note || '')
+        break
+      case 'unblock':
+        await kanbanStore.unblockTasks([taskId])
+        break
+      case 'promote':
+        await kanbanStore.promoteTask(taskId, note)
+        break
+      case 'schedule':
+        await kanbanStore.scheduleTask(taskId, note)
+        break
+      case 'requestReview':
+        await kanbanStore.requestReview(taskId, note)
+        break
+      case 'reopenReview':
+        await kanbanStore.reopenReview(taskId, note)
+        break
+      case 'archive':
+        await kanbanStore.archiveTasks([taskId])
+        break
+    }
+    message.success(t(TRANSITION_MESSAGE_KEY[action]))
+  } catch (err: any) {
+    message.error(err.message)
+    await revertBoard()
+  } finally {
+    transitionBusy.value = false
+  }
+}
+
+async function handleCardDropped(payload: { taskId: string; from: KanbanTaskStatus; to: KanbanTaskStatus }) {
+  const transition = resolveKanbanTransition(payload.from, payload.to)
+  if (!transition) {
+    await revertBoard()
+    return
+  }
+  const drop: PendingDrop = { ...payload, action: transition.action }
+  if (transition.requiresReason) {
+    dropReason.value = ''
+    pendingDrop.value = drop
+    return
+  }
+  if (transition.confirm) {
+    let decided = false
+    dialog.warning({
+      title: t('kanban.action.archive'),
+      content: t('kanban.action.archiveConfirm'),
+      positiveText: t('kanban.action.archive'),
+      negativeText: t('common.cancel'),
+      onPositiveClick: async () => {
+        decided = true
+        await runTransition(drop.taskId, drop.action)
+      },
+      onNegativeClick: async () => {
+        decided = true
+        await revertBoard()
+      },
+      onClose: async () => {
+        if (!decided) await revertBoard()
+      },
+    })
+    return
+  }
+  await runTransition(drop.taskId, drop.action)
+}
+
+async function confirmPendingDrop() {
+  const drop = pendingDrop.value
+  const reason = dropReason.value.trim()
+  if (!drop || !reason) return
+  pendingDrop.value = null
+  await runTransition(drop.taskId, drop.action, reason)
+}
+
+async function cancelPendingDrop() {
+  if (!pendingDrop.value) return
+  pendingDrop.value = null
+  dropReason.value = ''
+  await revertBoard()
+}
+
+const reasonModalVisible = computed({
+  get: () => pendingDrop.value !== null,
+  set: (visible: boolean) => {
+    if (!visible) void cancelPendingDrop()
+  },
+})
+
+// Vertical wheel over the board background scrolls the columns sideways so
+// mouse users can reach every column without a horizontal scrollbar.
+function handleBoardWheel(event: WheelEvent) {
+  if (event.deltaX !== 0 || event.deltaY === 0 || event.shiftKey) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('.task-list')) return
+  const board = event.currentTarget as HTMLElement
+  if (board.scrollWidth <= board.clientWidth) return
+  event.preventDefault()
+  const direction = document.documentElement.dir === 'rtl' ? -1 : 1
+  board.scrollLeft += event.deltaY * direction
 }
 
 async function handleCreateBoard() {
@@ -338,6 +452,14 @@ async function handleDispatch() {
           style="width: 170px;"
           @update:value="handleApplyFilter"
         />
+        <NTooltip v-if="kanbanStore.hasCustomLayout" trigger="hover">
+          <template #trigger>
+            <NButton size="small" tertiary class="reset-layout-button" @click="handleResetLayout">
+              {{ t('kanban.dnd.resetLayout') }}
+            </NButton>
+          </template>
+          {{ t('kanban.dnd.layoutHint') }}
+        </NTooltip>
         <NButton type="primary" size="small" @click="showCreateForm = true">
           <template #icon>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -379,50 +501,38 @@ async function handleDispatch() {
       class="kanban-board-spin"
       :show="kanbanStore.loading && kanbanStore.tasks.length === 0"
     >
-      <div class="kanban-canvas">
-        <VueFlow
-          :key="kanbanCanvasKey"
-          id="hermes-kanban"
-          :nodes="kanbanCanvasNodes"
-          :default-viewport="kanbanCanvasViewport"
-          :min-zoom="0.35"
-          :max-zoom="1.25"
-          :nodes-draggable="false"
-          :nodes-connectable="false"
-          :elements-selectable="false"
-          :zoom-on-double-click="false"
-          class="kanban-flow"
-          :class="{ filtered: visibleBoardStatuses.length === 1 }"
+      <div
+        class="kanban-board"
+        :class="{ filtered: isFiltered, dragging: draggingStatus !== null }"
+        data-testid="kanban-board"
+        @wheel="handleBoardWheel"
+      >
+        <VueDraggable
+          v-model="columns"
+          class="kanban-columns"
+          handle=".column-header"
+          :animation="150"
+          :force-fallback="true"
+          :fallback-tolerance="6"
+          :disabled="isFiltered || transitionBusy"
+          ghost-class="kanban-column-ghost"
+          @update="handleColumnsReordered"
         >
-          <template #node-status="{ data }">
-            <section
-              :class="['kanban-column', `status-${data.status}`]"
-              :data-status="data.status"
-            >
-              <header class="column-header">
-                <span class="status-dot" aria-hidden="true" />
-                <span class="column-title">{{ data.title }}</span>
-                <span class="column-count">{{ data.tasks.length }}</span>
-              </header>
-              <div class="task-list nodrag nopan nowheel">
-                <KanbanTaskCard
-                  v-for="task in data.tasks"
-                  :key="task.id"
-                  :task="task"
-                  :assignee-avatar="task.assignee ? profileAvatarByName[task.assignee] || null : null"
-                  @click="handleTaskClick(task.id)"
-                />
-                <div v-if="data.tasks.length === 0" class="column-empty">
-                  {{ t('kanban.noTasks') }}
-                </div>
-              </div>
-            </section>
-          </template>
-
-          <Background :gap="24" :size="1.2" color="var(--border-color)" />
-          <MiniMap pannable zoomable :node-color="kanbanNodeColor" />
-          <Controls />
-        </VueFlow>
+          <KanbanColumn
+            v-for="status in columns"
+            :key="status"
+            :status="status"
+            :tasks="tasksByStatus[status]"
+            :avatars="profileAvatarByName"
+            :dragging-status="draggingStatus"
+            :drag-disabled="transitionBusy"
+            @task-click="handleTaskClick"
+            @reorder="ids => handleCardsReordered(status, ids)"
+            @dropped="handleCardDropped"
+            @drag-start="handleDragStart"
+            @drag-end="handleDragEnd"
+          />
+        </VueDraggable>
       </div>
     </NSpin>
 
@@ -433,6 +543,24 @@ async function handleDispatch() {
       @updated="handleDrawerUpdated"
       @navigate="handleNavigateTask"
     />
+
+    <!-- Reason prompt for drops that Hermes requires a reason for (block) -->
+    <NModal v-model:show="reasonModalVisible" preset="dialog" :title="t('kanban.action.block')" style="width: 420px;">
+      <div class="board-form">
+        <NInput
+          v-model:value="dropReason"
+          :placeholder="t('kanban.action.blockReason')"
+          data-testid="kanban-drop-reason"
+          @keyup.enter="confirmPendingDrop"
+        />
+      </div>
+      <template #action>
+        <NButton @click="cancelPendingDrop">{{ t('common.cancel') }}</NButton>
+        <NButton type="primary" :disabled="!dropReason.trim()" :loading="transitionBusy" @click="confirmPendingDrop">
+          {{ t('common.ok') }}
+        </NButton>
+      </template>
+    </NModal>
 
     <!-- Board management -->
     <NModal v-model:show="showCreateBoardForm" preset="dialog" :title="t('kanban.board.create')" style="width: 420px;">
@@ -491,32 +619,8 @@ async function handleDispatch() {
   }
 }
 
-.stat-chip,
-.kanban-column {
-  --kanban-status-color: #7f858d;
-
-  &.triage,
-  &.status-triage { --kanban-status-color: #8b8f95; }
-  &.todo,
-  &.status-todo { --kanban-status-color: #6f7782; }
-  &.scheduled,
-  &.status-scheduled { --kanban-status-color: #667681; }
-  &.ready,
-  &.status-ready { --kanban-status-color: #a66d23; }
-  &.running,
-  &.status-running { --kanban-status-color: var(--accent-info); }
-  &.blocked,
-  &.status-blocked { --kanban-status-color: var(--error); }
-  &.review,
-  &.status-review { --kanban-status-color: #7b6f8b; }
-  &.done,
-  &.status-done { --kanban-status-color: var(--success); }
-  &.archived,
-  &.status-archived { --kanban-status-color: #777b81; }
-  &.total { --kanban-status-color: $text-muted; }
-}
-
 .stat-chip {
+  --kanban-status-color: #7f858d;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -531,6 +635,17 @@ async function handleDispatch() {
   font: inherit;
   line-height: inherit;
   white-space: nowrap;
+
+  &.triage { --kanban-status-color: #8b8f95; }
+  &.todo { --kanban-status-color: #6f7782; }
+  &.scheduled { --kanban-status-color: #667681; }
+  &.ready { --kanban-status-color: #a66d23; }
+  &.running { --kanban-status-color: var(--accent-info); }
+  &.blocked { --kanban-status-color: var(--error); }
+  &.review { --kanban-status-color: #7b6f8b; }
+  &.done { --kanban-status-color: var(--success); }
+  &.archived { --kanban-status-color: #777b81; }
+  &.total { --kanban-status-color: $text-muted; }
 
   &:hover,
   &.active {
@@ -561,15 +676,6 @@ async function handleDispatch() {
   color: $text-muted;
 }
 
-.kanban-canvas {
-  container-type: size;
-  position: relative;
-  flex: 1;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
 .kanban-board-spin {
   flex: 1;
   min-height: 0;
@@ -587,119 +693,35 @@ async function handleDispatch() {
   }
 }
 
-.column-header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 43px;
-  padding: 10px 11px;
-  border-bottom: 1px solid $border-light;
-  color: $text-primary;
-  font-weight: 600;
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--kanban-status-color);
-  flex-shrink: 0;
-}
-
-.column-title {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 12.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.column-count {
-  min-width: 22px;
-  margin-inline-start: auto;
-  padding: 2px 6px;
-  border: 1px solid $border-light;
-  border-radius: 999px;
-  color: $text-muted;
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 1.2;
-  text-align: center;
-}
-
-.kanban-flow {
-  width: 100%;
+.kanban-board {
+  --kanban-column-width: 300px;
+  flex: 1;
   height: 100%;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
   background: $bg-primary;
+  scrollbar-width: thin;
 
-  :deep(.vue-flow__node-status) {
-    border: 0;
-    padding: 0;
-    background: transparent;
-    box-shadow: none;
-    cursor: grab;
-  }
-
-  :deep(.vue-flow__node-status:active) {
-    cursor: grabbing;
-  }
-
-  :deep(.vue-flow__minimap) {
-    border: 1px solid $border-color;
-    border-radius: $radius-md;
-    background: $bg-card;
-  }
-
-  :deep(.vue-flow__controls) {
-    overflow: hidden;
-    border: 1px solid $border-color;
-    border-radius: $radius-md;
-    box-shadow: none;
-  }
-
-  :deep(.vue-flow__controls-button) {
-    border-bottom-color: $border-light;
-    background: $bg-card;
-    color: $text-primary;
+  &.filtered {
+    --kanban-column-width: min(520px, 100%);
   }
 }
 
-.kanban-column {
+.kanban-columns {
   display: flex;
-  flex-direction: column;
-  width: 100%;
-  min-width: 0;
+  align-items: stretch;
+  gap: 16px;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
   height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  border: 1px solid $border-light;
-  border-radius: $radius-md;
-  background: color-mix(in srgb, $bg-secondary 66%, $bg-card);
+  padding: 16px 20px;
 }
 
-.task-list {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 0;
-  padding: 9px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  touch-action: pan-y;
-}
-
-.column-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  min-height: 72px;
-  border: 1px dashed $border-light;
-  border-radius: $radius-sm;
-  font-size: 12px;
-  color: $text-muted;
+.kanban-column-ghost {
+  opacity: 0.4;
 }
 
 .board-form {
@@ -730,11 +752,18 @@ async function handleDispatch() {
     padding-inline: 12px;
   }
 
-  .kanban-flow {
-    :deep(.vue-flow__minimap) {
-      width: 112px;
-      height: 76px;
-    }
+  .kanban-board {
+    --kanban-column-width: min(280px, calc(100vw - 40px));
+    scroll-snap-type: x proximity;
+  }
+
+  .kanban-columns {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .kanban-columns > :deep(.kanban-column) {
+    scroll-snap-align: start;
   }
 }
 </style>
