@@ -1,0 +1,18 @@
+services:
+  agent-studio:
+    build: .
+    image: agent-studio:personal
+    ports:
+      - "127.0.0.1:6061:6060"
+    volumes:
+      - agent-studio-hermes:/home/agent/.hermes
+      - agent-studio-state:/home/agent/.hermes-web-ui
+    environment:
+      HERMES_WEB_UI_HOME: /home/agent/.hermes-web-ui
+      HERMES_WEBUI_STATE_DIR: /home/agent/.hermes-web-ui
+      HERMES_WEB_UI_DISABLE_UPDATE_CHECK: "1"
+      HERMES_LAN_ADVERTISE_URL: ${AGENT_STUDIO_PUBLIC_URL:-http://localhost:6061}
+    restart: unless-stopped
+volumes:
+  agent-studio-hermes:
+  agent-studio-state:

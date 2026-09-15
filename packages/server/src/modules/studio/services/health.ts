@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'fs'
 import { resolve } from 'path'
 import type { StudioHealthDependencies } from '../contracts/health'
+import { PERSONAL_FORK } from '../public/personal-fork'
 
 declare const __APP_VERSION__: string
 
@@ -34,6 +35,7 @@ function readPackageInfo(): PackageInfo | null {
 }
 
 function isUpdateCheckDisabled(): boolean {
+  if (PERSONAL_FORK) return true
   const raw = (process.env.HERMES_WEB_UI_DISABLE_UPDATE_CHECK || '').trim().toLowerCase()
   return raw === 'true' || raw === '1' || raw === 'on' || raw === 'yes'
 }

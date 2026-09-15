@@ -1,6 +1,8 @@
 const ANNOUNCEMENTS_URL = 'https://api.ekkostudio.xyz/api/studio/announcements'
+import { PERSONAL_FORK } from '../../public/personal-fork'
 
 export async function fetchStudioAnnouncements(localeInput: unknown): Promise<unknown> {
+  if (PERSONAL_FORK) return { ok: true, platform: 'desktop', list: [] }
   const locale = /^zh(?:[-_]|$)/i.test(String(localeInput || 'en')) ? 'zh-CN' : 'en'
   const url = new URL(ANNOUNCEMENTS_URL)
   url.searchParams.set('locale', locale)

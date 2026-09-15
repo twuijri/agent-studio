@@ -10,6 +10,11 @@ const serverOutDir = resolve(rootDir, 'dist/server')
 
 rmSync(serverOutDir, { recursive: true, force: true })
 mkdirSync(serverOutDir, { recursive: true })
+// Distribution must retain the upstream license and fork attribution.
+cpSync(resolve(rootDir, 'LICENSE'), resolve(rootDir, 'dist/LICENSE'))
+cpSync(resolve(rootDir, 'NOTICE.personal.md'), resolve(rootDir, 'dist/NOTICE.personal.md'))
+mkdirSync(resolve(rootDir, 'dist/client'), { recursive: true })
+cpSync(resolve(rootDir, 'LICENSE'), resolve(rootDir, 'dist/client/LICENSE'))
 
 await esbuild.build({
   entryPoints: [resolve(rootDir, 'packages/server/src/index.ts')],

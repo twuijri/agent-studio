@@ -1,5 +1,16 @@
 # Agent Map
 
+## Personal fork: Agent Studio — mandatory first read
+
+This is twuijri's personal, non-commercial fork. Read `docs/PERSONAL-FORK.md`.
+NEVER delete, rename, replace, or strip the root `LICENSE`, third-party licenses,
+or EKKOLearnAI attribution. Rebranding does not change ownership or licensing.
+NEVER disable the license guard to make a build or update pass. If upstream changes
+the license, stop that update for human review. Keep personal work private unless
+the owner explicitly asks to publish. Upstream PR instructions below do not
+authorize publishing this fork. All upstream updates must use a review branch;
+never replace this fork with the upstream npm package or desktop auto-updater.
+
 This file is a short map for coding agents. Keep detailed guidance in `docs/`
 and keep this file small enough to fit into every task context.
 

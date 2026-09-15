@@ -1667,7 +1667,7 @@ describe('coding agent launch preparation', () => {
     // Studio-owned parts are still rewritten, not inherited.
     expect(config).not.toContain('[model_providers.unrelated]')
     expect(config).not.toContain('stale-model')
-    expect(config).toContain('[mcp_servers.hermes-studio-api]')
+    expect(config).toContain('[mcp_servers.ekko-studio-api]')
 
     // Studio writes its own [features] flags, and TOML rejects a table
     // declared twice: the user's flags are merged into that one table.

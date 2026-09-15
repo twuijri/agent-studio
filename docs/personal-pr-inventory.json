@@ -1,0 +1,560 @@
+[
+  {
+    "headRefName": "feat/native-image-providers",
+    "mergeCommit": null,
+    "number": 3012,
+    "state": "OPEN",
+    "title": "feat: integrate Studio image routes with Hermes image providers",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/3012",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged contribution head; compatibility reviewed against current base."
+    }
+  },
+  {
+    "headRefName": "feat-incoming-webhooks-ui",
+    "mergeCommit": null,
+    "number": 2729,
+    "state": "OPEN",
+    "title": "feat(channels): manage Hermes incoming webhooks",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2729",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged contribution head; compatibility reviewed against current base."
+    }
+  },
+  {
+    "headRefName": "fix-provider-api-mode-autodetect",
+    "mergeCommit": null,
+    "number": 2727,
+    "state": "OPEN",
+    "title": "fix(models): allow automatic provider API mode",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2727",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged contribution head; compatibility reviewed against current base."
+    }
+  },
+  {
+    "headRefName": "feat-image-task-hints",
+    "mergeCommit": null,
+    "number": 2726,
+    "state": "OPEN",
+    "title": "fix(models): say which kind of model each image task expects",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2726",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged contribution head; compatibility reviewed against current base."
+    }
+  },
+  {
+    "headRefName": "fix-thinking-elapsed-origin",
+    "mergeCommit": null,
+    "number": 2693,
+    "state": "CLOSED",
+    "title": "fix(chat): count thinking time from the run, not from the page",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2693",
+    "integration": {
+      "status": "superseded-upstream",
+      "reason": "Replaced by upstream PR #2723 including clock-skew handling; author closed as landed."
+    }
+  },
+  {
+    "headRefName": "feat-image-model-settings",
+    "mergeCommit": {
+      "oid": "24ccfbe50d80acd9233033e55aed9b757ae12deb"
+    },
+    "number": 2691,
+    "state": "MERGED",
+    "title": "feat(models): choose the image generation and editing models",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2691",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "fix-context-length-retry",
+    "mergeCommit": null,
+    "number": 2652,
+    "state": "OPEN",
+    "title": "fix(chat): retry context length after lookup failure",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2652",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged contribution head; compatibility reviewed against current base."
+    }
+  },
+  {
+    "headRefName": "feat-bulk-session-archive",
+    "mergeCommit": null,
+    "number": 2651,
+    "state": "OPEN",
+    "title": "feat(chat): add bulk session archive actions",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2651",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged contribution head; compatibility reviewed against current base."
+    }
+  },
+  {
+    "headRefName": "fix-new-chat-stale-session",
+    "mergeCommit": {
+      "oid": "46f4d5ed68023e063953a47fc6b474d6e966c96b"
+    },
+    "number": 2650,
+    "state": "MERGED",
+    "title": "fix(chat): keep New Chat selected after stale session load",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2650",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "feat-steer-queued-message",
+    "mergeCommit": null,
+    "number": 2646,
+    "state": "OPEN",
+    "title": "feat(chat): steer, queue or interrupt a message sent while the agent works",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2646",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged contribution head; compatibility reviewed against current base."
+    }
+  },
+  {
+    "headRefName": "feat-fallback-providers",
+    "mergeCommit": {
+      "oid": "ec2b9e9ab546497b373db57dc08aa91c0ec3e33a"
+    },
+    "number": 2627,
+    "state": "MERGED",
+    "title": "feat(models): manage the fallback provider chain from the Web UI",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2627",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "fix-header-title-direction",
+    "mergeCommit": {
+      "oid": "6401d5b2bd8a23626ea9036af25541e0bcfa4b72"
+    },
+    "number": 2614,
+    "state": "MERGED",
+    "title": "fix(chat): let session titles and outlines find their own direction",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2614",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "fix-session-switch-scroll",
+    "mergeCommit": {
+      "oid": "5dd0b8fde4a92445c25331feabf2daea4b411bc2"
+    },
+    "number": 2606,
+    "state": "MERGED",
+    "title": "fix(chat): focus the composer when you switch sessions",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2606",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "feat-reasoning-slider-hint",
+    "mergeCommit": {
+      "oid": "b7f7837b5c6fff34a678a234fdb1afde539e90d7"
+    },
+    "number": 2605,
+    "state": "MERGED",
+    "title": "feat(chat): say how many reasoning effort levels the slider has",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2605",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "fix-upload-oversize-413",
+    "mergeCommit": {
+      "oid": "537ee643ae51527555c9c8f4aa1a318832e87449"
+    },
+    "number": 2604,
+    "state": "MERGED",
+    "title": "fix(upload): let an oversize upload read its own 413",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2604",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "fix-bridge-stub-fallback-model",
+    "mergeCommit": null,
+    "number": 2603,
+    "state": "CLOSED",
+    "title": "fix(tests): complete the bridge_runtime stub so main builds again",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2603",
+    "integration": {
+      "status": "superseded-upstream",
+      "reason": "Same test stub fix landed via PR #2607."
+    }
+  },
+  {
+    "headRefName": "fix-provider-test-no-catalog",
+    "mergeCommit": {
+      "oid": "a246da3422fb1386b15748848b2b697fdea40b5b"
+    },
+    "number": 2587,
+    "state": "MERGED",
+    "title": "fix(providers): no model catalog is not a failed connection",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2587",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "fix-traversal-segment-check",
+    "mergeCommit": {
+      "oid": "571a246d26686462f9d4f736d4cacf9ac3d7adc2"
+    },
+    "number": 2586,
+    "state": "MERGED",
+    "title": "fix(files): a name that begins with dots is not a traversal segment",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2586",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "feat-persist-provider-collapse",
+    "mergeCommit": {
+      "oid": "d596dfc3886ca12dda6f8e7bfdbccb9ec9320777"
+    },
+    "number": 2585,
+    "state": "MERGED",
+    "title": "fix(models): keep the provider groups you collapsed",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2585",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "feat-plugin-import",
+    "mergeCommit": null,
+    "number": 2554,
+    "state": "OPEN",
+    "title": "feat(plugins): install a user plugin from an uploaded archive",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2554",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged contribution head; compatibility reviewed against current base."
+    }
+  },
+  {
+    "headRefName": "fix-kanban-text-direction",
+    "mergeCommit": {
+      "oid": "626b4f5ce922b763a503f5636072fe0d3b0a8242"
+    },
+    "number": 2545,
+    "state": "MERGED",
+    "title": "fix(kanban): let task text pick its own direction",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2545",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "feat-event-outbox",
+    "mergeCommit": null,
+    "number": 2443,
+    "state": "CLOSED",
+    "title": "feat(events): durable outbound event outbox with signed webhook delivery",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2443",
+    "integration": {
+      "status": "superseded-upstream",
+      "reason": "Maintainer selected upstream PR #2452, already included; do not introduce a second webhook delivery system."
+    }
+  },
+  {
+    "headRefName": "fix-codex-config-sections",
+    "mergeCommit": null,
+    "number": 2417,
+    "state": "OPEN",
+    "title": "fix(coding-agents): keep user-owned tables when rewriting Codex config.toml",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2417",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Current upstream contains the behavior; merged the remaining regression coverage."
+    }
+  },
+  {
+    "headRefName": "fix-duplicate-guidance",
+    "mergeCommit": {
+      "oid": "c912de75b6613f3603b6f323e8ddc5370bb834fa"
+    },
+    "number": 2416,
+    "state": "MERGED",
+    "title": "fix(chat): stop sending the Studio guidance block twice",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2416",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "tts-format",
+    "mergeCommit": {
+      "oid": "9aaa829e937590e97711197c233aa46b371c609e"
+    },
+    "number": 2328,
+    "state": "MERGED",
+    "title": "fix(tts): accept speech providers that cannot return mp3",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2328",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "export-timeout",
+    "mergeCommit": {
+      "oid": "57809ab3b3724cb375449a200e5adcdef921ec08"
+    },
+    "number": 2310,
+    "state": "MERGED",
+    "title": "fix(profiles): give profile export and import a realistic time budget",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2310",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "clone-from-any-profile",
+    "mergeCommit": null,
+    "number": 2309,
+    "state": "OPEN",
+    "title": "feat(profiles): choose which profile a new profile clones from",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2309",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged contribution head; compatibility reviewed against current base."
+    }
+  },
+  {
+    "headRefName": "android-client",
+    "mergeCommit": null,
+    "number": 2307,
+    "state": "CLOSED",
+    "title": "feat(clients): add a native Android client for Hermes Studio",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2307",
+    "integration": {
+      "status": "restored-experimental-source",
+      "reason": "Historical native Android source restored; not a validated client for the current API."
+    }
+  },
+  {
+    "headRefName": "fix-hermes-cli-path",
+    "mergeCommit": null,
+    "number": 2304,
+    "state": "CLOSED",
+    "title": "fix(cli): find the Hermes CLI when PATH does not",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2304",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Ported CLI discovery fallback to current runtime/process module; modern Windows invocation preserved."
+    }
+  },
+  {
+    "headRefName": "fix-sidebar-profiles-label",
+    "mergeCommit": {
+      "oid": "b49b2fb3b542b3282da19507dff9570098a44bd8"
+    },
+    "number": 2303,
+    "state": "MERGED",
+    "title": "fix(i18n): the sidebar profile switcher is not a user list",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2303",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "rtl-auto-direction",
+    "mergeCommit": null,
+    "number": 2291,
+    "state": "CLOSED",
+    "title": "fix(chat): let message text find its own direction",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2291",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged history; current upstream direction-aware implementation preserved where equivalent."
+    }
+  },
+  {
+    "headRefName": "rtl-final-sweep",
+    "mergeCommit": null,
+    "number": 2288,
+    "state": "CLOSED",
+    "title": "feat(i18n): finish the direction-aware CSS conversion",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2288",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged history; current upstream direction-aware implementation preserved where equivalent."
+    }
+  },
+  {
+    "headRefName": "rtl-views",
+    "mergeCommit": null,
+    "number": 2287,
+    "state": "CLOSED",
+    "title": "feat(i18n): use direction-aware CSS for the page views",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2287",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged history; current upstream direction-aware implementation preserved where equivalent."
+    }
+  },
+  {
+    "headRefName": "rtl-feature-panels",
+    "mergeCommit": null,
+    "number": 2286,
+    "state": "CLOSED",
+    "title": "feat(i18n): use direction-aware CSS for the feature panels",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2286",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged history; current upstream direction-aware implementation preserved where equivalent."
+    }
+  },
+  {
+    "headRefName": "rtl-group-chat",
+    "mergeCommit": null,
+    "number": 2285,
+    "state": "CLOSED",
+    "title": "feat(i18n): use direction-aware CSS for group chat",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2285",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged history; current upstream direction-aware implementation preserved where equivalent."
+    }
+  },
+  {
+    "headRefName": "rtl-sidebar-nav",
+    "mergeCommit": null,
+    "number": 2284,
+    "state": "CLOSED",
+    "title": "feat(i18n): use direction-aware CSS for layout and navigation",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2284",
+    "integration": {
+      "status": "merged-personal",
+      "reason": "Merged history; current upstream direction-aware implementation preserved where equivalent."
+    }
+  },
+  {
+    "headRefName": "rtl-chat-layout",
+    "mergeCommit": {
+      "oid": "e25c157c2ae0a3c52431b31ba1043532acd34a09"
+    },
+    "number": 2273,
+    "state": "MERGED",
+    "title": "feat(i18n): use direction-aware CSS for the chat surface",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2273",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "rtl-naive-components",
+    "mergeCommit": {
+      "oid": "95ea771242fba6071d92b1acf09533fbfa65b0a9"
+    },
+    "number": 2271,
+    "state": "MERGED",
+    "title": "feat(i18n): mirror Naive UI components for right-to-left locales",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2271",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "rtl-foundation",
+    "mergeCommit": {
+      "oid": "55a81ac2fc1f163f3a48a13536ac8bfcf29259e5"
+    },
+    "number": 2270,
+    "state": "MERGED",
+    "title": "feat(i18n): drive document direction from the active locale",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2270",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "add-arabic-locale",
+    "mergeCommit": {
+      "oid": "e133158c626b5d054b7597409bfe5c8977daeb17"
+    },
+    "number": 2269,
+    "state": "MERGED",
+    "title": "feat(i18n): add Arabic (ar) locale",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2269",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "edge-tts-voice-entry",
+    "mergeCommit": {
+      "oid": "9db2f5d40bdd2ecc94b6cc017d9f5f7486546c1b"
+    },
+    "number": 2267,
+    "state": "MERGED",
+    "title": "feat(voice): allow any Edge TTS voice and offer Arabic entries",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2267",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "custom-tts-voices-capability",
+    "mergeCommit": {
+      "oid": "cc53aced4d9fe7bc2f896ab862a1bbb4d341ace9"
+    },
+    "number": 2265,
+    "state": "MERGED",
+    "title": "fix(voice): declare the voices capability for Custom TTS",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2265",
+    "integration": {
+      "status": "included-upstream",
+      "reason": "Merge commit included in the fork base."
+    }
+  },
+  {
+    "headRefName": "stt-config-sync",
+    "mergeCommit": null,
+    "number": 2258,
+    "state": "CLOSED",
+    "title": "fix(voice): mirror Web UI STT provider into the Hermes Agent profile config",
+    "url": "https://github.com/EKKOLearnAI/hermes-studio/pull/2258",
+    "integration": {
+      "status": "superseded-upstream",
+      "reason": "Maintainer replaced the narrow Groq-only sync with PR #2260; keep current general voice integration."
+    }
+  }
+]

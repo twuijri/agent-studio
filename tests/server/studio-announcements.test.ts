@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+// Exercise the retained upstream service implementation. Actual fork policy is
+// covered without mocks in personal-fork.test.ts and the direct-connection e2e.
+vi.mock('../../packages/server/src/modules/studio/public/personal-fork', () => ({ PERSONAL_FORK: false }))
 import { fetchStudioAnnouncements } from '../../packages/server/src/modules/studio/services/notifications/announcements'
 import { getAnnouncements } from '../../packages/server/src/modules/studio/controllers/announcements'
 

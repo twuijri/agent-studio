@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import GithubPreviewSettings from '@/components/hermes/settings/GithubPreviewSettings.vue'
+import { NAlert } from 'naive-ui'
 
 const { t } = useI18n()
 </script>
@@ -12,7 +12,10 @@ const { t } = useI18n()
     </header>
 
     <div class="page-content">
-      <GithubPreviewSettings />
+      <NAlert type="info" :bordered="false" title="Agent Studio">
+        <p>{{ t('personalFork.manualUpdate') }}</p>
+        <code dir="ltr">node scripts/prepare-upstream-update.mjs</code>
+      </NAlert>
     </div>
   </div>
 </template>

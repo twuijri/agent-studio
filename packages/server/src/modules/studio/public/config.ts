@@ -78,15 +78,17 @@ export function getLanAdvertiseUrl(env: Record<string, string | undefined> = pro
 
 export function isAppEntitlementRequired(env: Record<string, string | undefined> = process.env): boolean {
   const value = String(env.HERMES_APP_ENTITLEMENT_REQUIRED || '').trim().toLowerCase()
-  return !['0', 'false', 'no', 'off'].includes(value)
+  // Local clients authenticate against this server's own user/device tokens.
+  // A cloud subscription is not an authentication requirement of this fork.
+  return ['1', 'true', 'yes', 'on'].includes(value)
 }
 
 const appHome = getWebUiHome()
 const remoteRelay = {
-  url: process.env.HERMES_REMOTE_RELAY_URL?.trim() || 'https://api.ekkostudio.xyz',
+  url: process.env.HERMES_REMOTE_RELAY_URL?.trim() || '',
 }
 const appRelay = {
-  url: process.env.HERMES_APP_RELAY_URL?.trim() || 'https://api.ekkostudio.xyz',
+  url: '',
   entitlementRequired: isAppEntitlementRequired(),
 }
 

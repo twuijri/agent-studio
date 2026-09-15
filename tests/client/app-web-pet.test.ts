@@ -91,6 +91,10 @@ vi.mock('@/components/layout/RuntimeRestartPrompt.vue', () => ({
   default: { name: 'RuntimeRestartPrompt', template: '<div class="runtime-restart-prompt-test" />' },
 }))
 
+vi.mock('@/components/layout/StudioAnnouncementPrompt.vue', () => ({
+  default: { name: 'StudioAnnouncementPrompt', template: '<div />' },
+}))
+
 vi.mock('@/components/hermes/chat/SessionSearchModal.vue', () => ({
   default: { name: 'SessionSearchModal', template: '<div />' },
 }))

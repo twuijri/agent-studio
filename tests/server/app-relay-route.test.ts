@@ -24,7 +24,7 @@ describe('App Relay route configuration', () => {
     )
 
     expect(await getAppRelayRoute()).toBe('official')
-    expect(appRelayUrlForRoute('official')).toBe('https://api.ekkostudio.xyz')
+    expect(appRelayUrlForRoute('official')).toBe('')
   })
 
   it('persists and maps the Cloudflare route', async () => {

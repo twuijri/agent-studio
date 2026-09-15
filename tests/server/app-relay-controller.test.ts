@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+// Exercise the retained upstream service implementation. Actual fork policy is
+// covered without mocks in personal-fork.test.ts and the direct-connection e2e.
+vi.mock('../../packages/server/src/modules/studio/public/personal-fork', () => ({ PERSONAL_FORK: false }))
+
 const {
   getAppRelayClient,
   startAppRelayClient,
@@ -73,7 +77,7 @@ describe('app relay controller', () => {
         pairingExpiresAt: 12345,
         expiresAt: 12345,
         route: 'official',
-        relayUrl: 'https://api.ekkostudio.xyz',
+        relayUrl: '',
       },
     })
   })
