@@ -55,6 +55,7 @@ Use the smallest relevant check while iterating. Before a broad PR, run
 - Put new server code under `modules/studio`, `modules/hermes`, `modules/ekko`, or `modules/coding-agents`; compose modules only from `bootstrap`.
 - Keep Web UI state under `HERMES_WEB_UI_HOME` or `HERMES_WEBUI_STATE_DIR`.
 - Keep Hermes Agent state separate from Web UI state.
+- Docker upgrades must work by replacing only the image in existing stacks. Managed npm agent binaries belong under `/home/agent/.hermes/coding-agent/npm`, covered by the existing Hermes mount. Do not require Compose PATH/volume changes or redirect desktop/native homes. Preserve discovery of legacy installs.
 - Register local API routes before proxy catch-all routes.
 - Use structured APIs and argument arrays instead of shell string construction.
 - Add user-facing strings to every locale file.
