@@ -594,7 +594,7 @@ function handleNavigateTask(taskId: string) {
               <NButton v-if="canSpecifyTask" size="small" secondary @click="handleSpecify">{{ t('kanban.action.specify') }}</NButton>
             </div>
             <div v-if="canTransitionTask" class="transition-group">
-              <NInput v-model:value="transitionNote" size="small" :placeholder="t('kanban.action.transitionNote')" />
+              <NInput v-model:value="transitionNote" :input-props="contentInputProps" size="small" :placeholder="t('kanban.action.transitionNote')" />
               <NButton v-if="canPromoteTask" size="small" secondary @click="handlePromote">{{ t('kanban.action.promote') }}</NButton>
               <NButton v-if="canScheduleTask" size="small" secondary @click="handleSchedule">{{ t('kanban.action.schedule') }}</NButton>
               <NButton v-if="canRequestReviewTask" size="small" secondary @click="handleRequestReview">{{ t('kanban.action.requestReview') }}</NButton>
