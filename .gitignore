@@ -49,6 +49,8 @@ hermes-dependencies.md
 *.sw?
 .superpowers/
 CLAUDE.md
+!/CLAUDE.md
+CLAUDE.local.md
 # Client source map artifacts
 packages/client/src/**/*.js
 .hermes/
