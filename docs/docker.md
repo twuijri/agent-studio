@@ -72,13 +72,19 @@ PORT=6060
 
 ### Coding agent installations
 
-Coding agents installed from Studio (Claude Code, Codex, Pi, OpenCode, and Grok)
-use npm's global prefix at `/home/agent/.hermes-web-ui/coding-agent/npm`.
-The image and Compose put its `bin` directory on `PATH`. With the default
-mounts, packages and executable links are saved under
-`${HERMES_DATA_DIR}/hermes-web-ui/coding-agent/npm` and remain available after
-container recreation or image updates. Studio's Pi MCP adapter and scoped
-agent configurations also use the existing Studio data volume.
+Coding agents installed from Studio (Claude Code, Codex, Pi, OpenCode, DSH, and Grok)
+use npm's global prefix at `/home/agent/.hermes/coding-agent/npm` in Docker.
+Packages and executable links are covered by the existing Hermes data mount.
+Replace only the image in your existing stack: no new volume, environment variable
+or PATH edit is required. The Docker-only entrypoint prepends the persistent bin
+directory even when an older Compose file overrides PATH. Desktop/native startup
+and the agent installation service are unchanged.
+
+Earlier persistent installs under `.hermes-web-ui/coding-agent/npm/bin` remain
+discoverable as a fallback; they are not copied, deleted or overwritten at startup.
+Keep both existing mounts. New managed installs prefer the Hermes prefix. Studio's
+Pi MCP adapter and scoped configurations stay in the Studio data volume; this is
+an installation-path fix, not a migration of profile or credential storage.
 
 Older images installed these CLIs outside the data volume. After upgrading,
 reinstall affected agents once from Studio to place them in the persistent
@@ -86,9 +92,8 @@ directory. Packages already lost when an old container was removed cannot be
 recovered from the new image. A restart of the same container normally retains
 its writable filesystem; recreation replaces it.
 
-For custom deployments, persist `/home/agent/.hermes-web-ui`, or set
-`NPM_CONFIG_PREFIX` to a directory inside your own persistent mount and include
-`$NPM_CONFIG_PREFIX/bin` on `PATH`. Do not mount over `/usr/local`, which also
+An explicitly configured `NPM_CONFIG_PREFIX` is respected; if you set one yourself,
+it must point into a persistent mount. Do not mount over `/usr/local`, which also
 contains the image's Node.js runtime. Native CLI login/configuration directories
 under `/home/agent` are separate from the npm installation; mount those as well
 if you use native global logins and need to retain them across recreation.
