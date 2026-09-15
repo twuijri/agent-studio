@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ContentText from '@/components/common/ContentText.vue'
 import { ref, watch, computed, defineAsyncComponent } from 'vue'
 import { NSpin, NEmpty, NCollapse, NCollapseItem } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -93,9 +94,12 @@ watch(() => [props.selectedJobId, props.profileKey], () => {
           <NCollapseItem
             v-for="run in filteredRuns"
             :key="`${run.jobId}/${run.fileName}`"
-            :title="`${getJobName(run.jobId)} — ${run.runTime}`"
             :name="`${run.jobId}/${run.fileName}`"
           >
+            <template #header>
+              <ContentText>{{ getJobName(run.jobId) }}</ContentText>
+              <span> — </span><ContentText technical>{{ run.runTime }}</ContentText>
+            </template>
             <template #header-extra>
               <span class="run-meta">{{ formatSize(run.size) }}</span>
             </template>
