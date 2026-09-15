@@ -2,6 +2,12 @@ name: Personal Agent Studio image
 
 on:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Reviewed source branch or tag (CI must have passed for its exact commit)
+        default: main
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -19,14 +25,20 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+      - name: Resolve immutable source revision
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Require successful CI for this exact commit
         env:
           GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           node --input-type=module <<'NODE'
           import { execFileSync } from 'node:child_process';
           const runs = JSON.parse(execFileSync('gh', ['run', 'list', '--repo', process.env.GITHUB_REPOSITORY,
-            '--commit', process.env.GITHUB_SHA, '--limit', '100', '--json', 'databaseId,workflowName,status,conclusion'], {encoding: 'utf8'}));
+            '--commit', process.env.SOURCE_SHA, '--limit', '100', '--json', 'databaseId,workflowName,status,conclusion'], {encoding: 'utf8'}));
           for (const name of ['Build', 'Playwright', 'Personal fork license']) {
             const run = runs.filter(r => r.workflowName === name).sort((a,b) => b.databaseId-a.databaseId)[0];
             if (!run || run.status !== 'completed' || run.conclusion !== 'success') {
@@ -37,6 +49,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Refuse a public repository or an existing public image package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          const headers = {Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json'};
+          const repo = await fetch('https://api.github.com/repos/twuijri/agent-studio', {headers});
+          if (!repo.ok || (await repo.json()).private !== true) throw new Error('The personal source repository must remain private.');
+          const pkg = await fetch('https://api.github.com/users/twuijri/packages/container/agent-studio', {headers});
+          if (pkg.status === 404) { console.log('No accessible existing package; new GHCR packages start private.'); }
+          else if (!pkg.ok || (await pkg.json()).visibility !== 'private') { throw new Error('Cannot verify private package visibility. Refusing publication.'); }
+          else console.log('Existing package is private.');
+          NODE
       - name: Verify license and personal safeguards
         run: |
           node scripts/check-personal-license.mjs
@@ -49,13 +74,13 @@ jobs:
           platforms: linux/amd64
           load: true
           push: false
-          tags: ghcr.io/twuijri/agent-studio:sha-${{ github.sha }}
+          tags: ghcr.io/twuijri/agent-studio:sha-${{ steps.source.outputs.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/twuijri/agent-studio
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
             org.opencontainers.image.licenses=BSL-1.1
       - name: Smoke-test the same image before publishing
-        run: node scripts/smoke-personal-image.mjs ghcr.io/twuijri/agent-studio:sha-${{ github.sha }}
+        run: node scripts/smoke-personal-image.mjs ghcr.io/twuijri/agent-studio:sha-${{ steps.source.outputs.sha }}
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -63,7 +88,17 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the tested image
         env:
-          IMAGE: ghcr.io/twuijri/agent-studio:sha-${{ github.sha }}
+          IMAGE: ghcr.io/twuijri/agent-studio:sha-${{ steps.source.outputs.sha }}
         run: |
           docker push "$IMAGE"
           docker image inspect "$IMAGE" --format '{{json .RepoDigests}}' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify the published image package is private
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          const headers = {Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json'};
+          const response = await fetch('https://api.github.com/users/twuijri/packages/container/agent-studio', {headers});
+          if (!response.ok || (await response.json()).visibility !== 'private') throw new Error('Published package privacy could not be verified. Do not mark this release ready.');
+          console.log('Verified: the published image package is private.');
+          NODE
