@@ -28,6 +28,9 @@ test('renders authenticated shell and navigates between key product routes', asy
   await returnLink.click()
   await expect(page).toHaveURL(/#\/studio\/agents$/)
 
+  // Personal fork removes only the referral navigation, not model providers.
+  await expect(page.locator('.page-sidebar-nav').getByRole('button', { name: 'API Relay', exact: true })).toHaveCount(0)
+
   const modelsButton = page.locator('.page-sidebar-nav').getByRole('button', { name: /^Models$/ })
   await modelsButton.click()
   await expect(page).toHaveURL(/#\/hermes\/models$/)

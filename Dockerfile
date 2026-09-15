@@ -1,4 +1,5 @@
-ARG BASE_IMAGE=nousresearch/hermes-agent:latest
+# Reviewed multi-platform Hermes base; update explicitly alongside runtime checks.
+ARG BASE_IMAGE=nousresearch/hermes-agent@sha256:1b179d039d8d19bdea36f9e66a449108195fb7b1215818b1480bc11fc21b0286
 FROM ${BASE_IMAGE}
 
 ARG NODE_VERSION=24.15.0
@@ -38,6 +39,7 @@ RUN npm run build && npm prune --omit=dev
 RUN npm run verify:sharp-runtime
 
 ENV NODE_ENV=production
+ENV PORT=6060
 ENV HOME=/home/agent
 ENV HERMES_HOME=/home/agent/.hermes
 ENV HERMES_WEB_UI_MANAGED_GATEWAY=1

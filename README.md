@@ -1,3 +1,20 @@
+# Agent Studio — personal fork
+
+Private, non-commercial fork maintained by twuijri. Based on
+[EKKOLearnAI/hermes-studio](https://github.com/EKKOLearnAI/hermes-studio);
+the original license and contributor attribution are retained.
+
+- [Personal-fork rules and upstream update procedure](docs/PERSONAL-FORK.md)
+- [Persistent development knowledge and decisions](docs/KNOWLEDGE-WORKFLOW.md)
+- [Existing-server deployment and backup guide](deploy/README.md)
+- [Verification results and limitations](docs/PERSONAL-VALIDATION.md)
+
+Use the personal deployment guide, not the upstream install commands below.
+The original project README is preserved below as upstream documentation; official
+cloud subscriptions, app downloads, and auto-updates are not features of this fork.
+
+---
+
 <p align="center">
   <strong>Ekko Studio</strong>
   <a href="./README_zh.md">中文</a>
