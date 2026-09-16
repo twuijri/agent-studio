@@ -34,8 +34,10 @@ image to latest» تعمل بعد كل بناء غير `verify_only`، فبنا�
   بتاريخ 2026-09-16 (Node 24 عبر nvm).
 - `actionlint` غير مثبت على الجهاز؛ لم يُشغَّل.
 - الفحص الفعلي للمسار: تشغيل `workflow_dispatch` من هذا الفرع مع
-  `source_ref=feat/kanban-board-dnd` و`publish_latest=false`؛ النتيجة تُسجَّل في قسم
-  التسليم عند اكتمالها.
+  `source_ref=feat/kanban-board-dnd` و`publish_latest=false`
+  (التشغيل `35091881910`، 2026-09-16): نجح؛ خطوة «Promote the tested image to latest»
+  ظهرت `skipped`، وخطوات البناء وفحص التشغيل والنشر والتحقق من خصوصية الحزمة نجحت.
+  الوسم المنشور: `ghcr.io/twuijri/agent-studio:sha-742cc9988b9c4a3d731ae10a3bcabba95b45c976`.
 
 ## المخاطر والرجوع
 - المدخل افتراضيًا `true`؛ التشغيل المعتاد من `main` لا يتغير.
@@ -45,5 +47,6 @@ image to latest» تعمل بعد كل بناء غير `verify_only`، فبنا�
 
 ## التسليم والخطوة التالية
 مرفوع على فرع `ci/personal-image-branch-preview` بطلب دمج؛ الدمج قرار المالك.
-الخطوة التالية: تشغيل المسار من هذا الفرع لبناء صورة `feat/kanban-board-dnd`
-(رأسها `742cc998`)، ثم استخدام الوسم في ستاك تجريبي منفصل على سيرفر المالك.
+صورة الفرع `feat/kanban-board-dnd` (رأسها `742cc998`) منشورة بوسم `sha` فقط و`latest`
+لم يتغير. الخطوة التالية: المالك يشغّل الستاك التجريبي المنفصل (`test.example.com`،
+أسماء بلاحقة `test`) من واجهة إدارته ويجرّب الفرع، ثم يقرر دمج PR #3 وPR #4.
