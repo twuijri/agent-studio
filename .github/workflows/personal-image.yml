@@ -18,6 +18,11 @@ on:
         default: false
         required: false
         type: boolean
+      publish_latest:
+        description: Promote a freshly built image to latest (disable to publish only the sha tag, e.g. a branch preview for a test stack)
+        default: true
+        required: false
+        type: boolean
 
 permissions:
   contents: read
@@ -106,6 +111,9 @@ jobs:
         run: |
           docker push "$IMAGE"
           docker image inspect "$IMAGE" --format '{{json .RepoDigests}}' >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ inputs.publish_latest }}" != "true" ]; then
+            printf 'Preview image only: latest was NOT updated (source %s).\n' "${{ steps.source.outputs.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Pull and verify the published image from the registry
         if: ${{ inputs.verify_only }}
         env:
@@ -127,7 +135,7 @@ jobs:
           console.log('Verified: the published image package is private.');
           NODE
       - name: Promote the tested image to latest
-        if: ${{ !inputs.verify_only || inputs.promote_latest }}
+        if: ${{ (!inputs.verify_only && inputs.publish_latest) || (inputs.verify_only && inputs.promote_latest) }}
         env:
           IMAGE: ghcr.io/twuijri/agent-studio:sha-${{ steps.source.outputs.sha }}
           LATEST: ghcr.io/twuijri/agent-studio:latest
