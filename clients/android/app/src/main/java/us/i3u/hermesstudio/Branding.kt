@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material3.Icon
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -169,11 +167,10 @@ fun AppMark(size: Dp = 76.dp, corner: Dp = size / 3.4f) {
                 contentScale = ContentScale.Crop,
             )
         } else {
-            Icon(
-                Icons.Filled.AutoAwesome,
+            Image(
+                painter = painterResource(R.drawable.core_hub),
                 contentDescription = null,
-                modifier = Modifier.size(size / 2.2f),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxSize(),
             )
         }
     }

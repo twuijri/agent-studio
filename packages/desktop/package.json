@@ -1,8 +1,8 @@
 {
   "name": "hermes-studio",
   "version": "0.7.21",
-  "description": "Agent Studio personal non-commercial fork of Ekko Studio, with bundled local runtimes.",
-  "homepage": "https://ekkostudio.xyz",
+  "description": "Core Hub personal non-commercial fork of Ekko Studio, with bundled local runtimes.",
+  "homepage": "https://github.com/twuijri/core-hub",
   "author": {
     "name": "Ekko Studio Contributors",
     "email": "noreply@hermes-studio.local"

@@ -22,6 +22,17 @@ function fixture(overrides: Partial<LaunchItem> = {}) {
 }
 
 describe('Windows login item migration across the Studio rename', () => {
+  it.each(['Agent Studio.exe', 'Ekko Studio.exe', 'Hermes Studio.exe'])('updates %s to Core Hub without changing startup approval', oldName => {
+    const current = 'D:\\Custom Apps\\Studio\\Core Hub.exe'
+    const oldPath = `D:\\Custom Apps\\Studio\\${oldName}`
+    const { app } = fixture({ path: oldPath, enabled: false })
+    expect(migrateWindowsLoginItem(app, appId, current, 'win32')).toBe(true)
+    expect(app.setLoginItemSettings).toHaveBeenCalledTimes(1)
+    expect(app.setLoginItemSettings).toHaveBeenCalledWith({
+      name: appId, path: current, args: ['--hidden'], openAtLogin: true, enabled: false,
+    })
+  })
+
   it.each([true, false])('preserves startup approval enabled=%s in a custom installation directory', enabled => {
     const { app } = fixture({ enabled })
     expect(migrateWindowsLoginItem(app, appId, executable, 'win32')).toBe(true)

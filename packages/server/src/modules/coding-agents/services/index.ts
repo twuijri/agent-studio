@@ -1244,7 +1244,7 @@ function inheritClaudeSettings(existingContent: string | null | undefined = ''):
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
     const inherited = { ...parsed } as Record<string, unknown>
     // Scoped Coding Agent runs authenticate exclusively through the selected
-    // Ekko Studio profile proxy. Never inherit native Claude login/provider
+    // Core Hub profile proxy. Never inherit native Claude login/provider
     // routing, otherwise a stale OAuth session can override the profile.
     delete inherited.apiKeyHelper
     delete inherited.awsAuthRefresh
@@ -1803,7 +1803,7 @@ function opencodeRuntimeConfig(
       provider: {
         [OPENCODE_PROVIDER_ID]: {
           npm: '@ai-sdk/openai',
-          name: runtime.provider || 'Ekko Studio',
+          name: runtime.provider || 'Core Hub',
           options: {
             baseURL: runtime.baseUrl || '',
             apiKey: `{env:${OPENCODE_API_KEY_ENV}}`,

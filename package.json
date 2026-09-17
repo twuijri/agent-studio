@@ -1,13 +1,13 @@
 {
-  "name": "agent-studio-personal",
+  "name": "core-hub-personal",
   "private": true,
   "version": "0.7.21",
-  "description": "Agent Studio: a personal non-commercial fork of Ekko Studio for multi-agent chat, coding, and visual workflows.",
+  "description": "Core Hub: a personal non-commercial fork of Ekko Studio for multi-agent chat, coding, and visual workflows.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/EKKOLearnAI/hermes-studio.git"
+    "url": "https://github.com/twuijri/core-hub.git"
   },
-  "homepage": "https://ekkostudio.xyz",
+  "homepage": "https://github.com/twuijri/core-hub",
   "license": "BSL-1.1",
   "engines": {
     "node": ">=23.0.0"

@@ -6,10 +6,10 @@
         {
           "glass": false,
           "image-name": "hermes-logo.png",
-          "name": "Ekko Studio"
+          "name": "Core Hub"
         }
       ],
-      "name": "Ekko Studio",
+      "name": "Core Hub",
       "shadow": {
         "kind": "none",
         "opacity": 0.5

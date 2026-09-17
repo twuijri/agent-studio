@@ -1,6 +1,6 @@
 # Agent Map
 
-## Personal fork: Agent Studio — mandatory first read
+## Personal fork: Core Hub — mandatory first read
 
 This is twuijri's personal, non-commercial fork. Read `docs/PERSONAL-FORK.md`.
 NEVER delete, rename, replace, or strip the root `LICENSE`, third-party licenses,

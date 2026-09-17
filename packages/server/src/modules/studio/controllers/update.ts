@@ -13,7 +13,7 @@ import {
 function requiresManualUpdate(ctx: Context): boolean {
   if (PERSONAL_FORK) {
     ctx.status = 409
-    ctx.body = { error: 'manual_fork_update_required', message: 'Update Agent Studio using docs/PERSONAL-FORK.md.' }
+    ctx.body = { error: 'manual_fork_update_required', message: 'Update Core Hub using docs/PERSONAL-FORK.md.' }
     return true
   }
   return false

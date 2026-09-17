@@ -1,7 +1,7 @@
 {
-  "name": "Agent Studio",
-  "short_name": "Agent Studio",
-  "description": "Agent Studio is a local-first AI workspace for multi-agent chat, coding, and visual workflows, available on desktop and the web.",
+  "name": "Core Hub",
+  "short_name": "Core Hub",
+  "description": "Core Hub is a local-first AI workspace for multi-agent chat, coding, and visual workflows, available on desktop and the web.",
   "start_url": "/#/hermes/chat",
   "scope": "/",
   "display": "standalone",
@@ -9,8 +9,14 @@
   "theme_color": "#f7f7f4",
   "icons": [
     {
-      "src": "/logo.png",
-      "sizes": "1254x1254",
+      "src": "/core-hub-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/core-hub-icon-512.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
