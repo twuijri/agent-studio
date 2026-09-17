@@ -381,6 +381,34 @@ export async function unblockTasks(taskIds: string[], opts?: KanbanBoardOptions)
   })
 }
 
+export async function promoteTask(taskId: string, reason?: string, opts?: KanbanBoardOptions): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>(appendQuery(`/api/hermes/kanban/${encodeURIComponent(taskId)}/promote`, boardParams(opts?.board)), {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export async function scheduleTask(taskId: string, reason?: string, opts?: KanbanBoardOptions): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>(appendQuery(`/api/hermes/kanban/${encodeURIComponent(taskId)}/schedule`, boardParams(opts?.board)), {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export async function requestReview(taskId: string, summary?: string, opts?: KanbanBoardOptions): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>(appendQuery(`/api/hermes/kanban/${encodeURIComponent(taskId)}/request-review`, boardParams(opts?.board)), {
+    method: 'POST',
+    body: JSON.stringify({ summary }),
+  })
+}
+
+export async function reopenReview(taskId: string, reason?: string, opts?: KanbanBoardOptions): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>(appendQuery(`/api/hermes/kanban/${encodeURIComponent(taskId)}/reopen-review`, boardParams(opts?.board)), {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
 export async function assignTask(taskId: string, profile: string, opts?: KanbanBoardOptions): Promise<{ ok: boolean }> {
   return request<{ ok: boolean }>(appendQuery(`/api/hermes/kanban/${encodeURIComponent(taskId)}/assign`, boardParams(opts?.board)), {
     method: 'POST',

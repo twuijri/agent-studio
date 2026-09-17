@@ -1,7 +1,15 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as kanbanApi from '@/api/hermes/kanban'
-import type { KanbanTask, KanbanStats, KanbanAssignee, KanbanBoard, KanbanCapabilities, KanbanDiagnosticsOptions, KanbanDispatchOptions, KanbanBulkUpdateRequest, KanbanCreateRequest } from '@/api/hermes/kanban'
+import type { KanbanTask, KanbanTaskStatus, KanbanStats, KanbanAssignee, KanbanBoard, KanbanCapabilities, KanbanDiagnosticsOptions, KanbanDispatchOptions, KanbanBulkUpdateRequest, KanbanCreateRequest } from '@/api/hermes/kanban'
+import {
+  type KanbanBoardLayout,
+  emptyKanbanLayout,
+  hasCustomKanbanLayout,
+  kanbanLayoutStorageKey,
+  orderKanbanCards,
+  parseKanbanLayout,
+} from '@/utils/hermes/kanban-board'
 
 export const KANBAN_SELECTED_BOARD_STORAGE_KEY = 'hermes.kanban.selectedBoard'
 export const DEFAULT_KANBAN_BOARD = 'default'
@@ -26,6 +34,15 @@ function safeStorageSet(key: string, value: string) {
   }
 }
 
+function safeStorageRemove(key: string) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(key)
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
 export function normalizeBoardSlug(board?: string | null): string {
   const trimmed = board?.trim().toLowerCase()
   if (!trimmed) return DEFAULT_KANBAN_BOARD
@@ -46,6 +63,48 @@ export const useKanbanStore = defineStore('kanban', () => {
 
   const filterStatus = ref<string | null>(null)
   const filterAssignee = ref<string | null>(null)
+
+  // Browser-local board layout keyed by board slug. See kanban-board.ts.
+  // The cache itself is plain; `layoutVersion` is the reactive signal so that
+  // lazily loading a layout inside a computed never writes reactive state.
+  const layoutCache = new Map<string, KanbanBoardLayout>()
+  const layoutVersion = ref(0)
+
+  function layoutFor(board: string): KanbanBoardLayout {
+    let layout = layoutCache.get(board)
+    if (!layout) {
+      layout = parseKanbanLayout(safeStorageGet(kanbanLayoutStorageKey(board)))
+      layoutCache.set(board, layout)
+    }
+    return layout
+  }
+
+  function persistLayout(board: string, layout: KanbanBoardLayout) {
+    layoutCache.set(board, layout)
+    if (hasCustomKanbanLayout(layout)) safeStorageSet(kanbanLayoutStorageKey(board), JSON.stringify(layout))
+    else safeStorageRemove(kanbanLayoutStorageKey(board))
+    layoutVersion.value++
+  }
+
+  const hasCustomLayout = computed(() => {
+    void layoutVersion.value
+    return hasCustomKanbanLayout(layoutFor(selectedBoard.value))
+  })
+
+  function orderedTasksForStatus(status: KanbanTaskStatus): KanbanTask[] {
+    void layoutVersion.value
+    return orderKanbanCards(tasks.value.filter(task => task.status === status), layoutFor(selectedBoard.value).cards[status])
+  }
+
+  function setCardOrder(status: KanbanTaskStatus, ids: string[]) {
+    const board = selectedBoard.value
+    const current = layoutFor(board)
+    persistLayout(board, { ...current, cards: { ...current.cards, [status]: [...ids] } })
+  }
+
+  function resetLayout() {
+    persistLayout(selectedBoard.value, emptyKanbanLayout())
+  }
 
   let boardGeneration = 0
   let boardsRequestSeq = 0
@@ -361,6 +420,40 @@ export const useKanbanStore = defineStore('kanban', () => {
     }
   }
 
+  async function refreshAfterTransition(board: string) {
+    if (board === selectedBoard.value) {
+      await Promise.all([fetchTasks(), fetchStats(), fetchBoards()])
+    }
+  }
+
+  async function promoteTask(taskId: string, reason?: string) {
+    assertCapability('promote')
+    const board = selectedBoard.value
+    await kanbanApi.promoteTask(taskId, reason, { board })
+    await refreshAfterTransition(board)
+  }
+
+  async function scheduleTask(taskId: string, reason?: string) {
+    assertCapability('schedule')
+    const board = selectedBoard.value
+    await kanbanApi.scheduleTask(taskId, reason, { board })
+    await refreshAfterTransition(board)
+  }
+
+  async function requestReview(taskId: string, summary?: string) {
+    assertCapability('requestReview')
+    const board = selectedBoard.value
+    await kanbanApi.requestReview(taskId, summary, { board })
+    await refreshAfterTransition(board)
+  }
+
+  async function reopenReview(taskId: string, reason?: string) {
+    assertCapability('reopenReview')
+    const board = selectedBoard.value
+    await kanbanApi.reopenReview(taskId, reason, { board })
+    await refreshAfterTransition(board)
+  }
+
   async function assignTask(taskId: string, profile: string) {
     const board = selectedBoard.value
     await kanbanApi.assignTask(taskId, profile, { board })
@@ -478,6 +571,10 @@ export const useKanbanStore = defineStore('kanban', () => {
     selectedBoard,
     filterStatus,
     filterAssignee,
+    hasCustomLayout,
+    orderedTasksForStatus,
+    setCardOrder,
+    resetLayout,
     fetchBoards,
     fetchCapabilities,
     fetchTasks,
@@ -489,6 +586,10 @@ export const useKanbanStore = defineStore('kanban', () => {
     completeTasks,
     blockTask,
     unblockTasks,
+    promoteTask,
+    scheduleTask,
+    requestReview,
+    reopenReview,
     assignTask,
     addComment,
     linkTasks,
