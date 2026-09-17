@@ -1498,6 +1498,22 @@ export default {
       layoutHint: '欄內卡片的手動順序只儲存在此瀏覽器中，不會改變代理的執行順序。',
     },
     board: {
+      columns: {
+        inbox: '收件匣',
+        queue: '佇列',
+        running: '執行中',
+        waiting: '等待中',
+        review: '審查',
+        done: '已完成',
+      },
+      showArchived: '顯示已封存 ({count})',
+      hideArchived: '隱藏已封存 ({count})',
+      inboxHint: '等待細化的任務。開啟卡片並使用「細化」將其移入佇列。',
+      loadingTasks: '正在載入任務…',
+      waitingKindTitle: '此任務應如何等待？',
+      waitingSchedule: '延後到稍後（已排程）',
+      waitingBlock: '封鎖直到有人處理（需要原因）',
+      scheduleNote: '備註（選填）',
       create: '新增看板',
       archive: '封存看板',
       slugPlaceholder: '看板識別碼，例如 project-a',
@@ -1552,6 +1568,7 @@ export default {
     },
     card: {
       assigneeTooltip: '負責人',
+      syncing: '儲存中…',
       priority: {
         low: '低',
         medium: '中',

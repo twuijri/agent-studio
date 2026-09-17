@@ -4,6 +4,8 @@ import * as kanbanApi from '@/api/hermes/kanban'
 import type { KanbanTask, KanbanTaskStatus, KanbanStats, KanbanAssignee, KanbanBoard, KanbanCapabilities, KanbanDiagnosticsOptions, KanbanDispatchOptions, KanbanBulkUpdateRequest, KanbanCreateRequest } from '@/api/hermes/kanban'
 import {
   type KanbanBoardLayout,
+  type KanbanColumnId,
+  kanbanColumnById,
   emptyKanbanLayout,
   hasCustomKanbanLayout,
   kanbanLayoutStorageKey,
@@ -91,15 +93,55 @@ export const useKanbanStore = defineStore('kanban', () => {
     return hasCustomKanbanLayout(layoutFor(selectedBoard.value))
   })
 
-  function orderedTasksForStatus(status: KanbanTaskStatus): KanbanTask[] {
-    void layoutVersion.value
-    return orderKanbanCards(tasks.value.filter(task => task.status === status), layoutFor(selectedBoard.value).cards[status])
+  // Optimistic transitions: while Hermes applies a command, the task is shown
+  // in its target status even if a poll or event refresh brings the old one.
+  const pendingTransitions = ref<Record<string, KanbanTaskStatus>>({})
+
+  const displayedTasks = computed<KanbanTask[]>(() => {
+    const pending = pendingTransitions.value
+    if (Object.keys(pending).length === 0) return tasks.value
+    return tasks.value.map(task => (pending[task.id] && pending[task.id] !== task.status ? { ...task, status: pending[task.id] } : task))
+  })
+
+  function isTransitionPending(taskId: string): boolean {
+    return taskId in pendingTransitions.value
   }
 
-  function setCardOrder(status: KanbanTaskStatus, ids: string[]) {
+  function beginTransition(taskId: string, expected: KanbanTaskStatus) {
+    pendingTransitions.value = { ...pendingTransitions.value, [taskId]: expected }
+  }
+
+  function endTransition(taskId: string) {
+    if (!(taskId in pendingTransitions.value)) return
+    const next = { ...pendingTransitions.value }
+    delete next[taskId]
+    pendingTransitions.value = next
+  }
+
+  /** Keep `taskId` displayed as `expected` until `run` (which refreshes tasks) settles. */
+  async function withPendingTransition<T>(taskId: string, expected: KanbanTaskStatus, run: () => Promise<T>): Promise<T> {
+    beginTransition(taskId, expected)
+    try {
+      return await run()
+    } finally {
+      endTransition(taskId)
+    }
+  }
+
+  function orderedTasksForColumn(column: KanbanColumnId): KanbanTask[] {
+    void layoutVersion.value
+    const statuses = kanbanColumnById(column).statuses
+    return orderKanbanCards(displayedTasks.value.filter(task => statuses.includes(task.status)), layoutFor(selectedBoard.value).cards[column])
+  }
+
+  function tasksWithStatus(status: KanbanTaskStatus): KanbanTask[] {
+    return displayedTasks.value.filter(task => task.status === status).sort((a, b) => b.created_at - a.created_at)
+  }
+
+  function setCardOrder(column: KanbanColumnId, ids: string[]) {
     const board = selectedBoard.value
     const current = layoutFor(board)
-    persistLayout(board, { ...current, cards: { ...current.cards, [status]: [...ids] } })
+    persistLayout(board, { ...current, cards: { ...current.cards, [column]: [...ids] } })
   }
 
   function resetLayout() {
@@ -572,7 +614,13 @@ export const useKanbanStore = defineStore('kanban', () => {
     filterStatus,
     filterAssignee,
     hasCustomLayout,
-    orderedTasksForStatus,
+    orderedTasksForColumn,
+    tasksWithStatus,
+    pendingTransitions,
+    isTransitionPending,
+    beginTransition,
+    endTransition,
+    withPendingTransition,
     setCardOrder,
     resetLayout,
     fetchBoards,
