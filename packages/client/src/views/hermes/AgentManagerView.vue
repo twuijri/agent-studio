@@ -465,7 +465,7 @@ onMounted(() => {
                       <h3>Ekko</h3>
                       <NTag type="success" size="small" :bordered="false">{{ t('agentManager.builtIn') }}</NTag>
                     </div>
-                    <p class="agent-version">Studio {{ formatVersion(appStore.serverVersion) }}</p>
+                    <p class="agent-version">Core Hub {{ formatVersion(appStore.serverVersion) }}</p>
                   </div>
                 </div>
               </header>

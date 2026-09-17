@@ -280,7 +280,7 @@ describe('Agent Manager page', () => {
 
     const ekkoCard = wrapper.get('[data-testid="agent-card-ekko"]')
     expect(ekkoCard.findAll('button').map(button => button.text())).toEqual(['sidebar.settings'])
-    expect(ekkoCard.get('.agent-version').text()).toBe('Studio v0.7.0')
+    expect(ekkoCard.get('.agent-version').text()).toBe('Core Hub v0.7.0')
     expect(ekkoCard.text()).not.toContain('agentManager.ekkoDescription')
     const claudeCard = wrapper.get('[data-testid="agent-card-claude-code"]')
     expect(claudeCard.get('.agent-version').text()).toBe('v2.0.0')

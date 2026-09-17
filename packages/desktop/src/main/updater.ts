@@ -230,7 +230,7 @@ export function initAutoUpdater(nextOptions: AutoUpdaterOptions = {}) {
 export async function checkForDesktopUpdates(manual: boolean): Promise<void> {
   if (PERSONAL_FORK) {
     if (manual) await dialog.showMessageBox({
-      type: 'info', title: 'Agent Studio',
+      type: 'info', title: 'Core Hub',
       message: 'Updates are installed from your personal fork after review.',
       detail: 'See docs/PERSONAL-FORK.md in the source checkout.',
       buttons: [t('common.ok')],

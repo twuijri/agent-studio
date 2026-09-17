@@ -1,3 +1,9 @@
+# Core Hub
+
+本仓库是 twuijri 的私人非商业分支，原项目版权及 LICENSE 保留。
+请使用 [个人部署指南](deploy/README.md) 和 [品牌与仓库改名说明](docs/CORE-HUB-BRANDING.md)。
+下面保留的是上游参考文档，不是本分支的安装或更新说明。
+
 <p align="center">
   <strong>Ekko Studio</strong>
   <a href="./README.md">English</a>

@@ -1111,7 +1111,7 @@ describe('coding agent launch preparation', () => {
     expect(readFileSync(join(rootDir, 'auth.json'), 'utf8')).toBe('{"token":"user-token"}\n')
     const prompt = readFileSync(join(rootDir, 'AGENTS.md'), 'utf8')
     expect(prompt).toContain('User global Codex instructions.')
-    expect(prompt).toContain('Ekko Studio MCP usage')
+    expect(prompt).toContain('Core Hub MCP usage')
     expect(readFileSync(join(globalCodexHome, 'config.toml'), 'utf8')).toBe('model = "gpt-global"\n')
     expect(readFileSync(join(globalCodexHome, 'auth.json'), 'utf8')).toBe('{"token":"user-token"}\n')
     expect(readFileSync(join(globalCodexHome, 'AGENTS.md'), 'utf8')).toBe('User global Codex instructions.\n')
@@ -1343,7 +1343,7 @@ describe('coding agent launch preparation', () => {
       promptFile: promptPath,
     })
     expect(rootDir).toContain(join('coding-agent', 'model', 'default', 'global', 'pi', 'runs'))
-    expect(readFileSync(promptPath, 'utf8')).toContain('Ekko Studio MCP usage')
+    expect(readFileSync(promptPath, 'utf8')).toContain('Core Hub MCP usage')
     expect(existsSync(join(home, 'global-home', '.pi', 'agent', 'APPEND_SYSTEM.md'))).toBe(false)
   })
 
@@ -1532,7 +1532,7 @@ describe('coding agent launch preparation', () => {
     expect(prompt).toContain('当你的回复中包含图片、视频或文件引用时')
   })
 
-  it('uses the desktop runtime node for scoped Ekko Studio MCP configs when available', async () => {
+  it('uses the desktop runtime node for scoped Core Hub MCP configs when available', async () => {
     const home = makeHome()
     process.env.HERMES_AGENT_NODE = '/runtime/node'
 
@@ -2130,7 +2130,7 @@ describe('coding agent launch preparation', () => {
     expect(config).toContain(`model_catalog_json = "${join(result.rootDir, 'codex-model-catalog.json')}"`)
     expect(config).toContain('model_reasoning_summary = "auto"')
     expect(config).toContain('developer_instructions = """')
-    expect(config).toContain('Ekko Studio MCP usage')
+    expect(config).toContain('Core Hub MCP usage')
     expect(config).toContain('ekko_studio_browser_toolset is available')
     expect(config).toContain('call it with action=list')
     expect(config).toContain('Browser MCP exposes a compact toolset rather than resources')
@@ -2156,7 +2156,7 @@ describe('coding agent launch preparation', () => {
 
     expect(result.files.some(file => file.key === 'agents')).toBe(true)
     const agents = readFileSync(join(result.rootDir, 'AGENTS.md'), 'utf-8')
-    expect(agents).toContain('Ekko Studio MCP usage')
+    expect(agents).toContain('Core Hub MCP usage')
     expect(agents).toContain('# 输出格式规范')
 
     const catalog = JSON.parse(readFileSync(join(result.rootDir, 'codex-model-catalog.json'), 'utf-8'))
@@ -2653,7 +2653,7 @@ describe('coding agent launch preparation', () => {
           type: 'tool_use',
           id: 'call_search',
           name: 'tool_search',
-          input: { query: 'Ekko Studio browser tabs' },
+          input: { query: 'Core Hub browser tabs' },
         }],
         stop_reason: 'tool_use',
         usage: { input_tokens: 3, output_tokens: 1 },
@@ -2702,7 +2702,7 @@ describe('coding agent launch preparation', () => {
       call_id: 'call_search',
       status: 'completed',
       execution: 'client',
-      arguments: { query: 'Ekko Studio browser tabs' },
+      arguments: { query: 'Core Hub browser tabs' },
     }])
 
     const secondCtx = makeProxyContext(routeKey, token, {
@@ -2713,7 +2713,7 @@ describe('coding agent launch preparation', () => {
           call_id: 'call_search',
           status: 'completed',
           execution: 'client',
-          arguments: { query: 'Ekko Studio browser tabs' },
+          arguments: { query: 'Core Hub browser tabs' },
         },
         {
           type: 'tool_search_output',
@@ -2790,7 +2790,7 @@ describe('coding agent launch preparation', () => {
       tools: [{
         type: 'namespace',
         name: 'mcp__ekko_studio_browser',
-        description: 'Ekko Studio browser tools',
+        description: 'Core Hub browser tools',
       }],
     })
 

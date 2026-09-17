@@ -26,7 +26,7 @@ test('persists the desktop link-opening destination', async ({ page }) => {
   const select = page.getByTestId('link-open-target-select')
   await expect(page.getByText('Open web links in', { exact: true })).toBeVisible()
   await expect(select).toHaveAttribute('aria-label', 'Open web links in')
-  await expect(select).toContainText('Agent Studio')
+  await expect(select).toContainText('Core Hub')
 
   await select.locator('.n-base-selection-label').focus()
   await page.keyboard.press('Enter')

@@ -20,7 +20,7 @@ describe('App connections scan modal', () => {
     expect(source).toContain("panelView === 'list'")
     expect(source).toContain("updatePanelView('messages')")
     expect(source).toContain('<SocialMessagesView v-else embedded')
-    expect(source).toContain('Agent Studio Mobile')
+    expect(source).toContain('Core Hub Mobile')
     expect(source).toContain("const downloadSource = ref<'github' | 'cloudflare'>('cloudflare')")
     expect(source).toContain('fetchStudioVersionManifest()')
     expect(source).toContain('mobileRelease.value.channels.androidApk.version')
