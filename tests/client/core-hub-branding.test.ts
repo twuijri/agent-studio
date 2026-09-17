@@ -33,7 +33,7 @@ describe('Core Hub branding without a data or deployment migration', () => {
     }
   })
 
-  it('allows only the old and new private repository names and preserves GHCR and release guards', () => {
+  it('uses the new image package before and after the repo rename without changing release or storage guards', () => {
     const text = read('.github/workflows/personal-image.yml')
     const workflow = parse(text)
     expect(workflow.jobs.image.if).toBe("github.repository == 'twuijri/agent-studio' || github.repository == 'twuijri/core-hub'")
@@ -42,12 +42,20 @@ describe('Core Hub branding without a data or deployment migration', () => {
     expect(text).toContain("['Build', 'Playwright', 'Personal fork license']")
     expect(text).toContain('(await repo.json()).private !== true')
     expect(text).toContain("(await response.json()).visibility !== 'private'")
-    expect(text).toContain('ghcr.io/twuijri/agent-studio:latest')
-    expect(text).not.toContain('ghcr.io/twuijri/core-hub:')
+    expect(text).toContain('ghcr.io/twuijri/core-hub:latest')
+    expect(text).not.toContain('ghcr.io/twuijri/agent-studio:')
+    expect(text).not.toContain('packages/container/agent-studio')
+    expect(text.match(/packages\/container\/core-hub/g)).toHaveLength(2)
+    const imageReferences = text.match(/ghcr\.io\/twuijri\/[a-z-]+/g) || []
+    expect(imageReferences.length).toBeGreaterThan(5)
+    expect(new Set(imageReferences)).toEqual(new Set(['ghcr.io/twuijri/core-hub']))
     expect(text).toContain('--install-agents')
     expect(text).toContain('node scripts/check-personal-license.mjs')
     expect(read('compose.personal.yml')).toContain('agent-studio-hermes:/home/agent/.hermes')
     expect(read('compose.personal.yml')).toContain('agent-studio-state:/home/agent/.hermes-web-ui')
+    const compose = parse(read('compose.personal.yml'))
+    expect(compose.services['agent-studio'].image).toBe('core-hub:personal')
+    expect(Object.keys(compose.volumes).sort()).toEqual(['agent-studio-hermes', 'agent-studio-state'])
   })
 
   it('ships matching web/desktop marks and real, correctly sized installable icons', async () => {

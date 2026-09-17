@@ -41,7 +41,7 @@ concurrency:
 jobs:
   image:
     # Both names are allowed during the owner-controlled repository rename.
-    # Keep the GHCR package name stable so existing stacks still pull updates.
+    # Owner-approved new GHCR package; existing data mounts remain unchanged.
     if: github.repository == 'twuijri/agent-studio' || github.repository == 'twuijri/core-hub'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -79,7 +79,7 @@ jobs:
           const headers = {Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json'};
           const repo = await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}`, {headers});
           if (!repo.ok || (await repo.json()).private !== true) throw new Error('The personal source repository must remain private.');
-          const pkg = await fetch('https://api.github.com/users/twuijri/packages/container/agent-studio', {headers});
+          const pkg = await fetch('https://api.github.com/users/twuijri/packages/container/core-hub', {headers});
           if (pkg.status === 404) { console.log('No accessible existing package; new GHCR packages start private.'); }
           else if (!pkg.ok || (await pkg.json()).visibility !== 'private') { throw new Error('Cannot verify private package visibility. Refusing publication.'); }
           else console.log('Existing package is private.');
@@ -98,14 +98,14 @@ jobs:
           platforms: linux/amd64
           load: true
           push: false
-          tags: ghcr.io/twuijri/agent-studio:sha-${{ steps.source.outputs.sha }}
+          tags: ghcr.io/twuijri/core-hub:sha-${{ steps.source.outputs.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
             org.opencontainers.image.licenses=BSL-1.1
       - name: Smoke-test the same image before publishing
         if: ${{ !inputs.verify_only }}
-        run: node scripts/smoke-personal-image.mjs ghcr.io/twuijri/agent-studio:sha-${{ steps.source.outputs.sha }} --install-agents
+        run: node scripts/smoke-personal-image.mjs ghcr.io/twuijri/core-hub:sha-${{ steps.source.outputs.sha }} --install-agents
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -114,7 +114,7 @@ jobs:
       - name: Publish the tested image
         if: ${{ !inputs.verify_only }}
         env:
-          IMAGE: ghcr.io/twuijri/agent-studio:sha-${{ steps.source.outputs.sha }}
+          IMAGE: ghcr.io/twuijri/core-hub:sha-${{ steps.source.outputs.sha }}
         run: |
           docker push "$IMAGE"
           docker image inspect "$IMAGE" --format '{{json .RepoDigests}}' >> "$GITHUB_STEP_SUMMARY"
@@ -124,7 +124,7 @@ jobs:
       - name: Pull and verify the published image from the registry
         if: ${{ inputs.verify_only }}
         env:
-          IMAGE: ghcr.io/twuijri/agent-studio:sha-${{ steps.source.outputs.sha }}
+          IMAGE: ghcr.io/twuijri/core-hub:sha-${{ steps.source.outputs.sha }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           docker pull "$IMAGE"
@@ -137,21 +137,21 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           const headers = {Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json'};
-          const response = await fetch('https://api.github.com/users/twuijri/packages/container/agent-studio', {headers});
+          const response = await fetch('https://api.github.com/users/twuijri/packages/container/core-hub', {headers});
           if (!response.ok || (await response.json()).visibility !== 'private') throw new Error('Published package privacy could not be verified. Do not mark this release ready.');
           console.log('Verified: the published image package is private.');
           NODE
       - name: Tag the published image with the preview tag
         if: ${{ !inputs.verify_only && inputs.preview_tag != '' }}
         env:
-          IMAGE: ghcr.io/twuijri/agent-studio:sha-${{ steps.source.outputs.sha }}
+          IMAGE: ghcr.io/twuijri/core-hub:sha-${{ steps.source.outputs.sha }}
           PREVIEW_TAG: ${{ inputs.preview_tag }}
         run: |
           case "$PREVIEW_TAG" in
             latest|main|sha-*) echo "preview_tag must not be latest, main or a sha tag" >&2; exit 1 ;;
           esac
           printf '%s' "$PREVIEW_TAG" | grep -Eq '^[a-z0-9][a-z0-9._-]{0,63}$' || { echo "invalid preview_tag" >&2; exit 1; }
-          PREVIEW="ghcr.io/twuijri/agent-studio:$PREVIEW_TAG"
+          PREVIEW="ghcr.io/twuijri/core-hub:$PREVIEW_TAG"
           expected_digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
           docker tag "$IMAGE" "$PREVIEW"
           docker push "$PREVIEW"
@@ -162,8 +162,8 @@ jobs:
       - name: Promote the tested image to latest
         if: ${{ (!inputs.verify_only && inputs.publish_latest) || (inputs.verify_only && inputs.promote_latest) }}
         env:
-          IMAGE: ghcr.io/twuijri/agent-studio:sha-${{ steps.source.outputs.sha }}
-          LATEST: ghcr.io/twuijri/agent-studio:latest
+          IMAGE: ghcr.io/twuijri/core-hub:sha-${{ steps.source.outputs.sha }}
+          LATEST: ghcr.io/twuijri/core-hub:latest
         run: |
           expected_digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
           docker tag "$IMAGE" "$LATEST"
