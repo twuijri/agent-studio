@@ -192,6 +192,21 @@ export default {
       layoutHint: '열 안의 카드 순서는 이 브라우저에만 저장되며 에이전트의 실행 순서는 바뀌지 않습니다.',
     },
     board: {
+      columns: {
+        inbox: '수신함',
+        queue: '대기열',
+        running: '실행 중',
+        waiting: '대기',
+        review: '리뷰',
+        done: '완료',
+      },
+      showArchived: '보관 항목 보기 ({count})',
+      hideArchived: '보관 항목 숨기기 ({count})',
+      inboxHint: '명세를 기다리는 작업입니다. 카드를 열고 “명세”를 사용해 대기열로 옮기세요.',
+      waitingKindTitle: '이 작업을 어떻게 대기시킬까요?',
+      waitingSchedule: '나중으로 미루기 (예약)',
+      waitingBlock: '누군가 조치할 때까지 차단 (사유 필요)',
+      scheduleNote: '메모 (선택)',
       defaultArchiveUnavailable: '기본 칸반은 보관할 수 없습니다',
     },
     action: {

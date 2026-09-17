@@ -343,20 +343,22 @@ describe('Kanban store', () => {
     ] as any
 
     expect(store.hasCustomLayout).toBe(false)
-    expect(store.orderedTasksForStatus('todo').map(task => task.id)).toEqual(['b', 'a'])
+    // The queue column groups todo and ready cards.
+    expect(store.orderedTasksForColumn('queue').map(task => task.id)).toEqual(['c', 'b', 'a'])
+    expect(store.tasksWithStatus('ready').map(task => task.id)).toEqual(['c'])
 
-    store.setCardOrder('todo', ['a', 'b'])
-    expect(store.orderedTasksForStatus('todo').map(task => task.id)).toEqual(['a', 'b'])
-    expect(store.orderedTasksForStatus('ready').map(task => task.id)).toEqual(['c'])
+    store.setCardOrder('queue', ['a', 'b', 'c'])
+    expect(store.orderedTasksForColumn('queue').map(task => task.id)).toEqual(['a', 'b', 'c'])
+    expect(store.orderedTasksForColumn('running')).toEqual([])
     expect(store.hasCustomLayout).toBe(true)
-    expect(JSON.parse(window.localStorage.getItem('hermes.kanban.layout.project-a') || '{}')).toEqual({ cards: { todo: ['a', 'b'] } })
+    expect(JSON.parse(window.localStorage.getItem('hermes.kanban.layout.project-a') || '{}')).toEqual({ cards: { queue: ['a', 'b', 'c'] } })
 
     store.tasks = [...store.tasks, { id: 'd', status: 'todo', created_at: 4 }] as any
-    expect(store.orderedTasksForStatus('todo').map(task => task.id)).toEqual(['d', 'a', 'b'])
+    expect(store.orderedTasksForColumn('queue').map(task => task.id)).toEqual(['d', 'a', 'b', 'c'])
 
     store.setSelectedBoard('default')
     expect(store.hasCustomLayout).toBe(false)
-    expect(store.orderedTasksForStatus('todo')).toEqual([])
+    expect(store.orderedTasksForColumn('queue')).toEqual([])
 
     store.setSelectedBoard('project-a')
     expect(store.hasCustomLayout).toBe(true)

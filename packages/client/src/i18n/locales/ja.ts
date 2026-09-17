@@ -192,6 +192,21 @@ export default {
       layoutHint: '列内のカードの並び順はこのブラウザにのみ保存され、エージェントの実行順には影響しません。',
     },
     board: {
+      columns: {
+        inbox: '受信箱',
+        queue: 'キュー',
+        running: '実行中',
+        waiting: '待機中',
+        review: 'レビュー',
+        done: '完了',
+      },
+      showArchived: 'アーカイブを表示 ({count})',
+      hideArchived: 'アーカイブを隠す ({count})',
+      inboxHint: '仕様化を待つタスクです。カードを開いて「仕様化」でキューへ移動します。',
+      waitingKindTitle: 'このタスクをどう待機させますか？',
+      waitingSchedule: '後回しにする（スケジュール）',
+      waitingBlock: '誰かの対応まで停止（理由が必要）',
+      scheduleNote: 'メモ（任意）',
       defaultArchiveUnavailable: 'デフォルトのカンバンはアーカイブできません',
     },
     action: {

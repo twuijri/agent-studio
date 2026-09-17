@@ -4,6 +4,8 @@ import * as kanbanApi from '@/api/hermes/kanban'
 import type { KanbanTask, KanbanTaskStatus, KanbanStats, KanbanAssignee, KanbanBoard, KanbanCapabilities, KanbanDiagnosticsOptions, KanbanDispatchOptions, KanbanBulkUpdateRequest, KanbanCreateRequest } from '@/api/hermes/kanban'
 import {
   type KanbanBoardLayout,
+  type KanbanColumnId,
+  kanbanColumnById,
   emptyKanbanLayout,
   hasCustomKanbanLayout,
   kanbanLayoutStorageKey,
@@ -91,15 +93,20 @@ export const useKanbanStore = defineStore('kanban', () => {
     return hasCustomKanbanLayout(layoutFor(selectedBoard.value))
   })
 
-  function orderedTasksForStatus(status: KanbanTaskStatus): KanbanTask[] {
+  function orderedTasksForColumn(column: KanbanColumnId): KanbanTask[] {
     void layoutVersion.value
-    return orderKanbanCards(tasks.value.filter(task => task.status === status), layoutFor(selectedBoard.value).cards[status])
+    const statuses = kanbanColumnById(column).statuses
+    return orderKanbanCards(tasks.value.filter(task => statuses.includes(task.status)), layoutFor(selectedBoard.value).cards[column])
   }
 
-  function setCardOrder(status: KanbanTaskStatus, ids: string[]) {
+  function tasksWithStatus(status: KanbanTaskStatus): KanbanTask[] {
+    return tasks.value.filter(task => task.status === status).sort((a, b) => b.created_at - a.created_at)
+  }
+
+  function setCardOrder(column: KanbanColumnId, ids: string[]) {
     const board = selectedBoard.value
     const current = layoutFor(board)
-    persistLayout(board, { ...current, cards: { ...current.cards, [status]: [...ids] } })
+    persistLayout(board, { ...current, cards: { ...current.cards, [column]: [...ids] } })
   }
 
   function resetLayout() {
@@ -572,7 +579,8 @@ export const useKanbanStore = defineStore('kanban', () => {
     filterStatus,
     filterAssignee,
     hasCustomLayout,
-    orderedTasksForStatus,
+    orderedTasksForColumn,
+    tasksWithStatus,
     setCardOrder,
     resetLayout,
     fetchBoards,
