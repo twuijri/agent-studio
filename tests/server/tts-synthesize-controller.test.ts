@@ -53,12 +53,14 @@ describe('getTtsProvider', () => {
     const { customTtsProvider, openaiTtsProvider } = await import('../../packages/server/src/modules/studio/services/voice/tts/providers/openai')
     const { mimoTtsProvider } = await import('../../packages/server/src/modules/studio/services/voice/tts/providers/mimo')
     const { doubaoTtsProvider } = await import('../../packages/server/src/modules/studio/services/voice/tts/providers/doubao')
+    const { groqTtsProvider } = await import('../../packages/server/src/modules/studio/services/voice/tts/providers/groq')
 
     expect(getTtsProvider('edge')).toBe(edgeTtsProvider)
     expect(getTtsProvider('openai')).toBe(openaiTtsProvider)
     expect(getTtsProvider('custom')).toBe(customTtsProvider)
     expect(getTtsProvider('mimo')).toBe(mimoTtsProvider)
     expect(getTtsProvider('doubao')).toBe(doubaoTtsProvider)
+    expect(getTtsProvider('groq')).toBe(groqTtsProvider)
     expect(getTtsProvider('unknown')).toBeUndefined()
   })
 })
@@ -70,6 +72,58 @@ describe('tts synthesize controller', () => {
     vi.doUnmock('../../packages/server/src/modules/studio/services/voice/tts/providers')
     vi.doUnmock('../../packages/server/src/modules/studio/controllers/tts')
     vi.doUnmock('../../packages/server/src/modules/studio/infrastructure/database/index')
+  })
+
+  it('persists Groq per profile, masks its key and resolves saved model/voice during synthesis', async () => {
+    const { DatabaseSync } = await import('node:sqlite')
+    const db = new DatabaseSync(':memory:')
+    vi.doMock('../../packages/server/src/modules/studio/infrastructure/database/index', () => ({ getDb: () => db, getStoragePath: () => ':memory:' }))
+    try {
+      const schemas = await import('../../packages/server/src/modules/studio/infrastructure/database/schemas')
+      schemas.initAllHermesTables()
+      const synthesis = vi.fn(async () => ({ audio: Buffer.from('mock-wav'), contentType: 'audio/wav', engine: 'groq', provider: 'groq' }))
+      vi.doMock('../../packages/server/src/modules/studio/services/voice/tts/providers', () => ({ getTtsProvider: (id: string) => id === 'groq' ? { synthesize: synthesis } : undefined }))
+      const ctrl = await import('../../packages/server/src/modules/studio/controllers/tts')
+      const contextualize = (ctx: any, profile: string) => {
+        ctx.state = { user: { id: 7 }, profile: { name: profile } }
+        ctx.params = { provider: 'groq' }
+        ctx.query = {}
+        ctx.get = vi.fn(() => '')
+      }
+      for (const [profile, model, voice] of [
+        ['default', 'canopylabs/orpheus-arabic-saudi', 'noura'],
+        ['work', 'canopylabs/orpheus-v1-english', 'troy'],
+      ]) {
+        const { ctx } = createMockCtx({ settings: { model, voice }, secrets: { apiKey: `${profile}-fake-key` } })
+        contextualize(ctx, profile!)
+        await ctrl.saveSettings(ctx)
+        expect(ctx.body.setting).toMatchObject({ provider: 'groq', settings: { model, voice }, secrets: { apiKey: '[stored]' } })
+        expect(ctx.body.activeProvider).toBe('groq')
+      }
+      const { ctx: listCtx } = createMockCtx()
+      contextualize(listCtx, 'default')
+      await ctrl.listSettings(listCtx)
+      expect(listCtx.body.activeProvider).toBe('groq')
+      expect(listCtx.body.settings).toEqual(expect.arrayContaining([expect.objectContaining({ provider: 'groq', settings: expect.objectContaining({ voice: 'noura' }) })]))
+      expect(JSON.stringify(listCtx.body)).not.toContain('fake-key')
+
+      const { ctx: synthCtx, headers } = createMockCtx({ text: 'هلا' })
+      contextualize(synthCtx, 'default')
+      await ctrl.synthesize(synthCtx)
+      expect(synthesis).toHaveBeenCalledWith(expect.objectContaining({ text: 'هلا' }), expect.objectContaining({ model: 'canopylabs/orpheus-arabic-saudi', voice: 'noura', apiKey: 'default-fake-key' }))
+      expect(headers['Content-Type']).toBe('audio/wav')
+
+      const { ctx: deleteCtx } = createMockCtx()
+      contextualize(deleteCtx, 'default')
+      await ctrl.deleteProvider(deleteCtx)
+      expect(deleteCtx.body.activeProvider).toBe('edge')
+      const store = await import('../../packages/server/src/modules/studio/repositories/tts-settings-store')
+      expect(store.getActiveTtsProvider('work')).toBe('groq')
+      expect(store.getTtsProviderSetting('work', 'groq')?.settings.voice).toBe('troy')
+    } finally {
+      db.close()
+      vi.doUnmock('../../packages/server/src/modules/studio/infrastructure/database/index')
+    }
   })
 
   it('returns 400 for an unknown provider', async () => {

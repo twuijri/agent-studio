@@ -39,7 +39,7 @@ function supportedFormatsFromError(body: string): string[] {
 }
 
 export function createOpenaiCompatibleTtsProvider(
-  id: Extract<TtsProviderId, 'openai' | 'custom' | 'deepinfra'>,
+  id: Extract<TtsProviderId, 'openai' | 'custom' | 'deepinfra' | 'groq'>,
   options: { engine?: string; defaultBaseUrl?: string; defaultModel?: string; defaultVoice?: string } = {},
 ): OpenaiTtsProvider {
   return {
