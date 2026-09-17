@@ -23,6 +23,11 @@ on:
         default: true
         required: false
         type: boolean
+      preview_tag:
+        description: Optional extra moving tag for the freshly built image (e.g. test); never latest
+        default: ""
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -134,6 +139,24 @@ jobs:
           if (!response.ok || (await response.json()).visibility !== 'private') throw new Error('Published package privacy could not be verified. Do not mark this release ready.');
           console.log('Verified: the published image package is private.');
           NODE
+      - name: Tag the published image with the preview tag
+        if: ${{ !inputs.verify_only && inputs.preview_tag != '' }}
+        env:
+          IMAGE: ghcr.io/twuijri/agent-studio:sha-${{ steps.source.outputs.sha }}
+          PREVIEW_TAG: ${{ inputs.preview_tag }}
+        run: |
+          case "$PREVIEW_TAG" in
+            latest|main|sha-*) echo "preview_tag must not be latest, main or a sha tag" >&2; exit 1 ;;
+          esac
+          printf '%s' "$PREVIEW_TAG" | grep -Eq '^[a-z0-9][a-z0-9._-]{0,63}$' || { echo "invalid preview_tag" >&2; exit 1; }
+          PREVIEW="ghcr.io/twuijri/agent-studio:$PREVIEW_TAG"
+          expected_digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
+          docker tag "$IMAGE" "$PREVIEW"
+          docker push "$PREVIEW"
+          docker pull "$PREVIEW"
+          actual_digest=$(docker image inspect "$PREVIEW" --format '{{index .RepoDigests 0}}')
+          test "$actual_digest" = "$expected_digest"
+          printf 'Preview tag %s points to %s\n' "$PREVIEW_TAG" "$actual_digest" >> "$GITHUB_STEP_SUMMARY"
       - name: Promote the tested image to latest
         if: ${{ (!inputs.verify_only && inputs.publish_latest) || (inputs.verify_only && inputs.promote_latest) }}
         env:
