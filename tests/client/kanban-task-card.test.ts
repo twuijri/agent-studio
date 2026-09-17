@@ -73,11 +73,59 @@ describe('KanbanTaskCard i18n', () => {
     expect(wrapper.text()).toContain('负责人')
     expect(wrapper.text()).toContain('task-1')
     expect(wrapper.text()).not.toContain('Body preview content')
-    expect(wrapper.element.tagName).toBe('BUTTON')
+    expect(wrapper.element.tagName).toBe('DIV')
     expect(wrapper.classes()).toContain('status-todo')
+    expect(wrapper.find('.card-main').attributes('role')).toBe('button')
+    expect(wrapper.find('.card-main').attributes('aria-label')).toBe('Ship kanban i18n')
     const avatar = wrapper.find('.assignee-profile-avatar-stub')
     expect(avatar.attributes('data-name')).toBe('alice')
     expect(avatar.attributes('data-avatar-type')).toBe('generated')
     expect(avatar.attributes('data-avatar-seed')).toBe('alice-seed')
+  })
+
+  it('shows the status on the card and offers the matching quick action', async () => {
+    const base = {
+      id: 'task-2',
+      title: 'Card states',
+      body: null,
+      assignee: null,
+      priority: 1,
+      created_by: null,
+      created_at: Math.floor(Date.now() / 1000),
+      started_at: null,
+      completed_at: null,
+      workspace_kind: 'local',
+      workspace_path: null,
+      tenant: null,
+      result: null,
+      skills: null,
+    }
+    const wrapper = mount(KanbanTaskCard, { props: { task: { ...base, status: 'todo' } as any } })
+    expect(wrapper.find('.status-badge').exists()).toBe(false)
+    expect(wrapper.find('.card-quick-action').attributes('data-action')).toBe('promote')
+    await wrapper.find('.card-quick-action').trigger('click')
+    expect(wrapper.emitted('action')).toEqual([[{ taskId: 'task-2', action: 'promote' }]])
+    expect(wrapper.emitted('click')).toBeUndefined()
+
+    await wrapper.find('.card-main').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('click')).toEqual([['task-2']])
+
+    await wrapper.setProps({ task: { ...base, status: 'running' } as any })
+    expect(wrapper.classes()).toContain('status-running')
+    expect(wrapper.find('.status-badge').text()).toBe('kanban.columns.running')
+    expect(wrapper.find('.card-quick-action').exists()).toBe(false)
+
+    await wrapper.setProps({ task: { ...base, status: 'blocked' } as any })
+    expect(wrapper.find('.status-badge .status-icon').exists()).toBe(true)
+
+    await wrapper.setProps({ task: { ...base, status: 'done' } as any })
+    expect(wrapper.find('.card-quick-action').attributes('data-action')).toBe('archive')
+
+    await wrapper.setProps({ task: { ...base, status: 'triage' } as any })
+    expect(wrapper.find('.card-quick-action').attributes('data-action')).toBe('specify')
+
+    await wrapper.setProps({ task: { ...base, status: 'archived' } as any, muted: true })
+    expect(wrapper.classes()).toContain('muted')
+    expect(wrapper.find('.card-quick-action').exists()).toBe(false)
   })
 })

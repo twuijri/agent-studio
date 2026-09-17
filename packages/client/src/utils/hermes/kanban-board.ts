@@ -82,6 +82,74 @@ export function isKanbanDropTarget(from: KanbanTaskStatus, to: KanbanTaskStatus)
   return from === to || resolveKanbanTransition(from, to) !== null
 }
 
+// ─── Board columns ───────────────────────────────────────────────
+//
+// Hermes keeps nine task statuses; the board shows them as an intake strip plus
+// five workflow columns. A column groups statuses; the card itself shows which
+// status it is in (ready badge, running ring, waiting kind, ...).
+
+export type KanbanColumnId = 'queue' | 'running' | 'waiting' | 'review' | 'done'
+
+export interface KanbanColumnDef {
+  id: KanbanColumnId
+  statuses: readonly KanbanTaskStatus[]
+}
+
+export const KANBAN_INBOX_STATUS: KanbanTaskStatus = 'triage'
+export const KANBAN_ARCHIVED_STATUS: KanbanTaskStatus = 'archived'
+
+export const KANBAN_COLUMNS: readonly KanbanColumnDef[] = [
+  { id: 'queue', statuses: ['todo', 'ready'] },
+  { id: 'running', statuses: ['running'] },
+  { id: 'waiting', statuses: ['scheduled', 'blocked'] },
+  { id: 'review', statuses: ['review'] },
+  { id: 'done', statuses: ['done'] },
+]
+
+export const KANBAN_COLUMN_IDS: readonly KanbanColumnId[] = KANBAN_COLUMNS.map(column => column.id)
+
+export function isKanbanColumnId(value: unknown): value is KanbanColumnId {
+  return typeof value === 'string' && (KANBAN_COLUMN_IDS as readonly string[]).includes(value)
+}
+
+export function kanbanColumnById(id: KanbanColumnId): KanbanColumnDef {
+  return KANBAN_COLUMNS.find(column => column.id === id)!
+}
+
+/** Column that shows a status as a card, or null for the intake strip and the archive. */
+export function kanbanColumnForStatus(status: KanbanTaskStatus): KanbanColumnId | null {
+  if (status === KANBAN_ARCHIVED_STATUS) return 'done'
+  return KANBAN_COLUMNS.find(column => column.statuses.includes(status))?.id || null
+}
+
+export interface KanbanColumnDrop {
+  /** Target status inside the column that Hermes will move the task to. */
+  to: KanbanTaskStatus
+  transition: KanbanTransition
+}
+
+/**
+ * Every Hermes transition a drop into `column` could mean for a card coming from
+ * `from`. Same-column moves are reorders and never yield a transition. One
+ * result runs directly; several (e.g. schedule vs block) need the user to pick.
+ */
+export function kanbanColumnDropOptions(from: KanbanTaskStatus, column: KanbanColumnDef): KanbanColumnDrop[] {
+  if (column.statuses.includes(from)) return []
+  const seen = new Set<KanbanTransitionAction>()
+  const options: KanbanColumnDrop[] = []
+  for (const to of column.statuses) {
+    const transition = resolveKanbanTransition(from, to)
+    if (!transition || seen.has(transition.action)) continue
+    seen.add(transition.action)
+    options.push({ to, transition })
+  }
+  return options
+}
+
+export function isKanbanColumnDropTarget(from: KanbanTaskStatus, column: KanbanColumnDef): boolean {
+  return column.statuses.includes(from) || kanbanColumnDropOptions(from, column).length > 0
+}
+
 // ─── Browser-local layout (manual card order inside a column) ───
 //
 // Hermes has no card ordering field, so this layout lives only in the viewer's
@@ -89,7 +157,7 @@ export function isKanbanDropTarget(from: KanbanTaskStatus, to: KanbanTaskStatus)
 // the Hermes workflow order and cannot be rearranged.
 
 export interface KanbanBoardLayout {
-  cards: Partial<Record<KanbanTaskStatus, string[]>>
+  cards: Partial<Record<KanbanColumnId, string[]>>
 }
 
 export const KANBAN_LAYOUT_STORAGE_PREFIX = 'hermes.kanban.layout.'
@@ -98,25 +166,21 @@ export function kanbanLayoutStorageKey(board: string): string {
   return `${KANBAN_LAYOUT_STORAGE_PREFIX}${board}`
 }
 
-function isStatus(value: unknown): value is KanbanTaskStatus {
-  return typeof value === 'string' && (KANBAN_BOARD_STATUSES as readonly string[]).includes(value)
-}
-
 export function emptyKanbanLayout(): KanbanBoardLayout {
   return { cards: {} }
 }
 
-/** Older layouts also stored a column order; it is ignored and dropped on the next save. */
+/** Older layouts keyed cards by status or stored a column order; both are ignored and dropped on the next save. */
 export function parseKanbanLayout(raw: string | null | undefined): KanbanBoardLayout {
   if (!raw) return emptyKanbanLayout()
   try {
     const parsed = JSON.parse(raw) as { cards?: unknown }
     const cards: KanbanBoardLayout['cards'] = {}
     if (parsed?.cards && typeof parsed.cards === 'object') {
-      for (const [status, ids] of Object.entries(parsed.cards as Record<string, unknown>)) {
-        if (!isStatus(status) || !Array.isArray(ids)) continue
+      for (const [column, ids] of Object.entries(parsed.cards as Record<string, unknown>)) {
+        if (!isKanbanColumnId(column) || !Array.isArray(ids)) continue
         const clean = ids.filter((id): id is string => typeof id === 'string' && id.length > 0)
-        if (clean.length) cards[status] = clean
+        if (clean.length) cards[column] = clean
       }
     }
     return { cards }

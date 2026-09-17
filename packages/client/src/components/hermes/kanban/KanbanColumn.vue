@@ -2,14 +2,16 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { VueDraggable, type DraggableEvent } from 'vue-draggable-plus'
-import KanbanTaskCard from './KanbanTaskCard.vue'
-import { isKanbanDropTarget } from '@/utils/hermes/kanban-board'
+import KanbanTaskCard, { type KanbanCardQuickAction } from './KanbanTaskCard.vue'
+import { type KanbanColumnDef, isKanbanColumnDropTarget, kanbanColumnById, isKanbanColumnId } from '@/utils/hermes/kanban-board'
 import type { KanbanTask, KanbanTaskStatus } from '@/api/hermes/kanban'
 import type { ProfileAvatar } from '@/api/hermes/profiles'
 
 const props = defineProps<{
-  status: KanbanTaskStatus
+  column: KanbanColumnDef
   tasks: KanbanTask[]
+  /** Archived tasks shown under the done column behind a toggle. */
+  archivedTasks?: KanbanTask[]
   avatars?: Record<string, ProfileAvatar | null>
   /** Status of the card currently being dragged anywhere on the board, or null. */
   draggingStatus?: KanbanTaskStatus | null
@@ -19,8 +21,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   taskClick: [taskId: string]
+  taskAction: [payload: { taskId: string; action: KanbanCardQuickAction }]
   reorder: [ids: string[]]
-  dropped: [payload: { taskId: string; from: KanbanTaskStatus; to: KanbanTaskStatus; index: number }]
+  dropped: [payload: { taskId: string; from: KanbanTaskStatus; toColumn: KanbanColumnDef; index: number }]
   dragStart: [status: KanbanTaskStatus]
   dragEnd: []
 }>()
@@ -47,24 +50,33 @@ watch(() => props.draggingStatus, (dragging) => {
   if (!dragging && syncPending) syncFromProps()
 })
 
-const columnLabel = computed(() => t(`kanban.columns.${props.status}`, props.status))
-const dropBlocked = computed(() => !!props.draggingStatus && !isKanbanDropTarget(props.draggingStatus, props.status))
-const dropOpen = computed(() => !!props.draggingStatus && props.draggingStatus !== props.status && !dropBlocked.value)
+const columnLabel = computed(() => t(`kanban.board.columns.${props.column.id}`, props.column.id))
+const dropBlocked = computed(() => !!props.draggingStatus && !isKanbanColumnDropTarget(props.draggingStatus, props.column))
+const dropOpen = computed(() => !!props.draggingStatus && !props.column.statuses.includes(props.draggingStatus) && !dropBlocked.value)
+
+const showArchived = ref(false)
+const archivedCount = computed(() => props.archivedTasks?.length || 0)
+
+function columnOf(element: HTMLElement | null | undefined): KanbanColumnDef | null {
+  const value = element?.dataset?.column
+  return isKanbanColumnId(value) ? kanbanColumnById(value) : null
+}
 
 function statusOf(element: HTMLElement | null | undefined): KanbanTaskStatus | null {
   const value = element?.dataset?.status
   return value ? value as KanbanTaskStatus : null
 }
 
-function canMove(event: { from: HTMLElement; to: HTMLElement }): boolean {
-  const from = statusOf(event.from)
-  const to = statusOf(event.to)
+function canMove(event: { from: HTMLElement; to: HTMLElement; dragged: HTMLElement }): boolean {
+  const from = statusOf(event.dragged)
+  const to = columnOf(event.to)
   if (!from || !to) return false
-  return isKanbanDropTarget(from, to)
+  return isKanbanColumnDropTarget(from, to)
 }
 
-function handleStart() {
-  emit('dragStart', props.status)
+function handleStart(event: DraggableEvent<KanbanTask>) {
+  const status = statusOf(event.item) || event.data?.status
+  if (status) emit('dragStart', status)
 }
 
 function handleEnd() {
@@ -75,31 +87,31 @@ function handleUpdate() {
   emit('reorder', localTasks.value.map(task => task.id))
 }
 
-function pointerStatus(event: DraggableEvent<KanbanTask>): KanbanTaskStatus | null {
+function pointerColumn(event: DraggableEvent<KanbanTask>): KanbanColumnDef | null {
   const original = (event as { originalEvent?: MouseEvent | TouchEvent }).originalEvent
   if (!original || typeof document.elementFromPoint !== 'function') return null
   const point = 'changedTouches' in original ? original.changedTouches[0] : original
   if (!point) return null
   const column = document.elementFromPoint(point.clientX, point.clientY)?.closest<HTMLElement>('.kanban-column')
-  return statusOf(column)
+  return columnOf(column)
 }
 
 function handleAdd(event: DraggableEvent<KanbanTask>) {
-  const from = statusOf(event.from)
   const task = event.data
+  const from = statusOf(event.item) || task?.status
   if (!from || !task) return
   // Sortable leaves the card in the last column that accepted it, so a drop over
   // a refused column would silently land elsewhere. Report the column under the
   // pointer instead; the board reverts when that is not a valid transition.
-  const to = pointerStatus(event) || props.status
-  emit('dropped', { taskId: task.id, from, to, index: event.newIndex ?? 0 })
+  const toColumn = pointerColumn(event) || props.column
+  emit('dropped', { taskId: task.id, from, toColumn, index: event.newIndex ?? 0 })
 }
 </script>
 
 <template>
   <section
-    :class="['kanban-column', `status-${status}`, { 'drop-blocked': dropBlocked, 'drop-open': dropOpen }]"
-    :data-status="status"
+    :class="['kanban-column', `column-${column.id}`, { 'drop-blocked': dropBlocked, 'drop-open': dropOpen }]"
+    :data-column="column.id"
     :aria-label="columnLabel"
   >
     <header class="column-header">
@@ -111,7 +123,7 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
       <VueDraggable
         v-model="localTasks"
         class="task-list"
-        :data-status="status"
+        :data-column="column.id"
         group="kanban-cards"
         :animation="150"
         :force-fallback="true"
@@ -119,10 +131,10 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
         :delay="120"
         :delay-on-touch-only="true"
         :disabled="dragDisabled"
-        @move="canMove"
         ghost-class="task-slot-ghost"
         chosen-class="task-slot-chosen"
         drag-class="task-slot-dragging"
+        @move="canMove"
         @start="handleStart"
         @end="handleEnd"
         @update="handleUpdate"
@@ -133,19 +145,42 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
           :key="task.id"
           class="task-slot"
           :data-task-id="task.id"
+          :data-status="task.status"
         >
           <KanbanTaskCard
             :task="task"
             :assignee-avatar="task.assignee ? avatars?.[task.assignee] || null : null"
             @click="emit('taskClick', task.id)"
+            @action="payload => emit('taskAction', payload)"
           />
         </div>
       </VueDraggable>
-      <div v-if="localTasks.length === 0" class="column-empty" aria-hidden="true">
+      <div v-if="localTasks.length === 0 && !showArchived" class="column-empty" aria-hidden="true">
         {{ dropBlocked ? t('kanban.dnd.dropNotAllowed') : t('kanban.noTasks') }}
       </div>
       <div v-else-if="dropBlocked" class="column-blocked-hint" aria-hidden="true">
         {{ t('kanban.dnd.dropNotAllowed') }}
+      </div>
+      <div v-if="archivedTasks" class="archive-section">
+        <button
+          type="button"
+          class="archive-toggle"
+          :aria-expanded="showArchived"
+          @click="showArchived = !showArchived"
+        >
+          {{ showArchived ? t('kanban.board.hideArchived', { count: archivedCount }) : t('kanban.board.showArchived', { count: archivedCount }) }}
+        </button>
+        <div v-if="showArchived" class="archive-list" data-testid="kanban-archive-list">
+          <div v-if="archivedCount === 0" class="archive-empty">{{ t('kanban.noTasks') }}</div>
+          <KanbanTaskCard
+            v-for="task in archivedTasks"
+            :key="task.id"
+            :task="task"
+            muted
+            :assignee-avatar="task.assignee ? avatars?.[task.assignee] || null : null"
+            @click="emit('taskClick', task.id)"
+          />
+        </div>
       </div>
     </div>
   </section>
@@ -169,15 +204,11 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
   background: color-mix(in srgb, $bg-secondary 66%, $bg-card);
   transition: border-color $transition-fast, opacity $transition-fast, box-shadow $transition-fast;
 
-  &.status-triage { --kanban-status-color: #8b8f95; }
-  &.status-todo { --kanban-status-color: #6f7782; }
-  &.status-scheduled { --kanban-status-color: #667681; }
-  &.status-ready { --kanban-status-color: #a66d23; }
-  &.status-running { --kanban-status-color: var(--accent-info); }
-  &.status-blocked { --kanban-status-color: var(--error); }
-  &.status-review { --kanban-status-color: #7b6f8b; }
-  &.status-done { --kanban-status-color: var(--success); }
-  &.status-archived { --kanban-status-color: #777b81; }
+  &.column-queue { --kanban-status-color: #a66d23; }
+  &.column-running { --kanban-status-color: var(--success); }
+  &.column-waiting { --kanban-status-color: #b8860b; }
+  &.column-review { --kanban-status-color: #7b5fb3; }
+  &.column-done { --kanban-status-color: var(--success); }
 
   &.drop-open {
     border-color: color-mix(in srgb, var(--kanban-status-color) 55%, $border-color);
@@ -269,11 +300,6 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
 
 .task-slot-ghost {
   opacity: 0.35;
-
-  :deep(.kanban-task-card) {
-    border-style: dashed;
-    border-color: var(--kanban-status-color);
-  }
 }
 
 .task-slot-chosen :deep(.kanban-task-card) {
@@ -304,5 +330,49 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
 .column-blocked-hint {
   inset: auto 9px 9px;
   background: color-mix(in srgb, $bg-card 85%, transparent);
+}
+
+.archive-section {
+  flex: 0 0 auto;
+  max-height: 55%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px dashed $border-light;
+}
+
+.archive-toggle {
+  appearance: none;
+  padding: 8px 11px;
+  border: 0;
+  background: transparent;
+  color: $text-muted;
+  font: inherit;
+  font-size: 11.5px;
+  text-align: start;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    color: $text-primary;
+  }
+}
+
+.archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 0 9px 9px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  overscroll-behavior-x: auto;
+}
+
+.archive-empty {
+  padding: 8px;
+  font-size: 12px;
+  color: $text-muted;
+  text-align: center;
 }
 </style>

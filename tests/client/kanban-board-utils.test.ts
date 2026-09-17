@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   KANBAN_BOARD_STATUSES,
+  KANBAN_COLUMNS,
   hasCustomKanbanLayout,
+  isKanbanColumnDropTarget,
+  kanbanColumnById,
+  kanbanColumnDropOptions,
+  kanbanColumnForStatus,
   isKanbanDropTarget,
   kanbanLayoutStorageKey,
   orderKanbanCards,
@@ -62,16 +67,51 @@ describe('kanban board transitions', () => {
   })
 })
 
+describe('kanban board columns', () => {
+  it('maps every Hermes status to the intake strip, a workflow column, or the archive under done', () => {
+    expect(KANBAN_COLUMNS.map(column => column.id)).toEqual(['queue', 'running', 'waiting', 'review', 'done'])
+    expect(kanbanColumnForStatus('triage')).toBeNull()
+    expect(kanbanColumnForStatus('todo')).toBe('queue')
+    expect(kanbanColumnForStatus('ready')).toBe('queue')
+    expect(kanbanColumnForStatus('running')).toBe('running')
+    expect(kanbanColumnForStatus('scheduled')).toBe('waiting')
+    expect(kanbanColumnForStatus('blocked')).toBe('waiting')
+    expect(kanbanColumnForStatus('review')).toBe('review')
+    expect(kanbanColumnForStatus('done')).toBe('done')
+    expect(kanbanColumnForStatus('archived')).toBe('done')
+    const covered = new Set(KANBAN_COLUMNS.flatMap(column => column.statuses))
+    expect([...covered].sort()).toEqual(['blocked', 'done', 'ready', 'review', 'running', 'scheduled', 'todo'])
+  })
+
+  it('derives drop options per column from the status transitions and treats same-column moves as reorders', () => {
+    const actions = (from: KanbanTaskStatus, column: string) => kanbanColumnDropOptions(from, kanbanColumnById(column as any)).map(option => `${option.transition.action}->${option.to}`)
+    expect(actions('todo', 'queue')).toEqual([])
+    expect(actions('ready', 'queue')).toEqual([])
+    expect(actions('blocked', 'queue')).toEqual(['unblock->todo'])
+    expect(actions('review', 'queue')).toEqual(['reopenReview->todo'])
+    expect(actions('todo', 'running')).toEqual([])
+    expect(actions('ready', 'waiting')).toEqual(['schedule->scheduled', 'block->blocked'])
+    expect(actions('todo', 'waiting')).toEqual(['schedule->scheduled'])
+    expect(actions('running', 'review')).toEqual(['requestReview->review'])
+    expect(actions('todo', 'review')).toEqual([])
+    expect(actions('blocked', 'done')).toEqual(['complete->done'])
+    expect(actions('done', 'queue')).toEqual([])
+    expect(isKanbanColumnDropTarget('scheduled', kanbanColumnById('waiting'))).toBe(true)
+    expect(isKanbanColumnDropTarget('todo', kanbanColumnById('running'))).toBe(false)
+    expect(isKanbanColumnDropTarget('ready', kanbanColumnById('review'))).toBe(true)
+  })
+})
+
 describe('kanban browser-local layout', () => {
   it('parses stored layouts defensively and drops the retired column order', () => {
     expect(parseKanbanLayout(null)).toEqual({ cards: {} })
     expect(parseKanbanLayout('not json')).toEqual({ cards: {} })
     expect(parseKanbanLayout(JSON.stringify({
       columns: ['done', 'todo'],
-      cards: { todo: ['a', '', 3, 'b'], nope: ['x'], ready: [] },
-    }))).toEqual({ cards: { todo: ['a', 'b'] } })
+      cards: { queue: ['a', '', 3, 'b'], todo: ['legacy'], nope: ['x'], review: [] },
+    }))).toEqual({ cards: { queue: ['a', 'b'] } })
     expect(hasCustomKanbanLayout({ cards: {} })).toBe(false)
-    expect(hasCustomKanbanLayout({ cards: { todo: ['a'] } })).toBe(true)
+    expect(hasCustomKanbanLayout({ cards: { queue: ['a'] } })).toBe(true)
     expect(kanbanLayoutStorageKey('project-a')).toBe('hermes.kanban.layout.project-a')
   })
 
