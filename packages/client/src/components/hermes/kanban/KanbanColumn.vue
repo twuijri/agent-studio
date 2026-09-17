@@ -205,7 +205,6 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
   transition: border-color $transition-fast, opacity $transition-fast, box-shadow $transition-fast;
 
   &.column-queue { --kanban-status-color: #a66d23; }
-  &.column-running { --kanban-status-color: var(--success); }
   &.column-waiting { --kanban-status-color: #b8860b; }
   &.column-review { --kanban-status-color: #7b5fb3; }
   &.column-done { --kanban-status-color: var(--success); }

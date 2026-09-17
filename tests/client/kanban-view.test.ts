@@ -82,7 +82,7 @@ vi.mock('@/stores/hermes/kanban', () => ({
     startEventStream: mockStartEventStream,
     stopEventStream: mockStopEventStream,
     orderedTasksForColumn: (column: string) => {
-      const statuses: Record<string, string[]> = { queue: ['todo', 'ready'], running: ['running'], waiting: ['scheduled', 'blocked'], review: ['review'], done: ['done'] }
+      const statuses: Record<string, string[]> = { queue: ['todo', 'ready', 'running'], waiting: ['scheduled', 'blocked'], review: ['review'], done: ['done'] }
       return storeState.tasks.filter(task => statuses[column]?.includes(task.status)).sort((a, b) => b.created_at - a.created_at)
     },
     tasksWithStatus: (status: string) => storeState.tasks.filter(task => task.status === status),
@@ -264,10 +264,9 @@ describe('KanbanView', () => {
     expect(mockRecoverSelectedBoard).toHaveBeenCalledWith('project-a')
     expect(mockRefreshAll).toHaveBeenCalledOnce()
     expect(routerReplace).not.toHaveBeenCalled()
-    expect(wrapper.findAll('.kanban-column')).toHaveLength(5)
+    expect(wrapper.findAll('.kanban-column')).toHaveLength(4)
     expect(wrapper.findAll('.kanban-column').map(column => column.attributes('data-column'))).toEqual([
       'queue',
-      'running',
       'waiting',
       'review',
       'done',
@@ -317,7 +316,7 @@ describe('KanbanView', () => {
     const wrapper = mount(KanbanView)
     await flushPromises()
 
-    expect(wrapper.findAll('.kanban-column').slice(0, 2).map(column => column.attributes('data-column'))).toEqual(['queue', 'running'])
+    expect(wrapper.findAll('.kanban-column').slice(0, 2).map(column => column.attributes('data-column'))).toEqual(['queue', 'waiting'])
     expect(wrapper.findAllComponents({ name: 'VueDraggable' })).toHaveLength(0)
     await wrapper.find('.kanban-task-card-stub').trigger('click')
     expect(wrapper.find('.drawer-updated').attributes('data-task-id')).toBe('task-1')
@@ -353,7 +352,7 @@ describe('KanbanView', () => {
     await flushPromises()
     expect(mockUnblockTasks).toHaveBeenCalledWith(['task-1'])
 
-    column('running').vm.$emit('dropped', { taskId: 'task-1', from: 'todo', toColumn: column('running').props('column'), index: 0 })
+    column('review').vm.$emit('dropped', { taskId: 'task-1', from: 'todo', toColumn: column('review').props('column'), index: 0 })
     await flushPromises()
     expect(mockFetchTasks).toHaveBeenCalledWith(true)
     expect(mockScheduleTask).not.toHaveBeenCalled()

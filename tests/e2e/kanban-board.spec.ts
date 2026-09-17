@@ -174,9 +174,9 @@ test('scrolls the board sideways, keeps columns scrollable, and opens cards', as
 
   const board = page.getByTestId('kanban-board')
   await expect(board).toBeVisible()
-  await expect(page.locator('.kanban-column')).toHaveCount(5)
+  await expect(page.locator('.kanban-column')).toHaveCount(4)
   expect(await page.locator('.kanban-column').evaluateAll(columns => columns.map(column => column.getAttribute('data-column')))).toEqual([
-    'queue', 'running', 'waiting', 'review', 'done',
+    'queue', 'waiting', 'review', 'done',
   ])
   await expect(page.getByTestId('kanban-inbox')).toBeVisible()
   const boardMetrics = await board.evaluate(element => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }))
@@ -205,8 +205,8 @@ test('moves cards between columns through the Hermes transition bridge', async (
   await page.goto('/#/hermes/kanban')
   await expect(page.locator('.task-slot[data-task-id="task-1"]')).toBeVisible()
 
-  // todo -> running is not a manual Hermes transition, so the drop is refused.
-  await dragCardToColumn(page, 'task-1', 'running')
+  // todo -> review is not a manual Hermes transition, so the drop is refused.
+  await dragCardToColumn(page, 'task-1', 'review')
   await expect(page.locator('.task-list[data-column="queue"] .task-slot[data-task-id="task-1"]')).toBeVisible()
   expect(transitions).toEqual([])
 
@@ -257,15 +257,15 @@ test('keeps manual card order in the browser only and never moves columns', asyn
 
   // Column headers are not drag handles: dragging one leaves the workflow order intact.
   const queueHeader = page.locator('.kanban-column.column-queue .column-header')
-  const runningHeader = page.locator('.kanban-column.column-running .column-header')
+  const waitingHeader = page.locator('.kanban-column.column-waiting .column-header')
   const from = (await queueHeader.boundingBox())!
-  const to = (await runningHeader.boundingBox())!
+  const to = (await waitingHeader.boundingBox())!
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
   await page.mouse.down()
   await page.mouse.move(from.x + from.width / 2 + 12, from.y + from.height / 2, { steps: 4 })
   await page.mouse.move(to.x + to.width - 12, to.y + to.height / 2, { steps: 16 })
   await page.mouse.up()
-  expect(await page.locator('.kanban-column').evaluateAll(columns => columns.slice(0, 2).map(column => column.getAttribute('data-column')))).toEqual(['queue', 'running'])
+  expect(await page.locator('.kanban-column').evaluateAll(columns => columns.slice(0, 2).map(column => column.getAttribute('data-column')))).toEqual(['queue', 'waiting'])
 
   // Reordering cards inside a column is a browser-only preference.
   await expect(page.getByTestId('kanban-board')).toHaveAttribute('data-busy', 'false')
