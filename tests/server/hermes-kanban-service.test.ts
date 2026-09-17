@@ -64,6 +64,10 @@ describe('hermes kanban service', () => {
         expect.objectContaining({ key: 'links', status: 'supported', canonicalRoute: '/links', canonicalCommand: 'link/unlink', requiresBoard: true }),
         expect.objectContaining({ key: 'bulk', status: 'partial', canonicalRoute: '/tasks/bulk', requiresBoard: true }),
         expect.objectContaining({ key: 'events', status: 'partial', canonicalRoute: '/events', canonicalCommand: 'watch', requiresBoard: true }),
+        expect.objectContaining({ key: 'promote', status: 'supported', canonicalCommand: 'promote', requiresBoard: true }),
+        expect.objectContaining({ key: 'schedule', status: 'supported', canonicalCommand: 'schedule', requiresBoard: true }),
+        expect.objectContaining({ key: 'requestReview', status: 'supported', canonicalCommand: 'request-review', requiresBoard: true }),
+        expect.objectContaining({ key: 'reopenReview', status: 'supported', canonicalCommand: 'reopen-review', requiresBoard: true }),
       ]),
     })
   })
@@ -95,6 +99,29 @@ describe('hermes kanban service', () => {
     expect(mockExecFileAsync.mock.calls[2][1]).toEqual(['kanban', '--board', 'project-a', 'complete', 'task-1', '--summary', 'closed'])
     expect(mockExecFileAsync.mock.calls[3][1]).toEqual(['kanban', '--board', 'project-a', 'assign', 'task-1', 'alice'])
     expect(mockExecFileAsync.mock.calls[4][1]).toEqual(['kanban', '--board', 'project-a', 'complete', 'task-2', '--summary', 'closed'])
+  })
+
+  it('builds manual transition commands with explicit board and optional notes', async () => {
+    mockExecFileAsync
+      .mockResolvedValueOnce({ stdout: 'Promoted task-1 -> ready\n' })
+      .mockResolvedValueOnce({ stdout: 'Scheduled task-1\n' })
+      .mockResolvedValueOnce({ stdout: 'Requested review for task-1\n' })
+      .mockResolvedValueOnce({ stdout: 'Reopened task-1\n' })
+      .mockResolvedValueOnce({ stdout: 'Promoted task-2 -> ready\n' })
+      .mockResolvedValueOnce({ stdout: '', stderr: 'cannot promote task-3: not todo/blocked\n' })
+
+    await expect(service.promoteTask('task-1', { board: 'project-a', reason: 'manual promote' })).resolves.toBeUndefined()
+    await expect(service.scheduleTask('task-1', { board: 'project-a' })).resolves.toBeUndefined()
+    await expect(service.requestReview('task-1', { board: 'project-a', summary: 'implemented' })).resolves.toBeUndefined()
+    await expect(service.reopenReviewTasks(['task-1'], { board: 'project-a', reason: 'needs tests' })).resolves.toBeUndefined()
+    await expect(service.promoteTask('task-2', { board: 'project-a', reason: '   ' })).resolves.toBeUndefined()
+    await expect(service.promoteTask('task-3', { board: 'project-a' })).rejects.toThrow('Failed to promote kanban task: cannot promote task-3: not todo/blocked')
+
+    expect(mockExecFileAsync.mock.calls[0][1]).toEqual(['kanban', '--board', 'project-a', 'promote', 'task-1', 'manual promote'])
+    expect(mockExecFileAsync.mock.calls[1][1]).toEqual(['kanban', '--board', 'project-a', 'schedule', 'task-1'])
+    expect(mockExecFileAsync.mock.calls[2][1]).toEqual(['kanban', '--board', 'project-a', 'request-review', 'task-1', '--summary', 'implemented'])
+    expect(mockExecFileAsync.mock.calls[3][1]).toEqual(['kanban', '--board', 'project-a', 'reopen-review', 'task-1', '--reason', 'needs tests'])
+    expect(mockExecFileAsync.mock.calls[4][1]).toEqual(['kanban', '--board', 'project-a', 'promote', 'task-2'])
   })
 
   it('treats zero-exit stderr from mutation CLI calls as failures', async () => {

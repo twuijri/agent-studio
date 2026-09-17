@@ -566,6 +566,78 @@ export async function unblock(ctx: Context) {
   }
 }
 
+async function runReasonTransition(
+  ctx: Context,
+  allowedStatuses: ReadonlySet<kanbanCli.KanbanTaskStatus>,
+  action: string,
+  run: (taskId: string, board: string, reason?: string) => Promise<void>,
+) {
+  const bodyResult = requestBody(ctx)
+  if (rejectBadRequest(ctx, bodyResult.error)) return
+  const reason = optionalString(bodyResult.body.reason, 'reason')
+  if (rejectBadRequest(ctx, reason.error)) return
+  const board = requestBoard(ctx)
+  if (!board) return
+  try {
+    if (!await authorizeTaskIds(ctx, board, [ctx.params.id], allowedStatuses, action)) return
+    await run(ctx.params.id, board, reason.value)
+    ctx.body = { ok: true }
+  } catch (err: any) {
+    ctx.status = 500
+    ctx.body = { error: err.message }
+  }
+}
+
+export async function promote(ctx: Context) {
+  await runReasonTransition(
+    ctx,
+    new Set<kanbanCli.KanbanTaskStatus>(['todo', 'blocked']),
+    'promote',
+    (taskId, board, reason) => kanbanCli.promoteTask(taskId, { board, reason }),
+  )
+}
+
+export async function schedule(ctx: Context) {
+  await runReasonTransition(
+    ctx,
+    new Set<kanbanCli.KanbanTaskStatus>(['todo', 'ready', 'running', 'blocked']),
+    'schedule',
+    (taskId, board, reason) => kanbanCli.scheduleTask(taskId, { board, reason }),
+  )
+}
+
+export async function reopenReview(ctx: Context) {
+  await runReasonTransition(
+    ctx,
+    new Set<kanbanCli.KanbanTaskStatus>(['review']),
+    'reopen review for',
+    (taskId, board, reason) => kanbanCli.reopenReviewTasks([taskId], { board, reason }),
+  )
+}
+
+export async function requestReview(ctx: Context) {
+  const bodyResult = requestBody(ctx)
+  if (rejectBadRequest(ctx, bodyResult.error)) return
+  const summary = optionalString(bodyResult.body.summary, 'summary')
+  if (rejectBadRequest(ctx, summary.error)) return
+  const board = requestBoard(ctx)
+  if (!board) return
+  try {
+    if (!await authorizeTaskIds(
+      ctx,
+      board,
+      [ctx.params.id],
+      new Set<kanbanCli.KanbanTaskStatus>(['running', 'ready']),
+      'request review for',
+    )) return
+    await kanbanCli.requestReview(ctx.params.id, { board, summary: summary.value })
+    ctx.body = { ok: true }
+  } catch (err: any) {
+    ctx.status = 500
+    ctx.body = { error: err.message }
+  }
+}
+
 export async function assign(ctx: Context) {
   const bodyResult = requestBody(ctx)
   if (rejectBadRequest(ctx, bodyResult.error)) return
