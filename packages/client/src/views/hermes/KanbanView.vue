@@ -619,6 +619,7 @@ async function handleDispatch() {
             :avatars="profileAvatarByName"
             :dragging-status="draggingStatus"
             :drag-disabled="transitionBusy"
+            :collapsible="column.id === 'waiting'"
             @task-click="handleTaskClick"
             @task-action="handleCardAction"
             @reorder="ids => handleCardsReordered(column, ids)"

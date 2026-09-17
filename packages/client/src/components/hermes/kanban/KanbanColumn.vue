@@ -17,6 +17,8 @@ const props = defineProps<{
   draggingStatus?: KanbanTaskStatus | null
   /** Disables dragging cards out of (and into) this column, e.g. while a transition runs. */
   dragDisabled?: boolean
+  /** Collapse to a narrow strip while empty; expands for drops and on click. */
+  collapsible?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -56,6 +58,16 @@ const dropOpen = computed(() => !!props.draggingStatus && !props.column.statuses
 
 const showArchived = ref(false)
 const archivedCount = computed(() => props.archivedTasks?.length || 0)
+
+// A collapsible column only takes a full slot when it has cards, when a card
+// that may land here is being dragged, or after the user opened it by hand.
+const expandedByUser = ref(false)
+const collapsed = computed(() => !!props.collapsible && localTasks.value.length === 0 && !dropOpen.value && !expandedByUser.value)
+
+function toggleExpanded() {
+  if (!props.collapsible) return
+  expandedByUser.value = !expandedByUser.value
+}
 
 function columnOf(element: HTMLElement | null | undefined): KanbanColumnDef | null {
   const value = element?.dataset?.column
@@ -110,16 +122,23 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
 
 <template>
   <section
-    :class="['kanban-column', `column-${column.id}`, { 'drop-blocked': dropBlocked, 'drop-open': dropOpen }]"
+    :class="['kanban-column', `column-${column.id}`, { 'drop-blocked': dropBlocked, 'drop-open': dropOpen, collapsed, collapsible }]"
     :data-column="column.id"
+    :data-collapsed="collapsed ? 'true' : 'false'"
     :aria-label="columnLabel"
   >
-    <header class="column-header">
+    <component
+      :is="collapsible ? 'button' : 'header'"
+      :type="collapsible ? 'button' : undefined"
+      class="column-header"
+      :aria-expanded="collapsible ? String(!collapsed) : undefined"
+      @click="toggleExpanded"
+    >
       <span class="status-dot" aria-hidden="true" />
       <span class="column-title">{{ columnLabel }}</span>
       <span class="column-count">{{ localTasks.length }}</span>
-    </header>
-    <div class="column-body">
+    </component>
+    <div v-show="!collapsed" class="column-body">
       <VueDraggable
         v-model="localTasks"
         class="task-list"
@@ -221,6 +240,33 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
       cursor: not-allowed;
     }
   }
+
+  &.collapsible {
+    transition: border-color $transition-fast, opacity $transition-fast, box-shadow $transition-fast, flex-basis $transition-normal, width $transition-normal;
+  }
+
+  // Empty collapsible column: a narrow strip with a vertical title.
+  &.collapsed {
+    flex-basis: 44px;
+    width: 44px;
+
+    .column-header {
+      flex: 1;
+      flex-direction: column;
+      justify-content: flex-start;
+      border-bottom: 0;
+    }
+
+    .column-title {
+      writing-mode: vertical-rl;
+      color: $text-muted;
+      font-weight: 500;
+    }
+
+    .column-count {
+      margin-inline-start: 0;
+    }
+  }
 }
 
 .column-header {
@@ -233,6 +279,18 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
   color: $text-primary;
   font-weight: 600;
   user-select: none;
+}
+
+button.column-header {
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  border-inline: 0;
+  border-top: 0;
+  font: inherit;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
 }
 
 .status-dot {
