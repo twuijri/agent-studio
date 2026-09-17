@@ -162,4 +162,36 @@ describe('KanbanColumn', () => {
     await archived[0].trigger('click')
     expect(wrapper.emitted('taskClick')).toEqual([['t-8']])
   })
+
+  it('collapses a collapsible column while empty and expands for drops or on click', async () => {
+    const wrapper = mount(KanbanColumn, { props: { column: kanbanColumnById('waiting'), tasks: [], collapsible: true } })
+    expect(wrapper.classes()).toContain('collapsed')
+    expect(wrapper.attributes('data-collapsed')).toBe('true')
+    expect(wrapper.find('.column-body').attributes('style') || '').toContain('display: none')
+    expect(wrapper.find('button.column-header').attributes('aria-expanded')).toBe('false')
+
+    await wrapper.setProps({ draggingStatus: 'ready' })
+    expect(wrapper.classes()).not.toContain('collapsed')
+    expect(wrapper.find('.column-body').attributes('style') || '').not.toContain('display: none')
+
+    await wrapper.setProps({ draggingStatus: 'todo' })
+    expect(wrapper.classes()).not.toContain('collapsed')
+
+    await wrapper.setProps({ draggingStatus: 'done' })
+    expect(wrapper.classes()).toContain('collapsed')
+
+    await wrapper.find('button.column-header').trigger('click')
+    expect(wrapper.classes()).not.toContain('collapsed')
+    expect(wrapper.find('button.column-header').attributes('aria-expanded')).toBe('true')
+    await wrapper.find('button.column-header').trigger('click')
+    expect(wrapper.classes()).toContain('collapsed')
+
+    // Store updates are deferred while a drag is in flight, so end it first.
+    await wrapper.setProps({ draggingStatus: null, tasks: [task('t-1', 'blocked')] })
+    expect(wrapper.classes()).not.toContain('collapsed')
+
+    const plain = mount(KanbanColumn, { props: { column: kanbanColumnById('review'), tasks: [] } })
+    expect(plain.classes()).not.toContain('collapsed')
+    expect(plain.find('header.column-header').exists()).toBe(true)
+  })
 })

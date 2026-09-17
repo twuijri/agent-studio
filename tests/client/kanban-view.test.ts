@@ -116,10 +116,11 @@ vi.mock('@/components/hermes/kanban/KanbanColumn.vue', () => ({
       avatars: { type: Object, required: false },
       draggingStatus: { type: String, required: false },
       dragDisabled: { type: Boolean, default: false },
+      collapsible: { type: Boolean, default: false },
     },
     emits: ['taskClick', 'taskAction', 'reorder', 'dropped', 'dragStart', 'dragEnd'],
     template: `
-      <section class="kanban-column" :data-column="column.id" :data-archived="archivedTasks ? archivedTasks.length : ''" :data-dragging="draggingStatus || ''" :data-drag-disabled="dragDisabled ? 'true' : 'false'">
+      <section class="kanban-column" :data-column="column.id" :data-collapsible="collapsible ? 'true' : 'false'" :data-archived="archivedTasks ? archivedTasks.length : ''" :data-dragging="draggingStatus || ''" :data-drag-disabled="dragDisabled ? 'true' : 'false'">
         <button
           v-for="task in tasks"
           :key="task.id"
@@ -273,6 +274,7 @@ describe('KanbanView', () => {
     ])
     expect(wrapper.find('[data-testid="kanban-inbox"]').exists()).toBe(true)
     expect(wrapper.find('.kanban-column[data-column="done"]').attributes('data-archived')).toBe('0')
+    expect(wrapper.findAll('.kanban-column').map(column => column.attributes('data-collapsible'))).toEqual(['false', 'true', 'false', 'false'])
     expect(wrapper.find('.kanban-board').exists()).toBe(true)
     expect(wrapper.find('.kanban-columns').exists()).toBe(true)
 

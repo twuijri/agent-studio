@@ -151,7 +151,6 @@ async function dragCardToColumn(page: Page, taskId: string, targetColumn: string
   await scrollColumnToStart(page, sourceColumn!)
   const target = page.locator(`.task-list[data-column="${targetColumn}"]`)
   const cardBox = (await card.boundingBox())!
-  const targetBox = (await target.boundingBox())!
   const startX = cardBox.x + cardBox.width / 2
   const startY = cardBox.y + Math.min(24, cardBox.height / 2)
   await page.mouse.move(startX, startY)
@@ -159,6 +158,11 @@ async function dragCardToColumn(page: Page, taskId: string, targetColumn: string
   // Sortable's fallback needs to pass its tolerance before the drag begins.
   await page.mouse.move(startX + 12, startY + 12, { steps: 4 })
   await expect(page.getByTestId('kanban-board')).toHaveClass(/dragging/)
+  // Measure the target only now: a collapsed empty column expands once a card
+  // that may land in it is being dragged.
+  await expect(target).toBeVisible()
+  await page.waitForTimeout(300)
+  const targetBox = (await target.boundingBox())!
   await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + Math.min(60, targetBox.height / 2), { steps: 16 })
   await page.mouse.up()
   await expect(page.getByTestId('kanban-board')).not.toHaveClass(/dragging/)
@@ -204,6 +208,8 @@ test('moves cards between columns through the Hermes transition bridge', async (
 
   await page.goto('/#/hermes/kanban')
   await expect(page.locator('.task-slot[data-task-id="task-1"]')).toBeVisible()
+  // The empty waiting column starts as a narrow strip.
+  await expect(page.locator('.kanban-column.column-waiting')).toHaveAttribute('data-collapsed', 'true')
 
   // todo -> review is not a manual Hermes transition, so the drop is refused.
   await dragCardToColumn(page, 'task-1', 'review')
@@ -241,6 +247,7 @@ test('moves cards between columns through the Hermes transition bridge', async (
   ])
   expect(transitions[2].body).toEqual({ reason: 'waiting for credentials' })
   await expect(page.locator('.task-list[data-column="waiting"] .task-slot[data-task-id="task-3"][data-status="blocked"]')).toBeVisible()
+  await expect(page.locator('.kanban-column.column-waiting')).toHaveAttribute('data-collapsed', 'false')
   expect(api.unexpectedRequests).toEqual([])
 })
 
