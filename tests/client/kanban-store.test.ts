@@ -15,6 +15,10 @@ const mockKanbanApi = vi.hoisted(() => ({
   blockTask: vi.fn(),
   unblockTasks: vi.fn(),
   assignTask: vi.fn(),
+  promoteTask: vi.fn(),
+  scheduleTask: vi.fn(),
+  requestReview: vi.fn(),
+  reopenReview: vi.fn(),
   addComment: vi.fn(),
   linkTasks: vi.fn(),
   unlinkTasks: vi.fn(),
@@ -297,6 +301,70 @@ describe('Kanban store', () => {
     expect(mockKanbanApi.specifyTask).toHaveBeenCalledWith('task-1', { board: 'project-a', author: 'han' })
     expect(mockKanbanApi.dispatch).toHaveBeenCalledWith({ board: 'project-a', dryRun: true, max: 2, failureLimit: 3 })
     expect(store.tasks[0]).toMatchObject({ id: 'task-1', assignee: 'bob' })
+  })
+
+  it('passes selected board to the bridged manual transitions and refreshes board state', async () => {
+    mockKanbanApi.getCapabilities.mockResolvedValue({
+      source: 'hermes-cli',
+      supports: { promote: true, schedule: true, requestReview: true, reopenReview: false },
+      missing: ['reopenReview'],
+    })
+    mockKanbanApi.promoteTask.mockResolvedValue({ ok: true })
+    mockKanbanApi.scheduleTask.mockResolvedValue({ ok: true })
+    mockKanbanApi.requestReview.mockResolvedValue({ ok: true })
+    mockKanbanApi.getStats.mockResolvedValue({ total: 1, by_status: {}, by_assignee: {} })
+    mockKanbanApi.listTasks.mockResolvedValue([{ id: 'task-1', status: 'ready', assignee: null }])
+
+    const store = useKanbanStore()
+    store.setSelectedBoard('project-a')
+    await store.fetchCapabilities()
+
+    await store.promoteTask('task-1', 'manual')
+    await store.scheduleTask('task-1')
+    await store.requestReview('task-1', 'implemented')
+    await expect(store.reopenReview('task-1')).rejects.toThrow('reopenReview')
+
+    expect(mockKanbanApi.promoteTask).toHaveBeenCalledWith('task-1', 'manual', { board: 'project-a' })
+    expect(mockKanbanApi.scheduleTask).toHaveBeenCalledWith('task-1', undefined, { board: 'project-a' })
+    expect(mockKanbanApi.requestReview).toHaveBeenCalledWith('task-1', 'implemented', { board: 'project-a' })
+    expect(mockKanbanApi.reopenReview).not.toHaveBeenCalled()
+    expect(mockKanbanApi.listTasks).toHaveBeenCalledTimes(3)
+    expect(mockKanbanApi.getStats).toHaveBeenCalledTimes(3)
+    expect(store.tasks[0]).toMatchObject({ id: 'task-1', status: 'ready' })
+  })
+
+  it('keeps a browser-local card order per board without touching the server', async () => {
+    const store = useKanbanStore()
+    store.setSelectedBoard('project-a')
+    store.tasks = [
+      { id: 'a', status: 'todo', created_at: 1 },
+      { id: 'b', status: 'todo', created_at: 2 },
+      { id: 'c', status: 'ready', created_at: 3 },
+    ] as any
+
+    expect(store.hasCustomLayout).toBe(false)
+    expect(store.orderedTasksForStatus('todo').map(task => task.id)).toEqual(['b', 'a'])
+
+    store.setCardOrder('todo', ['a', 'b'])
+    expect(store.orderedTasksForStatus('todo').map(task => task.id)).toEqual(['a', 'b'])
+    expect(store.orderedTasksForStatus('ready').map(task => task.id)).toEqual(['c'])
+    expect(store.hasCustomLayout).toBe(true)
+    expect(JSON.parse(window.localStorage.getItem('hermes.kanban.layout.project-a') || '{}')).toEqual({ cards: { todo: ['a', 'b'] } })
+
+    store.tasks = [...store.tasks, { id: 'd', status: 'todo', created_at: 4 }] as any
+    expect(store.orderedTasksForStatus('todo').map(task => task.id)).toEqual(['d', 'a', 'b'])
+
+    store.setSelectedBoard('default')
+    expect(store.hasCustomLayout).toBe(false)
+    expect(store.orderedTasksForStatus('todo')).toEqual([])
+
+    store.setSelectedBoard('project-a')
+    expect(store.hasCustomLayout).toBe(true)
+
+    store.resetLayout()
+    expect(store.hasCustomLayout).toBe(false)
+    expect(window.localStorage.getItem('hermes.kanban.layout.project-a')).toBeNull()
+    expect(mockKanbanApi.listTasks).not.toHaveBeenCalled()
   })
 
   it('creates and archives boards without relying on CLI current board', async () => {
