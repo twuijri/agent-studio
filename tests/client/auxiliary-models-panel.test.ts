@@ -77,6 +77,7 @@ vi.mock('naive-ui', async () => {
         disabled: Boolean,
         filterable: Boolean,
         clearable: Boolean,
+        renderLabel: Function,
       },
       emits: ['update:value'],
       setup(props, { attrs, emit }) {
@@ -178,7 +179,8 @@ describe('AuxiliaryModelsPanel', () => {
     expect(providerSelect.props('value')).toBe('custom:studio-images')
     expect(providerSelect.props('options')).toEqual([
       { label: 'models.auxiliaryProviderStudioDefault', value: 'auto' },
-      { label: 'Studio Images', value: 'custom:studio-images' },
+      { type: 'group', key: 'custom-image-providers', label: 'models.imageProvidersCustom',
+        children: [{ label: 'Studio Images', value: 'custom:studio-images' }] },
     ])
 
     await wrapper.get('[data-testid="auxiliary-save"]').trigger('click')
@@ -237,7 +239,10 @@ describe('AuxiliaryModelsPanel', () => {
     await flushPromises()
     await wrapper.findAll('.auxiliary-row')[1].get('button').trigger('click')
 
-    const generationOptions = wrapper.getComponent('[data-testid="auxiliary-provider"]').props('options')
+    const groups = wrapper.getComponent('[data-testid="auxiliary-provider"]').props('options')
+    expect(groups.map((option: any) => option.key || option.value)).toEqual(['auto', 'hermes-image-providers', 'custom-image-providers'])
+    expect(groups[1].label).toBe('models.imageProvidersHermes')
+    const generationOptions = groups[1].children
     expect(generationOptions).toContainEqual({ label: 'OpenAI Images', value: 'image:openai', disabled: false })
     expect(generationOptions).toContainEqual({ label: 'DeepInfra', value: 'image:deepinfra', disabled: true })
     wrapper.getComponent('[data-testid="auxiliary-provider"]').vm.$emit('update:value', 'image:openai')
@@ -248,9 +253,55 @@ describe('AuxiliaryModelsPanel', () => {
     await wrapper.vm.$nextTick()
     await wrapper.get('.modal-stub button').trigger('click')
     await wrapper.findAll('.auxiliary-row')[2].get('button').trigger('click')
-    const editOptions = wrapper.getComponent('[data-testid="auxiliary-provider"]').props('options')
+    const editOptions = wrapper.getComponent('[data-testid="auxiliary-provider"]').props('options')[1].children
     expect(editOptions).toContainEqual({ label: 'OpenAI Images', value: 'image:openai', disabled: false })
     expect(editOptions).not.toContainEqual(expect.objectContaining({ value: 'image:deepinfra' }))
+  })
+
+  it('keeps non-image provider lists flat and does not show image guidance', async () => {
+    apiMocks.fetchAuxiliaryModels.mockResolvedValueOnce({ tasks: [{ key: 'vision', default_timeout: 120 }], auxiliary: {} })
+    const wrapper = mount(AuxiliaryModelsPanel)
+    await flushPromises()
+    await wrapper.findAll('.auxiliary-row')[1].get('button').trigger('click')
+    const select = wrapper.getComponent('[data-testid="auxiliary-provider"]')
+    expect(select.props('options').map((option: any) => option.value)).toEqual([
+      'auto', 'main', 'openrouter', 'anthropic', 'custom:studio-images',
+    ])
+    expect(select.props('renderLabel')).toBeUndefined()
+    expect(wrapper.find('[data-testid="image-provider-hint"]').exists()).toBe(false)
+  })
+
+  it('groups a newly discovered provider by source and preserves its saved route', async () => {
+    apiMocks.fetchAuxiliaryModels.mockResolvedValueOnce({
+      tasks: [{ key: 'image_generation', default_timeout: 600 }],
+      auxiliary: { image_generation: { provider: 'image:future-provider', model: 'future-image', timeout: 600 } },
+    })
+    apiMocks.fetchStudioImageProviders.mockResolvedValueOnce({ providers: [{
+      name: 'future-provider', display_name: 'صور Future', available: true,
+      default_model: 'future-image', models: [{ id: 'future-image' }], capabilities: { modalities: ['text'] },
+    }] })
+    apiMocks.saveAuxiliaryModels.mockResolvedValueOnce({ success: true, auxiliary: {} })
+    const wrapper = mount(AuxiliaryModelsPanel)
+    await flushPromises()
+    await wrapper.findAll('.auxiliary-row')[1].get('button').trigger('click')
+    const select = wrapper.getComponent('[data-testid="auxiliary-provider"]')
+    expect(select.props('value')).toBe('image:future-provider')
+    const group = select.props('options')[1]
+    expect(group.key).toBe('hermes-image-providers')
+    expect(group.children[0].value).toBe('image:future-provider')
+    const renderLabel = select.props('renderLabel')
+    const label = mount({ render: () => renderLabel(group.children[0]) })
+    expect(label.get('.content-text').attributes('dir')).toBe('auto')
+    expect(label.text()).toBe('صور Future')
+    expect(renderLabel(group)).toBe('models.imageProvidersHermes')
+    expect(wrapper.get('[data-testid="image-provider-hint"]').text()).toBe('models.imageProvidersHint')
+    await wrapper.get('[data-testid="auxiliary-save"]').trigger('click')
+    await flushPromises()
+    expect(apiMocks.saveAuxiliaryModels).toHaveBeenCalledWith({
+      image_generation: { provider: 'image:future-provider', model: 'future-image', timeout: 600 },
+    })
+    label.unmount()
+    wrapper.unmount()
   })
 
   it('labels an unconfigured Studio image route as the Studio default', async () => {
