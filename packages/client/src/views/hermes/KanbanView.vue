@@ -4,13 +4,24 @@ import { NButton, NSelect, NSpin, NModal, NInput, NTooltip, useDialog, useMessag
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import KanbanColumn from '@/components/hermes/kanban/KanbanColumn.vue'
+import KanbanTaskCard, { type KanbanCardQuickAction } from '@/components/hermes/kanban/KanbanTaskCard.vue'
 import KanbanTaskDrawer from '@/components/hermes/kanban/KanbanTaskDrawer.vue'
 import KanbanCreateForm from '@/components/hermes/kanban/KanbanCreateForm.vue'
 import { DEFAULT_KANBAN_BOARD, useKanbanStore } from '@/stores/hermes/kanban'
 import { useProfilesStore } from '@/stores/hermes/profiles'
 import { withDefaultAssignee } from '@/utils/hermes/kanban-assignees'
 import { contentInputProps, technicalInputProps } from '@/utils/content-direction'
-import { KANBAN_BOARD_STATUSES, resolveKanbanTransition, type KanbanTransitionAction } from '@/utils/hermes/kanban-board'
+import {
+  KANBAN_ARCHIVED_STATUS,
+  KANBAN_BOARD_STATUSES,
+  KANBAN_COLUMNS,
+  KANBAN_INBOX_STATUS,
+  kanbanColumnDropOptions,
+  kanbanColumnForStatus,
+  type KanbanColumnDef,
+  type KanbanColumnDrop,
+  type KanbanTransitionAction,
+} from '@/utils/hermes/kanban-board'
 import type { KanbanTask, KanbanTaskStatus } from '@/api/hermes/kanban'
 import type { ProfileAvatar } from '@/api/hermes/profiles'
 
@@ -44,6 +55,9 @@ const draggingStatus = ref<KanbanTaskStatus | null>(null)
 const transitionBusy = ref(false)
 const pendingDrop = ref<PendingDrop | null>(null)
 const dropReason = ref('')
+// A drop that could mean more than one Hermes command (waiting = schedule or block).
+const pendingChoice = ref<{ taskId: string; from: KanbanTaskStatus; options: KanbanColumnDrop[] } | null>(null)
+const inboxOpen = ref(false)
 
 const TRANSITION_MESSAGE_KEY: Record<KanbanTransitionAction, string> = {
   complete: 'kanban.message.taskCompleted',
@@ -102,21 +116,39 @@ const selectedBoardValue = computed({
   },
 })
 
-const tasksByStatus = computed(() => {
-  const grouped: Record<string, KanbanTask[]> = {}
-  for (const status of boardStatuses) {
-    grouped[status] = kanbanStore.orderedTasksForStatus(status)
+const tasksByColumn = computed(() => {
+  const grouped = {} as Record<KanbanColumnDef['id'], KanbanTask[]>
+  for (const column of KANBAN_COLUMNS) {
+    grouped[column.id] = kanbanStore.orderedTasksForColumn(column.id)
   }
   return grouped
 })
 
-// Columns always follow the Hermes workflow order; only cards move.
-const visibleBoardStatuses = computed<readonly KanbanTaskStatus[]>(() => {
+const inboxTasks = computed(() => kanbanStore.tasksWithStatus(KANBAN_INBOX_STATUS))
+const archivedTasks = computed(() => kanbanStore.tasksWithStatus(KANBAN_ARCHIVED_STATUS))
+
+const activeFilterStatus = computed(() => {
   const status = kanbanStore.filterStatus as KanbanTaskStatus | null
-  return status && boardStatuses.includes(status) ? [status] : boardStatuses
+  return status && boardStatuses.includes(status) ? status : null
 })
 
-const isFiltered = computed(() => visibleBoardStatuses.value.length === 1)
+// Columns always follow the Hermes workflow order; only cards move. A status
+// filter narrows the board to the one column that shows that status.
+const visibleColumns = computed<readonly KanbanColumnDef[]>(() => {
+  const status = activeFilterStatus.value
+  if (!status) return KANBAN_COLUMNS
+  const columnId = kanbanColumnForStatus(status)
+  return columnId ? KANBAN_COLUMNS.filter(column => column.id === columnId) : []
+})
+
+const inboxVisible = computed(() => !activeFilterStatus.value || activeFilterStatus.value === KANBAN_INBOX_STATUS)
+// First fetch of a board: columns say "loading" instead of "no tasks".
+const initialLoading = computed(() => kanbanStore.loading && kanbanStore.tasks.length === 0)
+const isFiltered = computed(() => activeFilterStatus.value !== null)
+
+watch(activeFilterStatus, (status) => {
+  if (status === KANBAN_INBOX_STATUS) inboxOpen.value = true
+})
 
 const visibleAssignees = computed(() => withDefaultAssignee(kanbanStore.assignees, kanbanStore.stats?.by_assignee || {}))
 
@@ -150,10 +182,11 @@ watch(() => route.query.board, async () => {
 })
 
 onMounted(async () => {
+  // Profiles only feed avatars; never let that request delay the first board load.
+  if (profilesStore.profiles.length === 0) void profilesStore.fetchProfiles()
   await Promise.all([
     kanbanStore.fetchBoards(),
     kanbanStore.fetchCapabilities(),
-    profilesStore.profiles.length === 0 ? profilesStore.fetchProfiles() : Promise.resolve(),
   ])
   await applyBoardSelection(routeBoard(), true, true)
   kanbanStore.startEventStream()
@@ -209,8 +242,23 @@ function handleDragEnd() {
   draggingStatus.value = null
 }
 
-function handleCardsReordered(status: KanbanTaskStatus, ids: string[]) {
-  kanbanStore.setCardOrder(status, ids)
+function handleCardsReordered(column: KanbanColumnDef, ids: string[]) {
+  kanbanStore.setCardOrder(column.id, ids)
+}
+
+async function handleCardAction(payload: { taskId: string; action: KanbanCardQuickAction }) {
+  switch (payload.action) {
+    case 'promote':
+      await runTransition(payload.taskId, 'promote')
+      break
+    case 'archive':
+      confirmArchive(payload.taskId)
+      break
+    case 'specify':
+      // Specification needs the drawer's confirmation flow; open the task there.
+      selectedTaskId.value = payload.taskId
+      break
+  }
 }
 
 function handleResetLayout() {
@@ -222,9 +270,32 @@ async function revertBoard() {
   await kanbanStore.fetchTasks(true)
 }
 
-async function runTransition(taskId: string, action: KanbanTransitionAction, note?: string) {
+const TRANSITION_TARGET: Record<KanbanTransitionAction, KanbanTaskStatus> = {
+  complete: 'done',
+  block: 'blocked',
+  unblock: 'ready',
+  promote: 'ready',
+  schedule: 'scheduled',
+  requestReview: 'review',
+  reopenReview: 'todo',
+  archive: 'archived',
+}
+
+async function runTransition(taskId: string, action: KanbanTransitionAction, note?: string, expected: KanbanTaskStatus = TRANSITION_TARGET[action]) {
   transitionBusy.value = true
   try {
+    await kanbanStore.withPendingTransition(taskId, expected, () => applyTransition(taskId, action, note))
+    message.success(t(TRANSITION_MESSAGE_KEY[action]))
+  } catch (err: any) {
+    message.error(err.message)
+    await revertBoard()
+  } finally {
+    transitionBusy.value = false
+  }
+}
+
+async function applyTransition(taskId: string, action: KanbanTransitionAction, note?: string) {
+  {
     switch (action) {
       case 'complete':
         await kanbanStore.completeTasks([taskId])
@@ -251,49 +322,89 @@ async function runTransition(taskId: string, action: KanbanTransitionAction, not
         await kanbanStore.archiveTasks([taskId])
         break
     }
-    message.success(t(TRANSITION_MESSAGE_KEY[action]))
-  } catch (err: any) {
-    message.error(err.message)
-    await revertBoard()
-  } finally {
-    transitionBusy.value = false
   }
 }
 
-async function handleCardDropped(payload: { taskId: string; from: KanbanTaskStatus; to: KanbanTaskStatus }) {
-  const transition = resolveKanbanTransition(payload.from, payload.to)
-  if (!transition) {
-    await revertBoard()
-    return
-  }
-  const drop: PendingDrop = { ...payload, action: transition.action }
+function confirmArchive(taskId: string, onCancel?: () => Promise<void> | void) {
+  let decided = false
+  dialog.warning({
+    title: t('kanban.action.archive'),
+    content: t('kanban.action.archiveConfirm'),
+    positiveText: t('kanban.action.archive'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      decided = true
+      await runTransition(taskId, 'archive')
+    },
+    onNegativeClick: async () => {
+      decided = true
+      await onCancel?.()
+    },
+    onClose: async () => {
+      if (!decided) await onCancel?.()
+    },
+  })
+}
+
+async function applyDrop(taskId: string, from: KanbanTaskStatus, drop: KanbanColumnDrop) {
+  const { transition, to } = drop
+  const pending: PendingDrop = { taskId, from, to, action: transition.action }
+  // The card already sits in its new column; keep it there while we ask.
+  kanbanStore.beginTransition(taskId, to)
   if (transition.requiresReason) {
     dropReason.value = ''
-    pendingDrop.value = drop
+    pendingDrop.value = pending
     return
   }
   if (transition.confirm) {
-    let decided = false
-    dialog.warning({
-      title: t('kanban.action.archive'),
-      content: t('kanban.action.archiveConfirm'),
-      positiveText: t('kanban.action.archive'),
-      negativeText: t('common.cancel'),
-      onPositiveClick: async () => {
-        decided = true
-        await runTransition(drop.taskId, drop.action)
-      },
-      onNegativeClick: async () => {
-        decided = true
-        await revertBoard()
-      },
-      onClose: async () => {
-        if (!decided) await revertBoard()
-      },
+    confirmArchive(taskId, async () => {
+      kanbanStore.endTransition(taskId)
+      await revertBoard()
     })
     return
   }
-  await runTransition(drop.taskId, drop.action)
+  await runTransition(taskId, transition.action, undefined, to)
+}
+
+async function handleCardDropped(payload: { taskId: string; from: KanbanTaskStatus; toColumn: KanbanColumnDef }) {
+  const options = kanbanColumnDropOptions(payload.from, payload.toColumn)
+  if (options.length === 0) {
+    await revertBoard()
+    return
+  }
+  if (options.length > 1) {
+    kanbanStore.beginTransition(payload.taskId, options[0].to)
+    pendingChoice.value = { taskId: payload.taskId, from: payload.from, options }
+    return
+  }
+  await applyDrop(payload.taskId, payload.from, options[0])
+}
+
+async function choosePendingDrop(drop: KanbanColumnDrop) {
+  const choice = pendingChoice.value
+  if (!choice) return
+  pendingChoice.value = null
+  await applyDrop(choice.taskId, choice.from, drop)
+}
+
+async function cancelPendingChoice() {
+  if (!pendingChoice.value) return
+  kanbanStore.endTransition(pendingChoice.value.taskId)
+  pendingChoice.value = null
+  await revertBoard()
+}
+
+const choiceModalVisible = computed({
+  get: () => pendingChoice.value !== null,
+  set: (visible: boolean) => {
+    if (!visible) void cancelPendingChoice()
+  },
+})
+
+function choiceLabel(drop: KanbanColumnDrop): string {
+  if (drop.transition.action === 'schedule') return t('kanban.board.waitingSchedule')
+  if (drop.transition.action === 'block') return t('kanban.board.waitingBlock')
+  return t(`kanban.columns.${drop.to}`, drop.to)
 }
 
 async function confirmPendingDrop() {
@@ -301,11 +412,12 @@ async function confirmPendingDrop() {
   const reason = dropReason.value.trim()
   if (!drop || !reason) return
   pendingDrop.value = null
-  await runTransition(drop.taskId, drop.action, reason)
+  await runTransition(drop.taskId, drop.action, reason, drop.to)
 }
 
 async function cancelPendingDrop() {
   if (!pendingDrop.value) return
+  kanbanStore.endTransition(pendingDrop.value.taskId)
   pendingDrop.value = null
   dropReason.value = ''
   await revertBoard()
@@ -491,7 +603,7 @@ async function handleDispatch() {
     <!-- Board -->
     <NSpin
       class="kanban-board-spin"
-      :show="kanbanStore.loading && kanbanStore.tasks.length === 0"
+      :show="false"
     >
       <div
         class="kanban-board"
@@ -501,16 +613,46 @@ async function handleDispatch() {
         @wheel="handleBoardWheel"
       >
         <div class="kanban-columns">
+          <!-- Intake strip: triage tasks are specified from the drawer, never dragged. -->
+          <aside
+            v-if="inboxVisible"
+            class="kanban-inbox"
+            :class="{ open: inboxOpen }"
+            data-testid="kanban-inbox"
+            :aria-label="t('kanban.board.columns.inbox')"
+          >
+            <button type="button" class="inbox-toggle" :aria-expanded="inboxOpen" @click="inboxOpen = !inboxOpen">
+              <span class="inbox-count">{{ inboxTasks.length }}</span>
+              <span class="inbox-title">{{ t('kanban.board.columns.inbox') }}</span>
+            </button>
+            <div v-if="inboxOpen" class="inbox-body">
+              <p class="inbox-hint">{{ t('kanban.board.inboxHint') }}</p>
+              <div v-if="inboxTasks.length === 0" class="inbox-empty">{{ initialLoading ? t('kanban.board.loadingTasks') : t('kanban.noTasks') }}</div>
+              <KanbanTaskCard
+                v-for="task in inboxTasks"
+                :key="task.id"
+                :task="task"
+                :assignee-avatar="task.assignee ? profileAvatarByName[task.assignee] || null : null"
+                @click="handleTaskClick"
+                @action="handleCardAction"
+              />
+            </div>
+          </aside>
           <KanbanColumn
-            v-for="status in visibleBoardStatuses"
-            :key="status"
-            :status="status"
-            :tasks="tasksByStatus[status]"
+            v-for="column in visibleColumns"
+            :key="column.id"
+            :column="column"
+            :tasks="tasksByColumn[column.id]"
+            :archived-tasks="column.id === 'done' ? archivedTasks : undefined"
             :avatars="profileAvatarByName"
             :dragging-status="draggingStatus"
             :drag-disabled="transitionBusy"
+            :pending-task-ids="kanbanStore.pendingTransitions"
+            :loading="initialLoading"
+            :collapsible="column.id === 'waiting'"
             @task-click="handleTaskClick"
-            @reorder="ids => handleCardsReordered(status, ids)"
+            @task-action="handleCardAction"
+            @reorder="ids => handleCardsReordered(column, ids)"
             @dropped="handleCardDropped"
             @drag-start="handleDragStart"
             @drag-end="handleDragEnd"
@@ -526,6 +668,24 @@ async function handleDispatch() {
       @updated="handleDrawerUpdated"
       @navigate="handleNavigateTask"
     />
+
+    <!-- Waiting column: the drop can mean schedule or block; let the user pick -->
+    <NModal v-model:show="choiceModalVisible" preset="dialog" :title="t('kanban.board.waitingKindTitle')" style="width: 420px;">
+      <div class="board-form choice-form" data-testid="kanban-drop-choice">
+        <NButton
+          v-for="drop in pendingChoice?.options || []"
+          :key="drop.to"
+          class="choice-button"
+          :data-choice="drop.transition.action"
+          @click="choosePendingDrop(drop)"
+        >
+          {{ choiceLabel(drop) }}
+        </NButton>
+      </div>
+      <template #action>
+        <NButton @click="cancelPendingChoice">{{ t('common.cancel') }}</NButton>
+      </template>
+    </NModal>
 
     <!-- Reason prompt for drops that Hermes requires a reason for (block) -->
     <NModal v-model:show="reasonModalVisible" preset="dialog" :title="t('kanban.action.block')" style="width: 420px;">
@@ -708,6 +868,92 @@ async function handleDispatch() {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.choice-form .choice-button {
+  justify-content: flex-start;
+}
+
+.kanban-inbox {
+  --kanban-status-color: #8b8f95;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  width: 44px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid $border-light;
+  border-radius: $radius-md;
+  background: color-mix(in srgb, $bg-secondary 66%, $bg-card);
+  transition: width $transition-normal;
+
+  &.open {
+    width: var(--kanban-column-width, 300px);
+  }
+}
+
+.inbox-toggle {
+  appearance: none;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 43px;
+  padding: 10px 11px;
+  border: 0;
+  border-bottom: 1px solid $border-light;
+  background: transparent;
+  color: $text-primary;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+
+  .kanban-inbox:not(.open) & {
+    flex: 1;
+    flex-direction: column;
+    justify-content: flex-start;
+    border-bottom: 0;
+  }
+}
+
+.kanban-inbox:not(.open) .inbox-title {
+  writing-mode: vertical-rl;
+  color: $text-muted;
+  font-weight: 500;
+}
+
+.inbox-count {
+  min-width: 22px;
+  padding: 2px 6px;
+  border: 1px solid $border-light;
+  border-radius: 999px;
+  color: $text-muted;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.inbox-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 9px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  overscroll-behavior-x: auto;
+}
+
+.inbox-hint,
+.inbox-empty {
+  margin: 0;
+  font-size: 12px;
+  color: $text-muted;
 }
 
 @media (max-width: $breakpoint-mobile) {
