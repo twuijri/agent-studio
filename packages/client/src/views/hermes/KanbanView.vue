@@ -142,6 +142,8 @@ const visibleColumns = computed<readonly KanbanColumnDef[]>(() => {
 })
 
 const inboxVisible = computed(() => !activeFilterStatus.value || activeFilterStatus.value === KANBAN_INBOX_STATUS)
+// First fetch of a board: columns say "loading" instead of "no tasks".
+const initialLoading = computed(() => kanbanStore.loading && kanbanStore.tasks.length === 0)
 const isFiltered = computed(() => activeFilterStatus.value !== null)
 
 watch(activeFilterStatus, (status) => {
@@ -180,10 +182,11 @@ watch(() => route.query.board, async () => {
 })
 
 onMounted(async () => {
+  // Profiles only feed avatars; never let that request delay the first board load.
+  if (profilesStore.profiles.length === 0) void profilesStore.fetchProfiles()
   await Promise.all([
     kanbanStore.fetchBoards(),
     kanbanStore.fetchCapabilities(),
-    profilesStore.profiles.length === 0 ? profilesStore.fetchProfiles() : Promise.resolve(),
   ])
   await applyBoardSelection(routeBoard(), true, true)
   kanbanStore.startEventStream()
@@ -267,9 +270,32 @@ async function revertBoard() {
   await kanbanStore.fetchTasks(true)
 }
 
-async function runTransition(taskId: string, action: KanbanTransitionAction, note?: string) {
+const TRANSITION_TARGET: Record<KanbanTransitionAction, KanbanTaskStatus> = {
+  complete: 'done',
+  block: 'blocked',
+  unblock: 'ready',
+  promote: 'ready',
+  schedule: 'scheduled',
+  requestReview: 'review',
+  reopenReview: 'todo',
+  archive: 'archived',
+}
+
+async function runTransition(taskId: string, action: KanbanTransitionAction, note?: string, expected: KanbanTaskStatus = TRANSITION_TARGET[action]) {
   transitionBusy.value = true
   try {
+    await kanbanStore.withPendingTransition(taskId, expected, () => applyTransition(taskId, action, note))
+    message.success(t(TRANSITION_MESSAGE_KEY[action]))
+  } catch (err: any) {
+    message.error(err.message)
+    await revertBoard()
+  } finally {
+    transitionBusy.value = false
+  }
+}
+
+async function applyTransition(taskId: string, action: KanbanTransitionAction, note?: string) {
+  {
     switch (action) {
       case 'complete':
         await kanbanStore.completeTasks([taskId])
@@ -296,12 +322,6 @@ async function runTransition(taskId: string, action: KanbanTransitionAction, not
         await kanbanStore.archiveTasks([taskId])
         break
     }
-    message.success(t(TRANSITION_MESSAGE_KEY[action]))
-  } catch (err: any) {
-    message.error(err.message)
-    await revertBoard()
-  } finally {
-    transitionBusy.value = false
   }
 }
 
@@ -329,16 +349,21 @@ function confirmArchive(taskId: string, onCancel?: () => Promise<void> | void) {
 async function applyDrop(taskId: string, from: KanbanTaskStatus, drop: KanbanColumnDrop) {
   const { transition, to } = drop
   const pending: PendingDrop = { taskId, from, to, action: transition.action }
+  // The card already sits in its new column; keep it there while we ask.
+  kanbanStore.beginTransition(taskId, to)
   if (transition.requiresReason) {
     dropReason.value = ''
     pendingDrop.value = pending
     return
   }
   if (transition.confirm) {
-    confirmArchive(taskId, revertBoard)
+    confirmArchive(taskId, async () => {
+      kanbanStore.endTransition(taskId)
+      await revertBoard()
+    })
     return
   }
-  await runTransition(taskId, transition.action)
+  await runTransition(taskId, transition.action, undefined, to)
 }
 
 async function handleCardDropped(payload: { taskId: string; from: KanbanTaskStatus; toColumn: KanbanColumnDef }) {
@@ -348,6 +373,7 @@ async function handleCardDropped(payload: { taskId: string; from: KanbanTaskStat
     return
   }
   if (options.length > 1) {
+    kanbanStore.beginTransition(payload.taskId, options[0].to)
     pendingChoice.value = { taskId: payload.taskId, from: payload.from, options }
     return
   }
@@ -363,6 +389,7 @@ async function choosePendingDrop(drop: KanbanColumnDrop) {
 
 async function cancelPendingChoice() {
   if (!pendingChoice.value) return
+  kanbanStore.endTransition(pendingChoice.value.taskId)
   pendingChoice.value = null
   await revertBoard()
 }
@@ -385,11 +412,12 @@ async function confirmPendingDrop() {
   const reason = dropReason.value.trim()
   if (!drop || !reason) return
   pendingDrop.value = null
-  await runTransition(drop.taskId, drop.action, reason)
+  await runTransition(drop.taskId, drop.action, reason, drop.to)
 }
 
 async function cancelPendingDrop() {
   if (!pendingDrop.value) return
+  kanbanStore.endTransition(pendingDrop.value.taskId)
   pendingDrop.value = null
   dropReason.value = ''
   await revertBoard()
@@ -575,7 +603,7 @@ async function handleDispatch() {
     <!-- Board -->
     <NSpin
       class="kanban-board-spin"
-      :show="kanbanStore.loading && kanbanStore.tasks.length === 0"
+      :show="false"
     >
       <div
         class="kanban-board"
@@ -599,7 +627,7 @@ async function handleDispatch() {
             </button>
             <div v-if="inboxOpen" class="inbox-body">
               <p class="inbox-hint">{{ t('kanban.board.inboxHint') }}</p>
-              <div v-if="inboxTasks.length === 0" class="inbox-empty">{{ t('kanban.noTasks') }}</div>
+              <div v-if="inboxTasks.length === 0" class="inbox-empty">{{ initialLoading ? t('kanban.board.loadingTasks') : t('kanban.noTasks') }}</div>
               <KanbanTaskCard
                 v-for="task in inboxTasks"
                 :key="task.id"
@@ -619,6 +647,8 @@ async function handleDispatch() {
             :avatars="profileAvatarByName"
             :dragging-status="draggingStatus"
             :drag-disabled="transitionBusy"
+            :pending-task-ids="kanbanStore.pendingTransitions"
+            :loading="initialLoading"
             :collapsible="column.id === 'waiting'"
             @task-click="handleTaskClick"
             @task-action="handleCardAction"

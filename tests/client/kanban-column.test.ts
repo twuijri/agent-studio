@@ -23,9 +23,9 @@ vi.mock('vue-draggable-plus', () => ({
 vi.mock('@/components/hermes/kanban/KanbanTaskCard.vue', () => ({
   default: defineComponent({
     name: 'KanbanTaskCard',
-    props: { task: { type: Object, required: true }, assigneeAvatar: { type: Object, required: false }, muted: Boolean },
+    props: { task: { type: Object, required: true }, assigneeAvatar: { type: Object, required: false }, muted: Boolean, pending: Boolean },
     emits: ['click', 'action'],
-    template: '<button class="kanban-task-card-stub" :data-muted="muted ? \'true\' : \'false\'" :data-avatar-seed="assigneeAvatar?.seed || null" @click="$emit(\'click\', task.id)">{{ task.title }}<i class="action-stub" @click.stop="$emit(\'action\', { taskId: task.id, action: \'promote\' })" /></button>',
+    template: '<button class="kanban-task-card-stub" :data-pending="pending ? \'true\' : \'false\'" :data-muted="muted ? \'true\' : \'false\'" :data-avatar-seed="assigneeAvatar?.seed || null" @click="$emit(\'click\', task.id)">{{ task.title }}<i class="action-stub" @click.stop="$emit(\'action\', { taskId: task.id, action: \'promote\' })" /></button>',
   }),
 }))
 
@@ -193,5 +193,24 @@ describe('KanbanColumn', () => {
     const plain = mount(KanbanColumn, { props: { column: kanbanColumnById('review'), tasks: [] } })
     expect(plain.classes()).not.toContain('collapsed')
     expect(plain.find('header.column-header').exists()).toBe(true)
+  })
+
+  it('marks pending tasks as not draggable and shows a loading hint during the first fetch', async () => {
+    const wrapper = mount(KanbanColumn, {
+      props: { column: kanbanColumnById('queue'), tasks: [task('t-1', 'ready'), task('t-2', 'todo')], pendingTaskIds: { 't-1': 'review' } },
+    })
+    const slots = wrapper.findAll('.task-slot')
+    expect(slots[0].classes()).toContain('task-slot-pending')
+    expect(slots[0].attributes('data-pending')).toBe('true')
+    expect(slots[1].attributes('data-pending')).toBe('false')
+    expect(wrapper.findAll('.kanban-task-card-stub').map(card => card.attributes('data-pending'))).toEqual(['true', 'false'])
+    expect(wrapper.findComponent({ name: 'VueDraggable' }).vm.$attrs.filter).toBe('.task-slot-pending')
+
+    const loading = mount(KanbanColumn, { props: { column: kanbanColumnById('review'), tasks: [], loading: true } })
+    expect(loading.find('.column-empty').text()).toBe('kanban.board.loadingTasks')
+    expect(loading.find('.column-loading-spinner').exists()).toBe(true)
+    expect(loading.find('.column-empty').attributes('role')).toBe('status')
+    await loading.setProps({ loading: false })
+    expect(loading.find('.column-empty').text()).toBe('kanban.noTasks')
   })
 })

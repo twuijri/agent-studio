@@ -36,7 +36,7 @@ interface TransitionCall {
   body: Record<string, unknown>
 }
 
-async function mockKanbanBoard(page: Page, tasks: MockTask[]) {
+async function mockKanbanBoard(page: Page, tasks: MockTask[], holdTransitions?: Promise<void>) {
   const transitions: TransitionCall[] = []
 
   await page.route(/\/api\/hermes\/kanban(?:\/|\?|$)/, async (route) => {
@@ -89,6 +89,7 @@ async function mockKanbanBoard(page: Page, tasks: MockTask[]) {
 
     const transition = pathname.match(/^\/api\/hermes\/kanban\/(task-\d+)\/(promote|schedule|request-review|reopen-review|block)$/)
     if (transition && request.method() === 'POST') {
+      if (holdTransitions) await holdTransitions
       const task = tasks.find(item => item.id === transition[1])
       const targetByAction: Record<string, string> = {
         promote: 'ready',
@@ -336,5 +337,43 @@ test('keeps triage in the inbox strip and archived tasks behind the done column 
   await expect(done.getByTestId('kanban-archive-list').getByRole('button', { name: 'Old work' })).toBeVisible()
   await done.getByTestId('kanban-archive-list').getByRole('button', { name: 'Old work' }).click()
   await expect(page.locator('.n-drawer').getByText('Old work', { exact: true })).toBeVisible()
+  expect(api.unexpectedRequests).toEqual([])
+})
+
+test('keeps a moved card in its new column while Hermes is still applying the command', async ({ page }) => {
+  await page.clock.install()
+  await page.setViewportSize({ width: 1600, height: 900 })
+  await authenticate(page, TEST_ACCESS_KEY, 'research')
+  const api = await mockHermesApi(page)
+  let releaseBackend!: () => void
+  const backendBusy = new Promise<void>((resolve) => { releaseBackend = resolve })
+  const { transitions } = await mockKanbanBoard(page, [makeTask(1, 'ready', 'Block me')], backendBusy)
+
+  await page.goto('/#/hermes/kanban')
+  await expect(page.locator('.task-slot[data-task-id="task-1"]')).toBeVisible()
+
+  await dragCardToColumn(page, 'task-1', 'waiting')
+  await page.getByTestId('kanban-drop-choice').locator('[data-choice="block"]').click()
+  await page.getByTestId('kanban-drop-reason').locator('input').fill('waiting for credentials')
+  await page.getByRole('button', { name: 'OK' }).click()
+
+  const slot = page.locator('.task-list[data-column="waiting"] .task-slot[data-task-id="task-1"]')
+  await expect(slot).toBeVisible()
+  await expect(slot).toHaveAttribute('data-pending', 'true')
+  await expect(slot.locator('.pending-badge')).toHaveText('Saving…')
+  expect(transitions).toEqual([])
+
+  // The periodic refresh fires while the backend is still busy and still reports
+  // the old status; the card must stay where the user put it.
+  await page.clock.runFor(16_000)
+  await expect(slot).toBeVisible()
+  await expect(slot).toHaveAttribute('data-pending', 'true')
+  await expect(page.locator('.task-list[data-column="queue"] .task-slot')).toHaveCount(0)
+
+  releaseBackend()
+  await expect(slot).toHaveAttribute('data-pending', 'false')
+  await expect(slot).toHaveAttribute('data-status', 'blocked')
+  expect(transitions.map(call => call.path)).toEqual(['/api/hermes/kanban/task-1/block'])
+  await expect(page.getByTestId('kanban-board')).toHaveAttribute('data-busy', 'false')
   expect(api.unexpectedRequests).toEqual([])
 })

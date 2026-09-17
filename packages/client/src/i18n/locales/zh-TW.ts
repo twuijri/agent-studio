@@ -1509,6 +1509,7 @@ export default {
       showArchived: '顯示已封存 ({count})',
       hideArchived: '隱藏已封存 ({count})',
       inboxHint: '等待細化的任務。開啟卡片並使用「細化」將其移入佇列。',
+      loadingTasks: '正在載入任務…',
       waitingKindTitle: '此任務應如何等待？',
       waitingSchedule: '延後到稍後（已排程）',
       waitingBlock: '封鎖直到有人處理（需要原因）',
@@ -1567,6 +1568,7 @@ export default {
     },
     card: {
       assigneeTooltip: '負責人',
+      syncing: '儲存中…',
       priority: {
         low: '低',
         medium: '中',

@@ -369,6 +369,37 @@ describe('Kanban store', () => {
     expect(mockKanbanApi.listTasks).not.toHaveBeenCalled()
   })
 
+  it('keeps a task in its target column while a transition is pending, even across refreshes', async () => {
+    mockKanbanApi.blockTask.mockResolvedValue({ ok: true })
+    mockKanbanApi.getStats.mockResolvedValue({ total: 1, by_status: {}, by_assignee: {} })
+    mockKanbanApi.listTasks.mockResolvedValue([{ id: 'task-1', status: 'blocked', created_at: 1 }])
+
+    const store = useKanbanStore()
+    store.setSelectedBoard('project-a')
+    store.tasks = [{ id: 'task-1', status: 'ready', created_at: 1 }] as any
+
+    store.beginTransition('task-1', 'blocked')
+    expect(store.isTransitionPending('task-1')).toBe(true)
+    expect(store.orderedTasksForColumn('queue')).toEqual([])
+    expect(store.orderedTasksForColumn('waiting').map(task => task.status)).toEqual(['blocked'])
+    expect(store.tasksWithStatus('blocked').map(task => task.id)).toEqual(['task-1'])
+    // A poll that still carries the old status must not move the card back.
+    store.tasks = [{ id: 'task-1', status: 'ready', created_at: 1 }] as any
+    expect(store.orderedTasksForColumn('waiting').map(task => task.id)).toEqual(['task-1'])
+    expect(store.tasks[0].status).toBe('ready')
+
+    store.endTransition('task-1')
+    expect(store.isTransitionPending('task-1')).toBe(false)
+    expect(store.orderedTasksForColumn('queue').map(task => task.id)).toEqual(['task-1'])
+
+    await store.withPendingTransition('task-1', 'blocked', () => store.blockTask('task-1', 'waiting'))
+    expect(store.isTransitionPending('task-1')).toBe(false)
+    expect(store.tasks[0].status).toBe('blocked')
+
+    await expect(store.withPendingTransition('task-1', 'done', async () => { throw new Error('nope') })).rejects.toThrow('nope')
+    expect(store.isTransitionPending('task-1')).toBe(false)
+  })
+
   it('creates and archives boards without relying on CLI current board', async () => {
     mockKanbanApi.listBoards.mockResolvedValue([
       { slug: 'default', name: 'Default', archived: false, counts: {}, total: 0 },

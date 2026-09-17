@@ -14,6 +14,8 @@ const props = defineProps<{
   assigneeAvatar?: ProfileAvatarData | null
   /** Renders the card muted and without quick actions (archive list). */
   muted?: boolean
+  /** A Hermes command for this task is still running. */
+  pending?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -59,7 +61,7 @@ const statusBadge = computed(() => {
 })
 
 const quickAction = computed<KanbanCardQuickAction | null>(() => {
-  if (props.muted) return null
+  if (props.muted || props.pending) return null
   switch (props.task.status) {
     case 'todo': return 'promote'
     case 'done': return 'archive'
@@ -94,8 +96,9 @@ function handleKeydown(event: KeyboardEvent) {
 <template>
   <div
     class="kanban-task-card"
-    :class="[`status-${task.status}`, { muted }]"
+    :class="[`status-${task.status}`, { muted, pending }]"
     :data-status="task.status"
+    :aria-busy="pending ? 'true' : undefined"
   >
     <div
       class="card-main"
@@ -114,6 +117,10 @@ function handleKeydown(event: KeyboardEvent) {
           <svg v-else-if="task.status === 'review'" class="status-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
           <svg v-else-if="task.status === 'done' || task.status === 'archived'" class="status-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           {{ statusBadge }}
+        </span>
+        <span v-if="pending" class="pending-badge" role="status">
+          <span class="pending-spinner" aria-hidden="true" />
+          {{ t('kanban.card.syncing') }}
         </span>
         <span v-if="task.priority >= 2" class="priority" :class="priorityLabel">
           <span class="priority-dot" aria-hidden="true" />
@@ -157,6 +164,10 @@ function handleKeydown(event: KeyboardEvent) {
 @use '@/styles/variables' as *;
 
 @keyframes kanban-ring-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes kanban-pending-spin {
   to { transform: rotate(360deg); }
 }
 
@@ -224,6 +235,10 @@ function handleKeydown(event: KeyboardEvent) {
   &.status-done .card-main,
   &.muted .card-main {
     opacity: 0.72;
+  }
+
+  &.pending .card-main {
+    opacity: 0.85;
   }
 
   &:hover {
@@ -318,6 +333,32 @@ function handleKeydown(event: KeyboardEvent) {
   width: 11px;
   height: 11px;
   flex: 0 0 auto;
+}
+
+.pending-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+  color: $text-muted;
+  font-size: 10.5px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.pending-spinner {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid $border-color;
+  border-top-color: $text-secondary;
+  border-radius: 999px;
+  animation: kanban-pending-spin 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pending-spinner {
+    animation: none;
+  }
 }
 
 .card-title {

@@ -49,6 +49,13 @@ const mockScheduleTask = vi.hoisted(() => vi.fn())
 const mockRequestReview = vi.hoisted(() => vi.fn())
 const mockReopenReview = vi.hoisted(() => vi.fn())
 const mockMessageError = vi.hoisted(() => vi.fn())
+const pendingState = vi.hoisted(() => ({ map: {} as Record<string, string> }))
+const mockBeginTransition = vi.hoisted(() => vi.fn((taskId: string, expected: string) => { pendingState.map = { ...pendingState.map, [taskId]: expected } }))
+const mockEndTransition = vi.hoisted(() => vi.fn((taskId: string) => { const next = { ...pendingState.map }; delete next[taskId]; pendingState.map = next }))
+const mockWithPendingTransition = vi.hoisted(() => vi.fn(async (taskId: string, expected: string, run: () => Promise<unknown>) => {
+  mockBeginTransition(taskId, expected)
+  try { return await run() } finally { mockEndTransition(taskId) }
+}))
 const mockMessageSuccess = vi.hoisted(() => vi.fn())
 const profilesState = vi.hoisted(() => ({
   profiles: [] as Array<{ name: string; avatar?: Record<string, any> | null }>,
@@ -88,6 +95,11 @@ vi.mock('@/stores/hermes/kanban', () => ({
     tasksWithStatus: (status: string) => storeState.tasks.filter(task => task.status === status),
     setCardOrder: mockSetCardOrder,
     resetLayout: mockResetLayout,
+    pendingTransitions: pendingState.map,
+    isTransitionPending: (taskId: string) => taskId in pendingState.map,
+    beginTransition: mockBeginTransition,
+    endTransition: mockEndTransition,
+    withPendingTransition: mockWithPendingTransition,
     completeTasks: mockCompleteTasks,
     blockTask: mockBlockTask,
     unblockTasks: mockUnblockTasks,
@@ -117,10 +129,12 @@ vi.mock('@/components/hermes/kanban/KanbanColumn.vue', () => ({
       draggingStatus: { type: String, required: false },
       dragDisabled: { type: Boolean, default: false },
       collapsible: { type: Boolean, default: false },
+      pendingTaskIds: { type: Object, required: false },
+      loading: { type: Boolean, default: false },
     },
     emits: ['taskClick', 'taskAction', 'reorder', 'dropped', 'dragStart', 'dragEnd'],
     template: `
-      <section class="kanban-column" :data-column="column.id" :data-collapsible="collapsible ? 'true' : 'false'" :data-archived="archivedTasks ? archivedTasks.length : ''" :data-dragging="draggingStatus || ''" :data-drag-disabled="dragDisabled ? 'true' : 'false'">
+      <section class="kanban-column" :data-column="column.id" :data-loading="loading ? 'true' : 'false'" :data-pending="Object.keys(pendingTaskIds || {}).join(',')" :data-collapsible="collapsible ? 'true' : 'false'" :data-archived="archivedTasks ? archivedTasks.length : ''" :data-dragging="draggingStatus || ''" :data-drag-disabled="dragDisabled ? 'true' : 'false'">
         <button
           v-for="task in tasks"
           :key="task.id"
@@ -227,6 +241,7 @@ describe('KanbanView', () => {
     storeState.filterStatus = null
     storeState.filterAssignee = null
     storeState.hasCustomLayout = false
+    pendingState.map = {}
     mockPromoteTask.mockResolvedValue(undefined)
     mockCompleteTasks.mockResolvedValue(undefined)
     mockBlockTask.mockResolvedValue(undefined)
@@ -343,6 +358,8 @@ describe('KanbanView', () => {
     column('review').vm.$emit('dragEnd')
     await flushPromises()
     expect(mockRequestReview).toHaveBeenCalledWith('task-1', undefined)
+    expect(mockWithPendingTransition).toHaveBeenCalledWith('task-1', 'review', expect.any(Function))
+    expect(pendingState.map).toEqual({})
     expect(mockMessageSuccess).toHaveBeenCalledWith('kanban.message.reviewRequested')
     expect(wrapper.find('.kanban-board').classes()).not.toContain('dragging')
 
@@ -376,6 +393,8 @@ describe('KanbanView', () => {
     await flushPromises()
     const choice = wrapper.find('[data-testid="kanban-drop-choice"]')
     expect(choice.exists()).toBe(true)
+    // The card is held in the waiting column while the question is open.
+    expect(pendingState.map).toEqual({ 'task-1': 'scheduled' })
     expect(choice.findAll('.n-button-stub').map(node => node.text())).toEqual(['kanban.board.waitingSchedule', 'kanban.board.waitingBlock'])
     expect(mockBlockTask).not.toHaveBeenCalled()
     expect(mockScheduleTask).not.toHaveBeenCalled()
@@ -386,9 +405,11 @@ describe('KanbanView', () => {
     const modal = wrapper.find('.n-modal-stub')
     expect(modal.exists()).toBe(true)
     await modal.find('.n-input-stub').setValue('waiting on api key')
+    expect(pendingState.map).toEqual({ 'task-1': 'blocked' })
     await modal.findAll('.n-button-stub').find(node => node.text() === 'common.ok')!.trigger('click')
     await flushPromises()
     expect(mockBlockTask).toHaveBeenCalledWith('task-1', 'waiting on api key')
+    expect(pendingState.map).toEqual({})
 
     waiting.vm.$emit('dropped', { taskId: 'task-1', from: 'ready', toColumn: waiting.props('column'), index: 0 })
     await flushPromises()
@@ -402,6 +423,27 @@ describe('KanbanView', () => {
     await wrapper.findAll('.n-modal-stub .n-button-stub').find(node => node.text() === 'common.cancel')!.trigger('click')
     await flushPromises()
     expect(mockFetchTasks).toHaveBeenCalledWith(true)
+    expect(pendingState.map).toEqual({})
+  })
+
+  it('shows a loading hint in the columns during the first fetch and does not wait for profiles', async () => {
+    storeState.loading = true
+    storeState.tasks = []
+    let resolveProfiles!: () => void
+    mockFetchProfiles.mockReturnValue(new Promise<void>((resolve) => { resolveProfiles = resolve }))
+    const wrapper = mount(KanbanView)
+    await flushPromises()
+
+    expect(mockRefreshAll).toHaveBeenCalledOnce()
+    expect(wrapper.findAll('.kanban-column').every(column => column.attributes('data-loading') === 'true')).toBe(true)
+
+    // The mocked store is not reactive, so check the settled state on a fresh mount.
+    storeState.loading = false
+    resolveProfiles()
+    await flushPromises()
+    const settled = mount(KanbanView)
+    await flushPromises()
+    expect(settled.findAll('.kanban-column').every(column => column.attributes('data-loading') === 'false')).toBe(true)
   })
 
   it('runs quick actions from cards: promote from the queue, archive from done with confirmation, specify opens the drawer', async () => {

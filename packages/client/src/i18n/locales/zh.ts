@@ -1521,6 +1521,7 @@ export default {
       showArchived: '显示已归档 ({count})',
       hideArchived: '隐藏已归档 ({count})',
       inboxHint: '等待细化的任务。打开卡片并使用“细化”将其移入队列。',
+      loadingTasks: '正在加载任务…',
       waitingKindTitle: '该任务应如何等待？',
       waitingSchedule: '暂缓到稍后（已排期）',
       waitingBlock: '阻塞直到有人处理（需要原因）',
@@ -1579,6 +1580,7 @@ export default {
     },
     card: {
       assigneeTooltip: '负责人',
+      syncing: '保存中…',
       priority: {
         low: '低',
         medium: '中',

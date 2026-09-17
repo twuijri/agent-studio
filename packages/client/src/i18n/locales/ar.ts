@@ -1514,6 +1514,7 @@ export default {
       showArchived: 'إظهار المؤرشف ({count})',
       hideArchived: 'إخفاء المؤرشف ({count})',
       inboxHint: 'مهام تنتظر التحديد. افتح البطاقة واستخدم «تحديد» لنقلها إلى الطابور.',
+      loadingTasks: 'جارٍ تحميل المهام…',
       waitingKindTitle: 'كيف تنتظر هذه المهمة؟',
       waitingSchedule: 'تأجيل إلى وقت لاحق (مجدولة)',
       waitingBlock: 'حجب حتى يتدخل أحد (يحتاج سببًا)',
@@ -1572,6 +1573,7 @@ export default {
     },
     card: {
       assigneeTooltip: 'المكلَّف',
+      syncing: 'جارٍ الحفظ…',
       priority: {
         low: 'منخفضة',
         medium: 'متوسطة',
