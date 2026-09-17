@@ -127,5 +127,11 @@ describe('KanbanTaskCard i18n', () => {
     await wrapper.setProps({ task: { ...base, status: 'archived' } as any, muted: true })
     expect(wrapper.classes()).toContain('muted')
     expect(wrapper.find('.card-quick-action').exists()).toBe(false)
+
+    await wrapper.setProps({ task: { ...base, status: 'todo' } as any, muted: false, pending: true })
+    expect(wrapper.classes()).toContain('pending')
+    expect(wrapper.attributes('aria-busy')).toBe('true')
+    expect(wrapper.find('.pending-badge').text()).toBe('kanban.card.syncing')
+    expect(wrapper.find('.card-quick-action').exists()).toBe(false)
   })
 })

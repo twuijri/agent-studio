@@ -1475,6 +1475,7 @@ export default {
       showArchived: 'Show archived ({count})',
       hideArchived: 'Hide archived ({count})',
       inboxHint: 'Tasks waiting to be specified. Open a card and use Specify to move it into the queue.',
+      loadingTasks: 'Loading tasks…',
       waitingKindTitle: 'How should this task wait?',
       waitingSchedule: 'Park until later (scheduled)',
       waitingBlock: 'Block until someone acts (needs a reason)',
@@ -1533,6 +1534,7 @@ export default {
     },
     card: {
       assigneeTooltip: 'Assignee',
+      syncing: 'Saving…',
       priority: {
         low: 'Low',
         medium: 'Medium',

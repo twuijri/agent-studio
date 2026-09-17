@@ -19,6 +19,10 @@ const props = defineProps<{
   dragDisabled?: boolean
   /** Collapse to a narrow strip while empty; expands for drops and on click. */
   collapsible?: boolean
+  /** Tasks whose Hermes command is still running; shown with a saving marker and not draggable. */
+  pendingTaskIds?: Record<string, unknown>
+  /** First board load still running: show a loading hint instead of "no tasks". */
+  loading?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -153,6 +157,8 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
         ghost-class="task-slot-ghost"
         chosen-class="task-slot-chosen"
         drag-class="task-slot-dragging"
+        filter=".task-slot-pending"
+        :prevent-on-filter="false"
         @move="canMove"
         @start="handleStart"
         @end="handleEnd"
@@ -163,19 +169,23 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
           v-for="task in localTasks"
           :key="task.id"
           class="task-slot"
+          :class="{ 'task-slot-pending': !!pendingTaskIds?.[task.id] }"
           :data-task-id="task.id"
           :data-status="task.status"
+          :data-pending="pendingTaskIds?.[task.id] ? 'true' : 'false'"
         >
           <KanbanTaskCard
             :task="task"
+            :pending="!!pendingTaskIds?.[task.id]"
             :assignee-avatar="task.assignee ? avatars?.[task.assignee] || null : null"
             @click="emit('taskClick', task.id)"
             @action="payload => emit('taskAction', payload)"
           />
         </div>
       </VueDraggable>
-      <div v-if="localTasks.length === 0 && !showArchived" class="column-empty" aria-hidden="true">
-        {{ dropBlocked ? t('kanban.dnd.dropNotAllowed') : t('kanban.noTasks') }}
+      <div v-if="localTasks.length === 0 && !showArchived" class="column-empty" :class="{ loading }" :aria-hidden="loading ? undefined : 'true'" :role="loading ? 'status' : undefined">
+        <span v-if="loading" class="column-loading-spinner" aria-hidden="true" />
+        {{ loading ? t('kanban.board.loadingTasks') : dropBlocked ? t('kanban.dnd.dropNotAllowed') : t('kanban.noTasks') }}
       </div>
       <div v-else-if="dropBlocked" class="column-blocked-hint" aria-hidden="true">
         {{ t('kanban.dnd.dropNotAllowed') }}
@@ -353,6 +363,10 @@ button.column-header {
   &:active {
     cursor: grabbing;
   }
+
+  &.task-slot-pending {
+    cursor: progress;
+  }
 }
 
 .task-slot-ghost {
@@ -387,6 +401,31 @@ button.column-header {
 .column-blocked-hint {
   inset: auto 9px 9px;
   background: color-mix(in srgb, $bg-card 85%, transparent);
+}
+
+@keyframes kanban-column-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+.column-empty.loading {
+  gap: 8px;
+  border-style: solid;
+  border-color: transparent;
+}
+
+.column-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid $border-color;
+  border-top-color: $text-secondary;
+  border-radius: 999px;
+  animation: kanban-column-loading-spin 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .column-loading-spinner {
+    animation: none;
+  }
 }
 
 .archive-section {

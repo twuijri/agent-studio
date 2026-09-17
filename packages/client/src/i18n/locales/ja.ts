@@ -191,6 +191,9 @@ export default {
       resetLayout: 'レイアウトをリセット',
       layoutHint: '列内のカードの並び順はこのブラウザにのみ保存され、エージェントの実行順には影響しません。',
     },
+    card: {
+      syncing: '保存中…',
+    },
     board: {
       columns: {
         inbox: '受信箱',
@@ -203,6 +206,7 @@ export default {
       showArchived: 'アーカイブを表示 ({count})',
       hideArchived: 'アーカイブを隠す ({count})',
       inboxHint: '仕様化を待つタスクです。カードを開いて「仕様化」でキューへ移動します。',
+      loadingTasks: 'タスクを読み込み中…',
       waitingKindTitle: 'このタスクをどう待機させますか？',
       waitingSchedule: '後回しにする（スケジュール）',
       waitingBlock: '誰かの対応まで停止（理由が必要）',

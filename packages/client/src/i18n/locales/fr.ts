@@ -191,6 +191,9 @@ export default {
       resetLayout: 'Réinitialiser la disposition',
       layoutHint: 'L\'ordre manuel des cartes dans une colonne est enregistré uniquement dans ce navigateur et ne change pas ce que l\'agent exécute en premier.',
     },
+    card: {
+      syncing: 'Enregistrement…',
+    },
     board: {
       columns: {
         inbox: 'Entrée',
@@ -203,6 +206,7 @@ export default {
       showArchived: 'Afficher les archivées ({count})',
       hideArchived: 'Masquer les archivées ({count})',
       inboxHint: 'Tâches à spécifier. Ouvrez la carte et utilisez « Spécifier » pour la placer dans la file.',
+      loadingTasks: 'Chargement des tâches…',
       waitingKindTitle: 'Comment cette tâche doit-elle attendre ?',
       waitingSchedule: 'Reporter à plus tard (planifiée)',
       waitingBlock: 'Bloquer jusqu\'à une action (motif requis)',

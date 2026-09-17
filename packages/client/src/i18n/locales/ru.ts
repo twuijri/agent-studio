@@ -1365,6 +1365,7 @@ export default {
       showArchived: 'Показать архив ({count})',
       hideArchived: 'Скрыть архив ({count})',
       inboxHint: 'Задачи, ожидающие спецификации. Откройте карточку и нажмите «Специфицировать», чтобы отправить её в очередь.',
+      loadingTasks: 'Загрузка задач…',
       waitingKindTitle: 'Как задача должна ждать?',
       waitingSchedule: 'Отложить на потом (запланировано)',
       waitingBlock: 'Заблокировать до действия человека (нужна причина)',
@@ -1423,6 +1424,7 @@ export default {
     },
     card: {
       assigneeTooltip: 'Ответственный',
+      syncing: 'Сохранение…',
       priority: {
         low: 'Низкий',
         medium: 'Средний',
