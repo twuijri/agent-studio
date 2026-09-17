@@ -191,7 +191,26 @@ export default {
       resetLayout: 'Redefinir layout',
       layoutHint: 'A ordem manual dos cartões dentro de uma coluna é salva apenas neste navegador e não muda o que o agente executa primeiro.',
     },
+    card: {
+      syncing: 'Salvando…',
+    },
     board: {
+      columns: {
+        inbox: 'Entrada',
+        queue: 'Fila',
+        running: 'Em execução',
+        waiting: 'Em espera',
+        review: 'Revisão',
+        done: 'Concluído',
+      },
+      showArchived: 'Mostrar arquivadas ({count})',
+      hideArchived: 'Ocultar arquivadas ({count})',
+      inboxHint: 'Tarefas aguardando especificação. Abra o cartão e use «Especificar» para movê-la para a fila.',
+      loadingTasks: 'Carregando tarefas…',
+      waitingKindTitle: 'Como esta tarefa deve esperar?',
+      waitingSchedule: 'Adiar para mais tarde (agendada)',
+      waitingBlock: 'Bloquear até alguém agir (precisa de motivo)',
+      scheduleNote: 'Nota (opcional)',
       defaultArchiveUnavailable: 'O quadro padrão não pode ser arquivado',
     },
     action: {
