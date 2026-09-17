@@ -103,6 +103,9 @@ export function setupKanbanEventsWebSocket(httpServers: HttpServer | HttpServer[
 
     child.stdout?.on('data', streamLines((line) => {
       if (line.toLowerCase().startsWith('watching kanban events')) return
+      // Hermes changed the board (worker claim, completion, ...): drop cached
+      // reads before clients refresh so they see the new state immediately.
+      kanbanCli.invalidateBoardReads(board)
       sendJson(ws, { type: 'event', board })
     }))
 
