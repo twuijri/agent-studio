@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      # Integration preview branch: CI must pass there before its image is built.
+      - test
   pull_request:
     branches:
       - main

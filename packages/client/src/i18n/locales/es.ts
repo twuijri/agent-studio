@@ -191,7 +191,26 @@ export default {
       resetLayout: 'Restablecer diseño',
       layoutHint: 'El orden manual de las tarjetas dentro de una columna se guarda solo en este navegador y no cambia lo que el agente ejecuta primero.',
     },
+    card: {
+      syncing: 'Guardando…',
+    },
     board: {
+      columns: {
+        inbox: 'Entrada',
+        queue: 'Cola',
+        running: 'En ejecución',
+        waiting: 'En espera',
+        review: 'Revisión',
+        done: 'Hecho',
+      },
+      showArchived: 'Mostrar archivadas ({count})',
+      hideArchived: 'Ocultar archivadas ({count})',
+      inboxHint: 'Tareas pendientes de especificar. Abre la tarjeta y usa «Especificar» para moverla a la cola.',
+      loadingTasks: 'Cargando tareas…',
+      waitingKindTitle: '¿Cómo debe esperar esta tarea?',
+      waitingSchedule: 'Aplazar hasta más tarde (programada)',
+      waitingBlock: 'Bloquear hasta que alguien actúe (requiere motivo)',
+      scheduleNote: 'Nota (opcional)',
       defaultArchiveUnavailable: 'El tablero predeterminado no se puede archivar',
     },
     action: {
