@@ -1507,7 +1507,7 @@ export default {
     dnd: {
       dropNotAllowed: '无法移动到此处',
       resetLayout: '重置布局',
-      layoutHint: '列和卡片的顺序仅保存在当前浏览器中，不会改变智能体的执行顺序。',
+      layoutHint: '列内卡片的手动顺序仅保存在当前浏览器中，不会改变智能体的执行顺序。',
     },
     board: {
       create: '新建看板',

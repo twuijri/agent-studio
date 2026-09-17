@@ -189,7 +189,7 @@ export default {
     dnd: {
       dropNotAllowed: 'Hierher nicht verschiebbar',
       resetLayout: 'Layout zurücksetzen',
-      layoutHint: 'Die Reihenfolge von Spalten und Karten wird nur in diesem Browser gespeichert und ändert nicht, was der Agent zuerst ausführt.',
+      layoutHint: 'Die manuelle Reihenfolge der Karten in einer Spalte wird nur in diesem Browser gespeichert und ändert nicht, was der Agent zuerst ausführt.',
     },
     board: {
       defaultArchiveUnavailable: 'Das Standard-Kanban kann nicht archiviert werden',

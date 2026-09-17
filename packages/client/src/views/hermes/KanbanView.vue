@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { NButton, NSelect, NSpin, NModal, NInput, NTooltip, useDialog, useMessage } from 'naive-ui'
-import { VueDraggable } from 'vue-draggable-plus'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import KanbanColumn from '@/components/hermes/kanban/KanbanColumn.vue'
@@ -111,16 +110,10 @@ const tasksByStatus = computed(() => {
   return grouped
 })
 
-const visibleBoardStatuses = computed(() => {
+// Columns always follow the Hermes workflow order; only cards move.
+const visibleBoardStatuses = computed<readonly KanbanTaskStatus[]>(() => {
   const status = kanbanStore.filterStatus as KanbanTaskStatus | null
-  return status && boardStatuses.includes(status) ? [status] : kanbanStore.columnOrder
-})
-
-// Sortable mutates the bound array, so the column order lives in a local copy
-// that is written back to the store (and the browser) after each drag.
-const columns = ref<KanbanTaskStatus[]>([...visibleBoardStatuses.value])
-watch(visibleBoardStatuses, (next) => {
-  columns.value = [...next]
+  return status && boardStatuses.includes(status) ? [status] : boardStatuses
 })
 
 const isFiltered = computed(() => visibleBoardStatuses.value.length === 1)
@@ -214,11 +207,6 @@ function handleDragStart(status: KanbanTaskStatus) {
 
 function handleDragEnd() {
   draggingStatus.value = null
-}
-
-function handleColumnsReordered() {
-  if (isFiltered.value) return
-  kanbanStore.setColumnOrder([...columns.value])
 }
 
 function handleCardsReordered(status: KanbanTaskStatus, ids: string[]) {
@@ -330,12 +318,15 @@ const reasonModalVisible = computed({
   },
 })
 
-// Vertical wheel over the board background scrolls the columns sideways so
-// mouse users can reach every column without a horizontal scrollbar.
+// Vertical mouse-wheel anywhere on the board scrolls the columns sideways,
+// unless the pointer is over a card list that can still scroll vertically.
+// Horizontal wheel/trackpad gestures are left to the browser (the lists let
+// them chain to the board), so sideways swipes work from any spot.
 function handleBoardWheel(event: WheelEvent) {
-  if (event.deltaX !== 0 || event.deltaY === 0 || event.shiftKey) return
+  if (event.deltaX !== 0 || event.deltaY === 0 || event.shiftKey || event.ctrlKey) return
   const target = event.target as HTMLElement | null
-  if (target?.closest('.task-list')) return
+  const list = target?.closest<HTMLElement>('.task-list')
+  if (list && list.scrollHeight > list.clientHeight) return
   const board = event.currentTarget as HTMLElement
   if (board.scrollWidth <= board.clientWidth) return
   event.preventDefault()
@@ -509,19 +500,9 @@ async function handleDispatch() {
         data-testid="kanban-board"
         @wheel="handleBoardWheel"
       >
-        <VueDraggable
-          v-model="columns"
-          class="kanban-columns"
-          handle=".column-header"
-          :animation="150"
-          :force-fallback="true"
-          :fallback-tolerance="6"
-          :disabled="isFiltered || transitionBusy"
-          ghost-class="kanban-column-ghost"
-          @update="handleColumnsReordered"
-        >
+        <div class="kanban-columns">
           <KanbanColumn
-            v-for="status in columns"
+            v-for="status in visibleBoardStatuses"
             :key="status"
             :status="status"
             :tasks="tasksByStatus[status]"
@@ -534,7 +515,7 @@ async function handleDispatch() {
             @drag-start="handleDragStart"
             @drag-end="handleDragEnd"
           />
-        </VueDraggable>
+        </div>
       </div>
     </NSpin>
 
@@ -721,10 +702,6 @@ async function handleDispatch() {
   min-width: 100%;
   height: 100%;
   padding: 16px 20px;
-}
-
-.kanban-column-ghost {
-  opacity: 0.4;
 }
 
 .board-form {

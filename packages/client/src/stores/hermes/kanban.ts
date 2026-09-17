@@ -8,7 +8,6 @@ import {
   hasCustomKanbanLayout,
   kanbanLayoutStorageKey,
   orderKanbanCards,
-  orderKanbanColumns,
   parseKanbanLayout,
 } from '@/utils/hermes/kanban-board'
 
@@ -87,11 +86,6 @@ export const useKanbanStore = defineStore('kanban', () => {
     layoutVersion.value++
   }
 
-  const columnOrder = computed(() => {
-    void layoutVersion.value
-    return orderKanbanColumns(layoutFor(selectedBoard.value).columns)
-  })
-
   const hasCustomLayout = computed(() => {
     void layoutVersion.value
     return hasCustomKanbanLayout(layoutFor(selectedBoard.value))
@@ -100,11 +94,6 @@ export const useKanbanStore = defineStore('kanban', () => {
   function orderedTasksForStatus(status: KanbanTaskStatus): KanbanTask[] {
     void layoutVersion.value
     return orderKanbanCards(tasks.value.filter(task => task.status === status), layoutFor(selectedBoard.value).cards[status])
-  }
-
-  function setColumnOrder(statuses: KanbanTaskStatus[]) {
-    const board = selectedBoard.value
-    persistLayout(board, { ...layoutFor(board), columns: orderKanbanColumns(statuses) })
   }
 
   function setCardOrder(status: KanbanTaskStatus, ids: string[]) {
@@ -582,10 +571,8 @@ export const useKanbanStore = defineStore('kanban', () => {
     selectedBoard,
     filterStatus,
     filterAssignee,
-    columnOrder,
     hasCustomLayout,
     orderedTasksForStatus,
-    setColumnOrder,
     setCardOrder,
     resetLayout,
     fetchBoards,

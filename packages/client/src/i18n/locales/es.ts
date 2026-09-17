@@ -189,7 +189,7 @@ export default {
     dnd: {
       dropNotAllowed: 'No se puede mover aquí',
       resetLayout: 'Restablecer diseño',
-      layoutHint: 'El orden de columnas y tarjetas se guarda solo en este navegador y no cambia lo que el agente ejecuta primero.',
+      layoutHint: 'El orden manual de las tarjetas dentro de una columna se guarda solo en este navegador y no cambia lo que el agente ejecuta primero.',
     },
     board: {
       defaultArchiveUnavailable: 'El tablero predeterminado no se puede archivar',

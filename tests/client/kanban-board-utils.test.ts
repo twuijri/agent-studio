@@ -5,7 +5,6 @@ import {
   isKanbanDropTarget,
   kanbanLayoutStorageKey,
   orderKanbanCards,
-  orderKanbanColumns,
   parseKanbanLayout,
   resolveKanbanTransition,
 } from '@/utils/hermes/kanban-board'
@@ -64,23 +63,16 @@ describe('kanban board transitions', () => {
 })
 
 describe('kanban browser-local layout', () => {
-  it('parses stored layouts defensively', () => {
-    expect(parseKanbanLayout(null)).toEqual({ columns: [], cards: {} })
-    expect(parseKanbanLayout('not json')).toEqual({ columns: [], cards: {} })
+  it('parses stored layouts defensively and drops the retired column order', () => {
+    expect(parseKanbanLayout(null)).toEqual({ cards: {} })
+    expect(parseKanbanLayout('not json')).toEqual({ cards: {} })
     expect(parseKanbanLayout(JSON.stringify({
-      columns: ['done', 'bogus', 'todo', 'done'],
+      columns: ['done', 'todo'],
       cards: { todo: ['a', '', 3, 'b'], nope: ['x'], ready: [] },
-    }))).toEqual({ columns: ['done', 'todo'], cards: { todo: ['a', 'b'] } })
-    expect(hasCustomKanbanLayout({ columns: [], cards: {} })).toBe(false)
-    expect(hasCustomKanbanLayout({ columns: ['done'], cards: {} })).toBe(true)
+    }))).toEqual({ cards: { todo: ['a', 'b'] } })
+    expect(hasCustomKanbanLayout({ cards: {} })).toBe(false)
+    expect(hasCustomKanbanLayout({ cards: { todo: ['a'] } })).toBe(true)
     expect(kanbanLayoutStorageKey('project-a')).toBe('hermes.kanban.layout.project-a')
-  })
-
-  it('orders columns from the saved order and appends every missing status', () => {
-    expect(orderKanbanColumns(undefined)).toEqual([...KANBAN_BOARD_STATUSES])
-    expect(orderKanbanColumns(['done', 'todo'])).toEqual([
-      'done', 'todo', 'triage', 'scheduled', 'ready', 'running', 'blocked', 'review', 'archived',
-    ])
   })
 
   it('keeps manual card order and shows unsaved arrivals first, newest on top', () => {

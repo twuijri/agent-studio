@@ -189,7 +189,7 @@ export default {
     dnd: {
       dropNotAllowed: 'Déplacement impossible ici',
       resetLayout: 'Réinitialiser la disposition',
-      layoutHint: 'L\'ordre des colonnes et des cartes est enregistré uniquement dans ce navigateur et ne change pas ce que l\'agent exécute en premier.',
+      layoutHint: 'L\'ordre manuel des cartes dans une colonne est enregistré uniquement dans ce navigateur et ne change pas ce que l\'agent exécute en premier.',
     },
     board: {
       defaultArchiveUnavailable: 'Le tableau par défaut ne peut pas être archivé',
