@@ -71,7 +71,7 @@ describe('KanbanColumn', () => {
   })
 
   it('marks columns that cannot accept the dragged card and highlights the ones that can', async () => {
-    const wrapper = mount(KanbanColumn, { props: { column: kanbanColumnById('running'), tasks: [], draggingStatus: 'todo' } })
+    const wrapper = mount(KanbanColumn, { props: { column: kanbanColumnById('review'), tasks: [], draggingStatus: 'todo' } })
     expect(wrapper.classes()).toContain('drop-blocked')
     expect(wrapper.find('.column-empty').text()).toBe('kanban.dnd.dropNotAllowed')
 
@@ -94,7 +94,7 @@ describe('KanbanColumn', () => {
     const move = wrapper.findComponent({ name: 'VueDraggable' }).vm.$attrs.onMove as (event: any) => boolean
     expect(move({ from: listElement('queue'), to: listElement('review'), dragged: slotElement('ready') })).toBe(true)
     expect(move({ from: listElement('queue'), to: listElement('review'), dragged: slotElement('todo') })).toBe(false)
-    expect(move({ from: listElement('queue'), to: listElement('running'), dragged: slotElement('ready') })).toBe(false)
+    expect(move({ from: listElement('waiting'), to: listElement('review'), dragged: slotElement('scheduled') })).toBe(false)
     expect(move({ from: listElement('queue'), to: document.createElement('div'), dragged: slotElement('ready') })).toBe(false)
   })
 
@@ -111,11 +111,11 @@ describe('KanbanColumn', () => {
     draggable.vm.$emit('add', { from: listElement('queue'), to: listElement('waiting'), item: slotElement('ready'), data: task('t-9', 'ready'), newIndex: 1 })
     expect(wrapper.emitted('dropped')![0]).toEqual([{ taskId: 't-9', from: 'ready', toColumn: kanbanColumnById('waiting'), index: 1 }])
 
-    const runningColumn = document.createElement('section')
-    runningColumn.className = 'kanban-column'
-    runningColumn.dataset.column = 'running'
+    const reviewColumn = document.createElement('section')
+    reviewColumn.className = 'kanban-column'
+    reviewColumn.dataset.column = 'review'
     const inner = document.createElement('div')
-    runningColumn.appendChild(inner)
+    reviewColumn.appendChild(inner)
     const originalElementFromPoint = document.elementFromPoint
     document.elementFromPoint = vi.fn(() => inner) as any
     try {
@@ -123,7 +123,7 @@ describe('KanbanColumn', () => {
     } finally {
       document.elementFromPoint = originalElementFromPoint
     }
-    expect(wrapper.emitted('dropped')![1]).toEqual([{ taskId: 't-9', from: 'ready', toColumn: kanbanColumnById('running'), index: 0 }])
+    expect(wrapper.emitted('dropped')![1]).toEqual([{ taskId: 't-9', from: 'ready', toColumn: kanbanColumnById('review'), index: 0 }])
 
     draggable.vm.$emit('end')
     expect(wrapper.emitted('dragEnd')).toHaveLength(1)

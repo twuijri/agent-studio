@@ -349,7 +349,7 @@ describe('Kanban store', () => {
 
     store.setCardOrder('queue', ['a', 'b', 'c'])
     expect(store.orderedTasksForColumn('queue').map(task => task.id)).toEqual(['a', 'b', 'c'])
-    expect(store.orderedTasksForColumn('running')).toEqual([])
+    expect(store.orderedTasksForColumn('review')).toEqual([])
     expect(store.hasCustomLayout).toBe(true)
     expect(JSON.parse(window.localStorage.getItem('hermes.kanban.layout.project-a') || '{}')).toEqual({ cards: { queue: ['a', 'b', 'c'] } })
 

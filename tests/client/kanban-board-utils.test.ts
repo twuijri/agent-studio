@@ -69,11 +69,11 @@ describe('kanban board transitions', () => {
 
 describe('kanban board columns', () => {
   it('maps every Hermes status to the intake strip, a workflow column, or the archive under done', () => {
-    expect(KANBAN_COLUMNS.map(column => column.id)).toEqual(['queue', 'running', 'waiting', 'review', 'done'])
+    expect(KANBAN_COLUMNS.map(column => column.id)).toEqual(['queue', 'waiting', 'review', 'done'])
     expect(kanbanColumnForStatus('triage')).toBeNull()
     expect(kanbanColumnForStatus('todo')).toBe('queue')
     expect(kanbanColumnForStatus('ready')).toBe('queue')
-    expect(kanbanColumnForStatus('running')).toBe('running')
+    expect(kanbanColumnForStatus('running')).toBe('queue')
     expect(kanbanColumnForStatus('scheduled')).toBe('waiting')
     expect(kanbanColumnForStatus('blocked')).toBe('waiting')
     expect(kanbanColumnForStatus('review')).toBe('review')
@@ -89,7 +89,8 @@ describe('kanban board columns', () => {
     expect(actions('ready', 'queue')).toEqual([])
     expect(actions('blocked', 'queue')).toEqual(['unblock->todo'])
     expect(actions('review', 'queue')).toEqual(['reopenReview->todo'])
-    expect(actions('todo', 'running')).toEqual([])
+    expect(actions('running', 'queue')).toEqual([])
+    expect(actions('running', 'review')).toEqual(['requestReview->review'])
     expect(actions('ready', 'waiting')).toEqual(['schedule->scheduled', 'block->blocked'])
     expect(actions('todo', 'waiting')).toEqual(['schedule->scheduled'])
     expect(actions('running', 'review')).toEqual(['requestReview->review'])
@@ -97,7 +98,7 @@ describe('kanban board columns', () => {
     expect(actions('blocked', 'done')).toEqual(['complete->done'])
     expect(actions('done', 'queue')).toEqual([])
     expect(isKanbanColumnDropTarget('scheduled', kanbanColumnById('waiting'))).toBe(true)
-    expect(isKanbanColumnDropTarget('todo', kanbanColumnById('running'))).toBe(false)
+    expect(isKanbanColumnDropTarget('todo', kanbanColumnById('review'))).toBe(false)
     expect(isKanbanColumnDropTarget('ready', kanbanColumnById('review'))).toBe(true)
   })
 })

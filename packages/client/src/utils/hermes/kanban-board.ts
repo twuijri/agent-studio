@@ -85,10 +85,11 @@ export function isKanbanDropTarget(from: KanbanTaskStatus, to: KanbanTaskStatus)
 // ─── Board columns ───────────────────────────────────────────────
 //
 // Hermes keeps nine task statuses; the board shows them as an intake strip plus
-// five workflow columns. A column groups statuses; the card itself shows which
-// status it is in (ready badge, running ring, waiting kind, ...).
+// four workflow columns. A column groups statuses; the card itself shows which
+// stage it is in: the queue goes todo -> ready (badge) -> running (green ring)
+// in place, waiting distinguishes scheduled from blocked, and so on.
 
-export type KanbanColumnId = 'queue' | 'running' | 'waiting' | 'review' | 'done'
+export type KanbanColumnId = 'queue' | 'waiting' | 'review' | 'done'
 
 export interface KanbanColumnDef {
   id: KanbanColumnId
@@ -99,8 +100,7 @@ export const KANBAN_INBOX_STATUS: KanbanTaskStatus = 'triage'
 export const KANBAN_ARCHIVED_STATUS: KanbanTaskStatus = 'archived'
 
 export const KANBAN_COLUMNS: readonly KanbanColumnDef[] = [
-  { id: 'queue', statuses: ['todo', 'ready'] },
-  { id: 'running', statuses: ['running'] },
+  { id: 'queue', statuses: ['todo', 'ready', 'running'] },
   { id: 'waiting', statuses: ['scheduled', 'blocked'] },
   { id: 'review', statuses: ['review'] },
   { id: 'done', statuses: ['done'] },
