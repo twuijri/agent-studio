@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { NButton, NInput, NInputNumber, NModal, NSelect, NSpin, useMessage, type SelectOption } from 'naive-ui'
+import { computed, h, onMounted, ref, watch } from 'vue'
+import { NButton, NInput, NInputNumber, NModal, NSelect, NSpin, useMessage, type SelectOption, type SelectGroupOption } from 'naive-ui'
+import ContentText from '@/components/common/ContentText.vue'
 import { useI18n } from 'vue-i18n'
 import {
   fetchAuxiliaryModels,
@@ -111,7 +112,7 @@ const isEditingStudioImage = computed(() => (
 
 const providerOptions = computed(() => {
   const seen = new Set<string>()
-  const options: SelectOption[] = [{
+  const options: Array<SelectOption | SelectGroupOption> = [{
     label: isEditingStudioImage.value
       ? t('models.auxiliaryProviderStudioDefault')
       : t('models.auxiliaryProviderAuto'),
@@ -120,28 +121,48 @@ const providerOptions = computed(() => {
   if (!isEditingStudioImage.value) {
     options.push({ label: t('models.auxiliaryProviderMain'), value: 'main' })
   } else {
+    const nativeOptions: SelectOption[] = []
     const modality = editingTask.value?.key === 'image_edit' ? 'image' : 'text'
     for (const provider of studioImageProviders.value) {
       const modalities = provider.capabilities?.modalities || ['text']
       if (!modalities.includes(modality)) continue
       const value = `image:${provider.name}`
       seen.add(value)
-      options.push({
+      nativeOptions.push({
         label: provider.display_name || provider.name,
         value,
         disabled: !provider.available,
       })
     }
+    if (nativeOptions.length) options.push({
+      type: 'group', key: 'hermes-image-providers',
+      label: t('models.imageProvidersHermes'), children: nativeOptions,
+    })
   }
+  const configuredOptions: SelectOption[] = []
   for (const group of modelsStore.providers) {
     if (!group.provider) continue
     if (isEditingStudioImage.value && !group.provider.startsWith('custom:')) continue
     if (seen.has(group.provider)) continue
     seen.add(group.provider)
-    options.push({ label: group.label || group.provider, value: group.provider })
+    configuredOptions.push({ label: group.label || group.provider, value: group.provider })
   }
+  if (isEditingStudioImage.value) {
+    if (configuredOptions.length) options.push({
+      type: 'group', key: 'custom-image-providers',
+      label: t('models.imageProvidersCustom'), children: configuredOptions,
+    })
+  } else options.push(...configuredOptions)
   return options
 })
+
+function renderImageProviderLabel(option: SelectOption | SelectGroupOption) {
+  const label = String(option.label || '')
+  // Translated group/default labels follow the UI; provider names follow content.
+  return option.type === 'group' || option.value === 'auto'
+    ? label
+    : h(ContentText, null, { default: () => label })
+}
 
 function canonicalProviderValue(value: string): string {
   const normalized = value.startsWith('custom:') ? value.slice('custom:'.length) : value
@@ -585,12 +606,16 @@ watch(() => delegationForm.value.provider, (provider) => {
         <p v-if="editingTask && taskHint(editingTask)" class="auxiliary-task-hint">
           {{ taskHint(editingTask) }}
         </p>
+        <p v-if="isEditingStudioImage" data-testid="image-provider-hint" class="auxiliary-task-hint">
+          {{ t('models.imageProvidersHint') }}
+        </p>
         <label>
           <span>{{ t('models.provider') }}</span>
           <NSelect
             data-testid="auxiliary-provider"
             v-model:value="form.provider"
             :options="providerOptions"
+            :render-label="isEditingStudioImage ? renderImageProviderLabel : undefined"
             :placeholder="t('models.chooseProvider')"
             filterable
           />
