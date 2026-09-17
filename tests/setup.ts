@@ -12,6 +12,8 @@ const workerStateDir = `${tempRoot}${pathSeparator}hermes-studio-vitest-${proces
 process.env.HERMES_WEB_UI_HOME = workerStateDir
 process.env.HERMES_WEBUI_STATE_DIR = workerStateDir
 process.env.UPLOAD_DIR = `${workerStateDir}${pathSeparator}upload`
+// Keep Kanban direct reads away from the developer's real ~/.hermes boards.
+process.env.HERMES_KANBAN_HOME = `${workerStateDir}${pathSeparator}kanban-home`
 
 // Vite injects this at build time; unit tests need a stable fallback.
 ;(globalThis as any).__APP_VERSION__ = 'test'
