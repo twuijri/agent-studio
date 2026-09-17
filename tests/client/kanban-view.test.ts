@@ -49,6 +49,13 @@ const mockScheduleTask = vi.hoisted(() => vi.fn())
 const mockRequestReview = vi.hoisted(() => vi.fn())
 const mockReopenReview = vi.hoisted(() => vi.fn())
 const mockMessageError = vi.hoisted(() => vi.fn())
+const pendingState = vi.hoisted(() => ({ map: {} as Record<string, string> }))
+const mockBeginTransition = vi.hoisted(() => vi.fn((taskId: string, expected: string) => { pendingState.map = { ...pendingState.map, [taskId]: expected } }))
+const mockEndTransition = vi.hoisted(() => vi.fn((taskId: string) => { const next = { ...pendingState.map }; delete next[taskId]; pendingState.map = next }))
+const mockWithPendingTransition = vi.hoisted(() => vi.fn(async (taskId: string, expected: string, run: () => Promise<unknown>) => {
+  mockBeginTransition(taskId, expected)
+  try { return await run() } finally { mockEndTransition(taskId) }
+}))
 const mockMessageSuccess = vi.hoisted(() => vi.fn())
 const profilesState = vi.hoisted(() => ({
   profiles: [] as Array<{ name: string; avatar?: Record<string, any> | null }>,
@@ -81,11 +88,18 @@ vi.mock('@/stores/hermes/kanban', () => ({
     dispatch: mockDispatch,
     startEventStream: mockStartEventStream,
     stopEventStream: mockStopEventStream,
-    orderedTasksForStatus: (status: string) => storeState.tasks
-      .filter(task => task.status === status)
-      .sort((a, b) => b.created_at - a.created_at),
+    orderedTasksForColumn: (column: string) => {
+      const statuses: Record<string, string[]> = { queue: ['todo', 'ready', 'running'], waiting: ['scheduled', 'blocked'], review: ['review'], done: ['done'] }
+      return storeState.tasks.filter(task => statuses[column]?.includes(task.status)).sort((a, b) => b.created_at - a.created_at)
+    },
+    tasksWithStatus: (status: string) => storeState.tasks.filter(task => task.status === status),
     setCardOrder: mockSetCardOrder,
     resetLayout: mockResetLayout,
+    pendingTransitions: pendingState.map,
+    isTransitionPending: (taskId: string) => taskId in pendingState.map,
+    beginTransition: mockBeginTransition,
+    endTransition: mockEndTransition,
+    withPendingTransition: mockWithPendingTransition,
     completeTasks: mockCompleteTasks,
     blockTask: mockBlockTask,
     unblockTasks: mockUnblockTasks,
@@ -108,15 +122,19 @@ vi.mock('@/components/hermes/kanban/KanbanColumn.vue', () => ({
   default: defineComponent({
     name: 'KanbanColumn',
     props: {
-      status: { type: String, required: true },
+      column: { type: Object, required: true },
       tasks: { type: Array, default: () => [] },
+      archivedTasks: { type: Array, required: false },
       avatars: { type: Object, required: false },
       draggingStatus: { type: String, required: false },
       dragDisabled: { type: Boolean, default: false },
+      collapsible: { type: Boolean, default: false },
+      pendingTaskIds: { type: Object, required: false },
+      loading: { type: Boolean, default: false },
     },
-    emits: ['taskClick', 'reorder', 'dropped', 'dragStart', 'dragEnd'],
+    emits: ['taskClick', 'taskAction', 'reorder', 'dropped', 'dragStart', 'dragEnd'],
     template: `
-      <section class="kanban-column" :data-status="status" :data-dragging="draggingStatus || ''" :data-drag-disabled="dragDisabled ? 'true' : 'false'">
+      <section class="kanban-column" :data-column="column.id" :data-loading="loading ? 'true' : 'false'" :data-pending="Object.keys(pendingTaskIds || {}).join(',')" :data-collapsible="collapsible ? 'true' : 'false'" :data-archived="archivedTasks ? archivedTasks.length : ''" :data-dragging="draggingStatus || ''" :data-drag-disabled="dragDisabled ? 'true' : 'false'">
         <button
           v-for="task in tasks"
           :key="task.id"
@@ -126,6 +144,15 @@ vi.mock('@/components/hermes/kanban/KanbanColumn.vue', () => ({
         >{{ task.title }}</button>
       </section>
     `,
+  }),
+}))
+
+vi.mock('@/components/hermes/kanban/KanbanTaskCard.vue', () => ({
+  default: defineComponent({
+    name: 'KanbanTaskCard',
+    props: { task: { type: Object, required: true }, assigneeAvatar: { type: Object, required: false }, muted: Boolean },
+    emits: ['click', 'action'],
+    template: '<button class="inbox-card-stub" @click="$emit(\'click\', task.id)">{{ task.title }}</button>',
   }),
 }))
 
@@ -214,6 +241,7 @@ describe('KanbanView', () => {
     storeState.filterStatus = null
     storeState.filterAssignee = null
     storeState.hasCustomLayout = false
+    pendingState.map = {}
     mockPromoteTask.mockResolvedValue(undefined)
     mockCompleteTasks.mockResolvedValue(undefined)
     mockBlockTask.mockResolvedValue(undefined)
@@ -252,18 +280,16 @@ describe('KanbanView', () => {
     expect(mockRecoverSelectedBoard).toHaveBeenCalledWith('project-a')
     expect(mockRefreshAll).toHaveBeenCalledOnce()
     expect(routerReplace).not.toHaveBeenCalled()
-    expect(wrapper.findAll('.kanban-column')).toHaveLength(9)
-    expect(wrapper.findAll('.kanban-column').map(column => column.attributes('data-status'))).toEqual([
-      'triage',
-      'todo',
-      'scheduled',
-      'ready',
-      'running',
-      'blocked',
+    expect(wrapper.findAll('.kanban-column')).toHaveLength(4)
+    expect(wrapper.findAll('.kanban-column').map(column => column.attributes('data-column'))).toEqual([
+      'queue',
+      'waiting',
       'review',
       'done',
-      'archived',
     ])
+    expect(wrapper.find('[data-testid="kanban-inbox"]').exists()).toBe(true)
+    expect(wrapper.find('.kanban-column[data-column="done"]').attributes('data-archived')).toBe('0')
+    expect(wrapper.findAll('.kanban-column').map(column => column.attributes('data-collapsible'))).toEqual(['false', 'true', 'false', 'false'])
     expect(wrapper.find('.kanban-board').exists()).toBe(true)
     expect(wrapper.find('.kanban-columns').exists()).toBe(true)
 
@@ -307,81 +333,156 @@ describe('KanbanView', () => {
     const wrapper = mount(KanbanView)
     await flushPromises()
 
-    expect(wrapper.findAll('.kanban-column').slice(0, 2).map(column => column.attributes('data-status'))).toEqual(['triage', 'todo'])
+    expect(wrapper.findAll('.kanban-column').slice(0, 2).map(column => column.attributes('data-column'))).toEqual(['queue', 'waiting'])
     expect(wrapper.findAllComponents({ name: 'VueDraggable' })).toHaveLength(0)
     await wrapper.find('.kanban-task-card-stub').trigger('click')
     expect(wrapper.find('.drawer-updated').attributes('data-task-id')).toBe('task-1')
   })
 
   it('runs the bridged Hermes transition for a dropped card and reloads unsupported drops', async () => {
+    storeState.tasks = [
+      { id: 'task-1', title: 'Task one', status: 'ready', created_at: 10 },
+      { id: 'task-2', title: 'Task two', status: 'done', created_at: 20 },
+    ]
     const wrapper = mount(KanbanView)
     await flushPromises()
     const columns = wrapper.findAllComponents({ name: 'KanbanColumn' })
-    const readyColumn = columns.find(column => column.props('status') === 'ready')!
-    const doneColumn = columns.find(column => column.props('status') === 'done')!
-    const runningColumn = columns.find(column => column.props('status') === 'running')!
+    const column = (id: string) => columns.find(item => (item.props('column') as any).id === id)!
 
-    readyColumn.vm.$emit('dragStart', 'todo')
+    column('review').vm.$emit('dragStart', 'ready')
     await flushPromises()
     expect(wrapper.find('.kanban-board').classes()).toContain('dragging')
-    expect(readyColumn.attributes('data-dragging')).toBe('todo')
+    expect(column('review').attributes('data-dragging')).toBe('ready')
 
-    readyColumn.vm.$emit('dropped', { taskId: 'task-1', from: 'todo', to: 'ready', index: 0 })
-    readyColumn.vm.$emit('dragEnd')
+    column('review').vm.$emit('dropped', { taskId: 'task-1', from: 'ready', toColumn: column('review').props('column'), index: 0 })
+    column('review').vm.$emit('dragEnd')
     await flushPromises()
-    expect(mockPromoteTask).toHaveBeenCalledWith('task-1', undefined)
-    expect(mockMessageSuccess).toHaveBeenCalledWith('kanban.message.taskPromoted')
+    expect(mockRequestReview).toHaveBeenCalledWith('task-1', undefined)
+    expect(mockWithPendingTransition).toHaveBeenCalledWith('task-1', 'review', expect.any(Function))
+    expect(pendingState.map).toEqual({})
+    expect(mockMessageSuccess).toHaveBeenCalledWith('kanban.message.reviewRequested')
     expect(wrapper.find('.kanban-board').classes()).not.toContain('dragging')
 
-    doneColumn.vm.$emit('dropped', { taskId: 'task-1', from: 'ready', to: 'done', index: 0 })
+    column('done').vm.$emit('dropped', { taskId: 'task-1', from: 'ready', toColumn: column('done').props('column'), index: 0 })
     await flushPromises()
     expect(mockCompleteTasks).toHaveBeenCalledWith(['task-1'])
 
-    runningColumn.vm.$emit('dropped', { taskId: 'task-1', from: 'todo', to: 'running', index: 0 })
+    column('queue').vm.$emit('dropped', { taskId: 'task-1', from: 'blocked', toColumn: column('queue').props('column'), index: 0 })
+    await flushPromises()
+    expect(mockUnblockTasks).toHaveBeenCalledWith(['task-1'])
+
+    column('review').vm.$emit('dropped', { taskId: 'task-1', from: 'todo', toColumn: column('review').props('column'), index: 0 })
     await flushPromises()
     expect(mockFetchTasks).toHaveBeenCalledWith(true)
     expect(mockScheduleTask).not.toHaveBeenCalled()
 
-    mockPromoteTask.mockRejectedValueOnce(new Error('hermes said no'))
+    mockRequestReview.mockRejectedValueOnce(new Error('hermes said no'))
     mockFetchTasks.mockClear()
-    readyColumn.vm.$emit('dropped', { taskId: 'task-1', from: 'todo', to: 'ready', index: 0 })
+    column('review').vm.$emit('dropped', { taskId: 'task-1', from: 'ready', toColumn: column('review').props('column'), index: 0 })
     await flushPromises()
     expect(mockMessageError).toHaveBeenCalledWith('hermes said no')
     expect(mockFetchTasks).toHaveBeenCalledWith(true)
   })
 
-  it('asks for a reason before blocking a dropped card and reverts on cancel', async () => {
+  it('asks whether a card dropped on waiting is scheduled or blocked, then asks for the block reason', async () => {
     const wrapper = mount(KanbanView)
     await flushPromises()
-    const blockedColumn = wrapper.findAllComponents({ name: 'KanbanColumn' }).find(column => column.props('status') === 'blocked')!
+    const waiting = wrapper.findAllComponents({ name: 'KanbanColumn' }).find(item => (item.props('column') as any).id === 'waiting')!
 
-    blockedColumn.vm.$emit('dropped', { taskId: 'task-1', from: 'ready', to: 'blocked', index: 0 })
+    waiting.vm.$emit('dropped', { taskId: 'task-1', from: 'ready', toColumn: waiting.props('column'), index: 0 })
     await flushPromises()
+    const choice = wrapper.find('[data-testid="kanban-drop-choice"]')
+    expect(choice.exists()).toBe(true)
+    // The card is held in the waiting column while the question is open.
+    expect(pendingState.map).toEqual({ 'task-1': 'scheduled' })
+    expect(choice.findAll('.n-button-stub').map(node => node.text())).toEqual(['kanban.board.waitingSchedule', 'kanban.board.waitingBlock'])
     expect(mockBlockTask).not.toHaveBeenCalled()
+    expect(mockScheduleTask).not.toHaveBeenCalled()
+
+    await choice.findAll('.n-button-stub')[1].trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="kanban-drop-choice"]').exists()).toBe(false)
     const modal = wrapper.find('.n-modal-stub')
     expect(modal.exists()).toBe(true)
-
     await modal.find('.n-input-stub').setValue('waiting on api key')
+    expect(pendingState.map).toEqual({ 'task-1': 'blocked' })
     await modal.findAll('.n-button-stub').find(node => node.text() === 'common.ok')!.trigger('click')
     await flushPromises()
     expect(mockBlockTask).toHaveBeenCalledWith('task-1', 'waiting on api key')
-    expect(wrapper.find('.n-modal-stub').exists()).toBe(false)
+    expect(pendingState.map).toEqual({})
+
+    waiting.vm.$emit('dropped', { taskId: 'task-1', from: 'ready', toColumn: waiting.props('column'), index: 0 })
+    await flushPromises()
+    await wrapper.find('[data-testid="kanban-drop-choice"]').findAll('.n-button-stub')[0].trigger('click')
+    await flushPromises()
+    expect(mockScheduleTask).toHaveBeenCalledWith('task-1', undefined)
 
     mockFetchTasks.mockClear()
-    blockedColumn.vm.$emit('dropped', { taskId: 'task-1', from: 'ready', to: 'blocked', index: 0 })
+    waiting.vm.$emit('dropped', { taskId: 'task-1', from: 'ready', toColumn: waiting.props('column'), index: 0 })
     await flushPromises()
-    await wrapper.find('.n-modal-stub').findAll('.n-button-stub').find(node => node.text() === 'common.cancel')!.trigger('click')
+    await wrapper.findAll('.n-modal-stub .n-button-stub').find(node => node.text() === 'common.cancel')!.trigger('click')
     await flushPromises()
-    expect(mockBlockTask).toHaveBeenCalledTimes(1)
     expect(mockFetchTasks).toHaveBeenCalledWith(true)
+    expect(pendingState.map).toEqual({})
+  })
+
+  it('shows a loading hint in the columns during the first fetch and does not wait for profiles', async () => {
+    storeState.loading = true
+    storeState.tasks = []
+    let resolveProfiles!: () => void
+    mockFetchProfiles.mockReturnValue(new Promise<void>((resolve) => { resolveProfiles = resolve }))
+    const wrapper = mount(KanbanView)
+    await flushPromises()
+
+    expect(mockRefreshAll).toHaveBeenCalledOnce()
+    expect(wrapper.findAll('.kanban-column').every(column => column.attributes('data-loading') === 'true')).toBe(true)
+
+    // The mocked store is not reactive, so check the settled state on a fresh mount.
+    storeState.loading = false
+    resolveProfiles()
+    await flushPromises()
+    const settled = mount(KanbanView)
+    await flushPromises()
+    expect(settled.findAll('.kanban-column').every(column => column.attributes('data-loading') === 'false')).toBe(true)
+  })
+
+  it('runs quick actions from cards: promote from the queue, archive from done with confirmation, specify opens the drawer', async () => {
+    storeState.tasks = [
+      { id: 'task-1', title: 'Task one', status: 'todo', created_at: 10 },
+      { id: 'task-2', title: 'Task two', status: 'done', created_at: 20 },
+      { id: 'task-3', title: 'Intake', status: 'triage', created_at: 30 },
+    ]
+    const wrapper = mount(KanbanView)
+    await flushPromises()
+    const queue = wrapper.findAllComponents({ name: 'KanbanColumn' }).find(item => (item.props('column') as any).id === 'queue')!
+
+    queue.vm.$emit('taskAction', { taskId: 'task-1', action: 'promote' })
+    await flushPromises()
+    expect(mockPromoteTask).toHaveBeenCalledWith('task-1', undefined)
+
+    queue.vm.$emit('taskAction', { taskId: 'task-2', action: 'archive' })
+    await flushPromises()
+    expect(mockDialogWarning).toHaveBeenCalledWith(expect.objectContaining({ title: 'kanban.action.archive' }))
+    expect(mockArchiveTasks).not.toHaveBeenCalled()
+    await mockDialogWarning.mock.calls[0][0].onPositiveClick()
+    expect(mockArchiveTasks).toHaveBeenCalledWith(['task-2'])
+
+    // Triage tasks live in the inbox strip, not in a column.
+    expect(wrapper.find('[data-testid="kanban-inbox"] .inbox-count').text()).toBe('1')
+    await wrapper.find('[data-testid="kanban-inbox"] .inbox-toggle').trigger('click')
+    expect(wrapper.find('.inbox-card-stub').text()).toBe('Intake')
+    queue.vm.$emit('taskAction', { taskId: 'task-3', action: 'specify' })
+    await flushPromises()
+    expect(wrapper.find('.drawer-updated').attributes('data-task-id')).toBe('task-3')
   })
 
   it('confirms before archiving a dropped card', async () => {
     const wrapper = mount(KanbanView)
     await flushPromises()
-    const archivedColumn = wrapper.findAllComponents({ name: 'KanbanColumn' }).find(column => column.props('status') === 'archived')!
+    // Archiving happens from the done card's quick action; a done card dropped on done is a reorder.
+    const doneColumn = wrapper.findAllComponents({ name: 'KanbanColumn' }).find(column => (column.props('column') as any).id === 'done')!
 
-    archivedColumn.vm.$emit('dropped', { taskId: 'task-2', from: 'done', to: 'archived', index: 0 })
+    doneColumn.vm.$emit('taskAction', { taskId: 'task-2', action: 'archive' })
     await flushPromises()
     expect(mockDialogWarning).toHaveBeenCalledWith(expect.objectContaining({
       title: 'kanban.action.archive',
@@ -396,10 +497,10 @@ describe('KanbanView', () => {
   it('persists manual card order through the store and offers a reset', async () => {
     const wrapper = mount(KanbanView)
     await flushPromises()
-    const todoColumn = wrapper.findAllComponents({ name: 'KanbanColumn' }).find(column => column.props('status') === 'todo')!
+    const queueColumn = wrapper.findAllComponents({ name: 'KanbanColumn' }).find(column => (column.props('column') as any).id === 'queue')!
 
-    todoColumn.vm.$emit('reorder', ['task-9', 'task-1'])
-    expect(mockSetCardOrder).toHaveBeenCalledWith('todo', ['task-9', 'task-1'])
+    queueColumn.vm.$emit('reorder', ['task-9', 'task-1'])
+    expect(mockSetCardOrder).toHaveBeenCalledWith('queue', ['task-9', 'task-1'])
     expect(wrapper.findAll('.n-button-stub').some(node => node.text() === 'kanban.dnd.resetLayout')).toBe(false)
 
     storeState.hasCustomLayout = true
@@ -421,7 +522,8 @@ describe('KanbanView', () => {
     const columns = wrapper.findAll('.kanban-column')
     expect(wrapper.find('.kanban-board').classes()).toContain('filtered')
     expect(columns).toHaveLength(1)
-    expect(columns[0].attributes('data-status')).toBe('done')
+    expect(columns[0].attributes('data-column')).toBe('done')
+    expect(wrapper.find('[data-testid="kanban-inbox"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Task two')
     expect(wrapper.text()).not.toContain('Task one')
 
