@@ -54,6 +54,22 @@ async function readConfig(): Promise<Record<string, any>> {
 }
 
 describe('Hermes voice config sync', () => {
+  it('routes Groq TTS through the existing Studio proxy without copying its secret to Hermes', async () => {
+    const ttsStore = await import('../../packages/server/src/modules/studio/repositories/tts-settings-store')
+    ttsStore.saveTtsProviderSetting('default', 'groq', {
+      settings: { baseUrl: 'https://api.groq.com/openai/v1', model: 'canopylabs/orpheus-arabic-saudi', voice: 'noura' },
+      secrets: { apiKey: 'groq-tts-fake-key' },
+    })
+    ttsStore.saveActiveTtsProvider('default', 'groq')
+    const { syncVoiceConfigToHermesProfile } = await import('../../packages/server/src/modules/studio/services/voice/config-sync')
+    await expect(syncVoiceConfigToHermesProfile('default')).resolves.toMatchObject({ tts: 'hermes-studio' })
+    const config = await readConfig()
+    expect(config.tts.provider).toBe('hermes-studio')
+    expect(config.tts.providers['hermes-studio']).toMatchObject({ type: 'command', output_format: 'mp3', voice_compatible: true })
+    expect(config.tts.providers['hermes-studio'].command).toContain('/api/studio/voice/proxy/default/v1/tts')
+    expect(JSON.stringify(config)).not.toContain('groq-tts-fake-key')
+  })
+
   it('registers one Ekko Studio provider while keeping upstream settings and secrets in Web UI storage', async () => {
     const sttStore = await import('../../packages/server/src/modules/studio/repositories/stt-settings-store')
     const ttsStore = await import('../../packages/server/src/modules/studio/repositories/tts-settings-store')
