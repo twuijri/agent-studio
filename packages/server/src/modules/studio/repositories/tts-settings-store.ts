@@ -17,6 +17,7 @@ export type StoredTtsProvider =
   | 'mistral'
   | 'minimax'
   | 'deepinfra'
+  | 'groq'
 export type ActiveTtsProvider = StoredTtsProvider
 
 const SETTINGS_KEYS = [
@@ -68,6 +69,7 @@ const PROVIDERS: StoredTtsProvider[] = [
   'edge',
   'elevenlabs',
   'gemini',
+  'groq',
   'mimo',
   'minimax',
   'mistral',
@@ -88,6 +90,7 @@ const PROVIDER_LABELS: Record<StoredTtsProvider, string> = {
   mistral: 'Mistral TTS',
   minimax: 'MiniMax TTS',
   deepinfra: 'DeepInfra TTS',
+  groq: 'Groq TTS',
 }
 
 type StoredRow = {

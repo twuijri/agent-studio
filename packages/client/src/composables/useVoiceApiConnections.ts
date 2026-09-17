@@ -48,7 +48,8 @@ function isStoredTtsProvider(provider: VoiceApiProvider): provider is StoredTtsP
     provider === 'xai' ||
     provider === 'mistral' ||
     provider === 'minimax' ||
-    provider === 'deepinfra'
+    provider === 'deepinfra' ||
+    provider === 'groq'
 }
 
 function isSttProvider(provider: VoiceApiProvider): provider is SttProvider {

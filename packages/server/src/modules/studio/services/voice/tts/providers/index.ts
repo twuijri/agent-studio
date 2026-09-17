@@ -1,4 +1,5 @@
 import { edgeTtsProvider } from './edge'
+import { groqTtsProvider } from './groq'
 import { customTtsProvider, deepinfraTtsProvider, openaiTtsProvider } from './openai'
 import { mimoTtsProvider } from './mimo'
 import { doubaoTtsProvider } from './doubao'
@@ -23,6 +24,7 @@ const providers: Record<TtsProviderId, TtsProvider<any>> = {
   mistral: mistralTtsProvider,
   minimax: minimaxTtsProvider,
   deepinfra: deepinfraTtsProvider,
+  groq: groqTtsProvider,
 }
 
 export function getTtsProvider(provider: string): TtsProvider<any> | undefined {

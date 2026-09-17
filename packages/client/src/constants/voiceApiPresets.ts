@@ -1,8 +1,22 @@
 import type { VoiceApiPreset } from '@/types/voice-api'
 import { DOUBAO_TTS_2_RESOURCE_ID } from './doubaoTtsVoices'
+import { GROQ_TTS_DEFAULT_MODEL } from './groqTtsVoices'
 
 export const VOICE_API_PRESETS: VoiceApiPreset[] = [
   // TTS Presets
+  {
+    id: 'tts-groq',
+    kind: 'tts',
+    provider: 'groq',
+    label: 'Groq TTS',
+    labelKey: 'settings.voice.presetGroqTtsLabel',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    defaultModel: GROQ_TTS_DEFAULT_MODEL,
+    defaultVoice: 'troy',
+    compatibility: 'manual',
+    isSecretRequired: true,
+    capabilities: { models: true, voices: true },
+  },
   {
     id: 'tts-edge',
     kind: 'tts',

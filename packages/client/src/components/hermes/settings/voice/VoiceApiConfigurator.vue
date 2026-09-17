@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, h, watch } from 'vue'
 import { NDrawer, NDrawerContent, NForm, NFormItem, NInput, NSelect, NSlider, NButton, NSpace } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import type { VoiceApiConnection, VoiceApiSavePayload } from '@/types/voice-api'
@@ -8,6 +8,9 @@ import { DOUBAO_TTS_2_RESOURCE_ID, DOUBAO_TTS_VOICE_OPTIONS, doubaoTtsResourceFo
 import { EDGE_TTS_VOICE_OPTIONS } from '@/constants/edgeTtsVoices'
 import { speedToEdgeRate, hzToEdgePitch } from '@/utils/ttsHelpers'
 import { useVoiceSettings } from '@/composables/useVoiceSettings'
+import ContentText from '@/components/common/ContentText.vue'
+import { technicalInputProps } from '@/utils/content-direction'
+import { GROQ_TTS_MODEL_OPTIONS, groqTtsVoiceOptions, groqTtsVoiceForModel } from '@/constants/groqTtsVoices'
 
 const props = defineProps<{
   connection: VoiceApiConnection | null
@@ -33,10 +36,19 @@ const MIMO_CLONE_AUDIO_MAX_BYTES = 10 * 1024 * 1024
 const MIMO_CLONE_AUDIO_ACCEPT = 'audio/mpeg,audio/mp3,audio/wav,.mp3,.wav'
 
 const preset = computed(() =>
-  props.connection ? VOICE_API_PRESETS.find(p => p.kind === props.connection!.kind && p.provider === props.connection!.provider && (p.baseUrl === props.connection!.baseUrl || !p.baseUrl)) : null
+  props.connection ? VOICE_API_PRESETS.find(p => p.kind === props.connection!.kind && p.provider === props.connection!.provider && (p.provider === 'groq' || p.baseUrl === props.connection!.baseUrl || !p.baseUrl)) : null
 )
 
 const capabilities = computed(() => preset.value?.capabilities || {})
+const isGroqTts = computed(() => props.connection?.kind === 'tts' && props.connection.provider === 'groq')
+const groqVoiceOptions = computed(() => groqTtsVoiceOptions(stringField('model')))
+const validGroqVoice = computed(() => !isGroqTts.value || groqVoiceOptions.value.some(option => option.value === stringField('voice')))
+const renderGroqLabel = (option: { label?: string | number }) => h(ContentText, { technical: true }, { default: () => String(option.label || '') })
+
+function handleGroqModelUpdate(value: string) {
+  setField('model', value)
+  setField('voice', groqTtsVoiceForModel(value, stringField('voice')))
+}
 
 function setField(key: string, value: string | number | null | undefined) {
   formData.value[key] = value ?? ''
@@ -128,7 +140,7 @@ function clearMimoCloneAudio() {
 }
 
 async function handleSave() {
-  if (!props.connection) return
+  if (!props.connection || !validGroqVoice.value) return
 
   loading.value = true
   try {
@@ -218,6 +230,7 @@ function handleDoubaoVoiceUpdate(value: string) {
         <NFormItem v-if="!connection.isBuiltin" :label="t('settings.voice.apiKey')">
           <NInput
             v-model:value="apiKeyInput"
+            :input-props="technicalInputProps"
             type="password"
             show-password-on="click"
             autocomplete="off"
@@ -227,7 +240,15 @@ function handleDoubaoVoiceUpdate(value: string) {
 
         <NFormItem :label="t('settings.voice.model')" v-if="capabilities.models">
           <NSelect
-            v-if="connection.provider === 'mimo'"
+            v-if="isGroqTts"
+            :value="stringField('model')"
+            :options="GROQ_TTS_MODEL_OPTIONS"
+            :render-label="renderGroqLabel"
+            data-testid="groq-edit-model"
+            @update:value="handleGroqModelUpdate"
+          />
+          <NSelect
+            v-else-if="connection.provider === 'mimo'"
             :value="stringField('model')"
             :options="mimoModelOptions"
             @update:value="value => setField('model', value)"
@@ -250,7 +271,16 @@ function handleDoubaoVoiceUpdate(value: string) {
 
         <NFormItem :label="t('settings.voice.voice')" v-if="capabilities.voices">
           <NSelect
-            v-if="connection.provider === 'edge'"
+            v-if="isGroqTts"
+            :value="stringField('voice')"
+            :options="groqVoiceOptions"
+            :render-label="renderGroqLabel"
+            filterable
+            data-testid="groq-edit-voice"
+            @update:value="value => setField('voice', value)"
+          />
+          <NSelect
+            v-else-if="connection.provider === 'edge'"
             :value="stringField('voice')"
             :options="edgeVoiceOptions"
             tag
@@ -415,7 +445,7 @@ function handleDoubaoVoiceUpdate(value: string) {
       <template #footer>
         <NSpace justify="end">
           <NButton @click="emit('close')">{{ t('common.cancel') }}</NButton>
-          <NButton type="primary" :loading="loading" @click="handleSave">{{ t('common.save') }}</NButton>
+          <NButton type="primary" :loading="loading" :disabled="!validGroqVoice" @click="handleSave">{{ t('common.save') }}</NButton>
         </NSpace>
       </template>
     </NDrawerContent>

@@ -56,7 +56,8 @@ function normalizeActiveProvider(value: unknown): StoredTtsProvider | null {
     value === 'xai' ||
     value === 'mistral' ||
     value === 'minimax' ||
-    value === 'deepinfra'
+    value === 'deepinfra' ||
+    value === 'groq'
     ? value
     : null
 }
