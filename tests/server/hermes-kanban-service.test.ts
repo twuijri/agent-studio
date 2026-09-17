@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockExecFileAsync = vi.hoisted(() => vi.fn())
 const mockSpawnHermes = vi.hoisted(() => vi.fn())
@@ -12,14 +12,23 @@ vi.mock('../../packages/server/src/modules/hermes/services/runtime/process', () 
 vi.mock('../../packages/server/src/modules/studio/public/logging', () => ({
   logger: {
     error: mockLoggerError,
+    warn: vi.fn(),
   },
 }))
 
 import * as service from '../../packages/server/src/modules/hermes/services/kanban/kanban-service'
+import { resetKanbanReadCache } from '../../packages/server/src/modules/hermes/services/kanban/kanban-read-cache'
 
 describe('hermes kanban service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // These cases pin the CLI contract; direct SQLite reads are covered separately.
+    process.env.HERMES_WEB_UI_KANBAN_DIRECT_READS = '0'
+    resetKanbanReadCache()
+  })
+
+  afterEach(() => {
+    delete process.env.HERMES_WEB_UI_KANBAN_DIRECT_READS
   })
 
   it('lists boards without mutating or depending on CLI current', async () => {

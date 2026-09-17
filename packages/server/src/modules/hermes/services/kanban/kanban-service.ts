@@ -5,6 +5,8 @@ import { join } from 'path'
 import { logger } from '../../../studio/public/logging'
 import { detectHermesRootHome } from '../runtime/path'
 import { execHermes, spawnHermes } from '../runtime/process'
+import * as kanbanDb from './kanban-db'
+import { cachedRead, invalidateKanbanReads } from './kanban-read-cache'
 
 const execOpts = { windowsHide: true }
 const BOARD_SLUG_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
@@ -25,6 +27,48 @@ export function normalizeBoardSlug(board?: string | null): string {
 
 function boardArgs(board?: string | null): string[] {
   return ['kanban', '--board', normalizeBoardSlug(board)]
+}
+
+// Reads go straight to the board's SQLite file (see kanban-db.ts) and fall back
+// to the Hermes CLI when the file or node:sqlite is unavailable, so a Hermes
+// schema change degrades to the slow path instead of breaking the board.
+// HERMES_WEB_UI_KANBAN_DIRECT_READS=0 forces the CLI path for diagnosis.
+function directReadsEnabled(): boolean {
+  const value = process.env.HERMES_WEB_UI_KANBAN_DIRECT_READS?.trim().toLowerCase()
+  return !(value === '0' || value === 'false' || value === 'off')
+}
+
+const directReadWarnings = new Set<string>()
+
+async function readDirectOrCli<T>(
+  board: string,
+  name: string,
+  params: unknown,
+  direct: () => Promise<T>,
+  cli: () => Promise<T>,
+): Promise<T> {
+  return cachedRead(board, name, params, async () => {
+    if (!directReadsEnabled()) return cli()
+    try {
+      return await direct()
+    } catch (err: any) {
+      const key = `${name}:${err?.message || err}`
+      if (!directReadWarnings.has(key)) {
+        directReadWarnings.add(key)
+        logger.warn({ err, board, read: name }, 'Kanban direct read unavailable; falling back to the Hermes CLI')
+      }
+      return cli()
+    }
+  })
+}
+
+/** Forget cached reads for a board after anything that may have changed it. */
+export function invalidateBoardReads(board?: string | null): void {
+  try {
+    invalidateKanbanReads(board ? normalizeBoardSlug(board) : null)
+  } catch {
+    invalidateKanbanReads(null)
+  }
 }
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -186,7 +230,7 @@ export interface KanbanBulkTaskUpdateResult {
 
 // ─── CLI wrappers ───────────────────────────────────────────────
 
-export async function listBoards(opts?: { includeArchived?: boolean }): Promise<KanbanBoard[]> {
+async function listBoardsViaCli(opts?: { includeArchived?: boolean }): Promise<KanbanBoard[]> {
   const args = ['kanban', 'boards', 'list', '--json']
   if (opts?.includeArchived) args.push('--all')
 
@@ -201,6 +245,16 @@ export async function listBoards(opts?: { includeArchived?: boolean }): Promise<
     logger.error(err, 'Hermes CLI: kanban boards list failed')
     throw new Error(`Failed to list kanban boards: ${err.message}`)
   }
+}
+
+export async function listBoards(opts?: { includeArchived?: boolean }): Promise<KanbanBoard[]> {
+  return readDirectOrCli(
+    '*',
+    'boards',
+    { includeArchived: Boolean(opts?.includeArchived) },
+    () => kanbanDb.listBoards({ includeArchived: opts?.includeArchived }) as Promise<KanbanBoard[]>,
+    () => listBoardsViaCli(opts),
+  )
 }
 
 async function findBoard(slug: string, includeArchived = true): Promise<KanbanBoard | null> {
@@ -320,6 +374,8 @@ async function execKanbanMutation(
   } catch (err: any) {
     logger.error(err, logMessage)
     throw new Error(`${errorPrefix}: ${err.message}`)
+  } finally {
+    invalidateBoardReads(args[0] === 'kanban' && args[1] === '--board' ? args[2] : null)
   }
 }
 
@@ -490,13 +546,31 @@ export async function dispatch(opts?: KanbanBoardOptions & { dryRun?: boolean; m
   }
 }
 
-export async function listTasks(opts?: {
+export interface KanbanListOptions {
   board?: string
   status?: string
   assignee?: string
   tenant?: string
   includeArchived?: boolean
-}): Promise<KanbanTask[]> {
+}
+
+export async function listTasks(opts?: KanbanListOptions): Promise<KanbanTask[]> {
+  const board = normalizeBoardSlug(opts?.board)
+  return readDirectOrCli(
+    board,
+    'list',
+    { status: opts?.status, assignee: opts?.assignee, tenant: opts?.tenant, includeArchived: Boolean(opts?.includeArchived) },
+    () => kanbanDb.listTasks(board, {
+      status: opts?.status,
+      assignee: opts?.assignee,
+      tenant: opts?.tenant,
+      includeArchived: opts?.includeArchived,
+    }) as Promise<KanbanTask[]>,
+    () => listTasksViaCli(opts),
+  )
+}
+
+async function listTasksViaCli(opts?: KanbanListOptions): Promise<KanbanTask[]> {
   const args = [...boardArgs(opts?.board), 'list', '--json']
   if (opts?.includeArchived) args.push('--archived')
   if (opts?.status) args.push('--status', opts.status)
@@ -516,26 +590,43 @@ export async function listTasks(opts?: {
   }
 }
 
+function normalizeDetail(detail: KanbanTaskDetail, taskId: string): KanbanTaskDetail {
+  const resolvedTaskId = detail.task?.id || taskId
+  detail.comments = (detail.comments || []).map((comment, index) => ({
+    ...comment,
+    id: comment.id ?? `${resolvedTaskId}:comment:${index}`,
+    task_id: comment.task_id || resolvedTaskId,
+  }))
+  detail.events = (detail.events || []).map((event, index) => ({
+    ...event,
+    id: event.id ?? `${resolvedTaskId}:event:${index}`,
+    task_id: event.task_id || resolvedTaskId,
+  }))
+  return detail
+}
+
 export async function getTask(taskId: string, opts?: KanbanBoardOptions): Promise<KanbanTaskDetail | null> {
+  const board = normalizeBoardSlug(opts?.board)
+  return readDirectOrCli(
+    board,
+    'show',
+    { taskId },
+    async () => {
+      const detail = await kanbanDb.getTask(board, taskId)
+      return detail ? normalizeDetail(detail as unknown as KanbanTaskDetail, taskId) : null
+    },
+    () => getTaskViaCli(taskId, opts),
+  )
+}
+
+async function getTaskViaCli(taskId: string, opts?: KanbanBoardOptions): Promise<KanbanTaskDetail | null> {
   try {
     const { stdout } = await execHermes([...boardArgs(opts?.board), 'show', taskId, '--json'], {
       maxBuffer: 50 * 1024 * 1024,
       timeout: 30000,
       ...execOpts,
     })
-    const detail = JSON.parse(stdout) as KanbanTaskDetail
-    const resolvedTaskId = detail.task?.id || taskId
-    detail.comments = (detail.comments || []).map((comment, index) => ({
-      ...comment,
-      id: comment.id ?? `${resolvedTaskId}:comment:${index}`,
-      task_id: comment.task_id || resolvedTaskId,
-    }))
-    detail.events = (detail.events || []).map((event, index) => ({
-      ...event,
-      id: event.id ?? `${resolvedTaskId}:event:${index}`,
-      task_id: event.task_id || resolvedTaskId,
-    }))
-    return detail
+    return normalizeDetail(JSON.parse(stdout) as KanbanTaskDetail, taskId)
   } catch (err: any) {
     if (err.code === 1 || err.status === 1) return null
     logger.error(err, 'Hermes CLI: kanban show failed')
@@ -583,6 +674,7 @@ export async function createTask(
       timeout: 30000,
       ...execOpts,
     })
+    invalidateBoardReads(opts?.board)
     return JSON.parse(stdout)
   } catch (err: any) {
     logger.error(err, 'Hermes CLI: kanban create failed')
@@ -700,6 +792,17 @@ export async function bulkUpdateTasks(opts: KanbanBulkTaskUpdateOptions): Promis
 }
 
 export async function getStats(opts?: KanbanBoardOptions): Promise<KanbanStats> {
+  const board = normalizeBoardSlug(opts?.board)
+  return readDirectOrCli(
+    board,
+    'stats',
+    null,
+    () => kanbanDb.getStats(board),
+    () => getStatsViaCli(opts),
+  )
+}
+
+async function getStatsViaCli(opts?: KanbanBoardOptions): Promise<KanbanStats> {
   try {
     const { stdout } = await execHermes([...boardArgs(opts?.board), 'stats', '--json'], {
       maxBuffer: 50 * 1024 * 1024,
@@ -726,7 +829,7 @@ export async function getStats(opts?: KanbanBoardOptions): Promise<KanbanStats> 
           .reduce<number>((total, count) => total + (Number.isFinite(Number(count)) ? Number(count) : 0), 0)
       }
     }
-    const archivedTasks = await listTasks({ board: opts?.board, status: 'archived', includeArchived: true })
+    const archivedTasks = await listTasksViaCli({ board: opts?.board, status: 'archived', includeArchived: true })
     byStatus.archived = archivedTasks.length
     for (const task of archivedTasks) {
       const assignee = task.assignee?.trim() || 'default'
@@ -744,6 +847,21 @@ export async function getStats(opts?: KanbanBoardOptions): Promise<KanbanStats> 
 }
 
 export async function listAttachments(taskId: string, opts?: KanbanBoardOptions): Promise<KanbanAttachment[]> {
+  const board = normalizeBoardSlug(opts?.board)
+  return readDirectOrCli(
+    board,
+    'attachments',
+    { taskId },
+    async () => {
+      const attachments = await kanbanDb.listAttachments(board, taskId)
+      if (attachments === null) throw new Error(`Failed to list kanban attachments: no such task: ${taskId}`)
+      return attachments as KanbanAttachment[]
+    },
+    () => listAttachmentsViaCli(taskId, opts),
+  )
+}
+
+async function listAttachmentsViaCli(taskId: string, opts?: KanbanBoardOptions): Promise<KanbanAttachment[]> {
   try {
     const { stdout } = await execHermes([...boardArgs(opts?.board), 'attachments', taskId, '--json'], {
       maxBuffer: 50 * 1024 * 1024,
@@ -759,6 +877,17 @@ export async function listAttachments(taskId: string, opts?: KanbanBoardOptions)
 }
 
 export async function getAssignees(opts?: KanbanBoardOptions): Promise<KanbanAssignee[]> {
+  const board = normalizeBoardSlug(opts?.board)
+  return readDirectOrCli(
+    board,
+    'assignees',
+    null,
+    () => kanbanDb.listAssignees(board) as Promise<KanbanAssignee[]>,
+    () => getAssigneesViaCli(opts),
+  )
+}
+
+async function getAssigneesViaCli(opts?: KanbanBoardOptions): Promise<KanbanAssignee[]> {
   try {
     const { stdout } = await execHermes([...boardArgs(opts?.board), 'assignees', '--json'], {
       maxBuffer: 50 * 1024 * 1024,
