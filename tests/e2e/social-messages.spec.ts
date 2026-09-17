@@ -80,7 +80,7 @@ test('polls Weixin and warns until the bot has a push target', async ({ page }) 
   await page.goto('/#/social-messages')
 
   await expect(page.getByText(
-    'Send this Bot one message in Weixin first so Studio can identify the push target.',
+    'Send this Bot one message in Weixin first so Core Hub can identify the push target.',
   )).toBeVisible()
   await expect(page.getByPlaceholder('Weixin Bot account ID')).toHaveCount(0)
   await expect(page.getByPlaceholder('Enter a new value to configure or replace')).toHaveCount(0)
@@ -113,7 +113,7 @@ test('creates a standalone Feishu app by QR code', async ({ page }) => {
   await expect(page.getByLabel('App ID')).toHaveCount(0)
   await expect(page.getByLabel('App Secret')).toHaveCount(0)
   await expect(page.getByText(
-    'Send this Bot one message in Feishu first so Studio can identify the push target.',
+    'Send this Bot one message in Feishu first so Core Hub can identify the push target.',
   )).toBeVisible({ timeout: 5_000 })
   await expect(page.getByPlaceholder('Feishu recipient identifier')).toHaveCount(0)
   await expect(page.getByPlaceholder('Write the message to send…')).toHaveCount(0)

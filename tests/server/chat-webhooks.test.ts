@@ -380,7 +380,7 @@ describe('chat run webhooks', () => {
     expect(body).toMatchObject({
       schema_version: 1,
       type: 'chat.run.completed',
-      message: { role: 'assistant', text: 'Ekko Studio webhook test', truncated: false },
+      message: { role: 'assistant', text: 'Core Hub webhook test', truncated: false },
     })
     expect(dispatcher.getStatus(endpoint.id)).toMatchObject({ state: 'success', delivered: 1 })
   })

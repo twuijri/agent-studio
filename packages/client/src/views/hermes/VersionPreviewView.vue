@@ -12,7 +12,7 @@ const { t } = useI18n()
     </header>
 
     <div class="page-content">
-      <NAlert type="info" :bordered="false" title="Agent Studio">
+      <NAlert type="info" :bordered="false" title="Core Hub">
         <p>{{ t('personalFork.manualUpdate') }}</p>
         <code dir="ltr">node scripts/prepare-upstream-update.mjs</code>
       </NAlert>

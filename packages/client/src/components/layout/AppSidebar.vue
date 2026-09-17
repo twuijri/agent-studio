@@ -380,7 +380,7 @@ function handleUpdateClick() {
         <div class="version-links">
           <a
             class="sidebar-footer-link"
-            href="https://github.com/EKKOLearnAI/hermes-studio"
+            href="https://github.com/twuijri/core-hub"
             target="_blank"
             rel="noopener noreferrer"
             title="GitHub"
@@ -393,7 +393,7 @@ function handleUpdateClick() {
           </a>
           <a
             class="sidebar-footer-link"
-            href="https://ekkostudio.xyz/"
+            href="https://github.com/twuijri/core-hub#readme"
             target="_blank"
             rel="noopener noreferrer"
             title="Website"
@@ -424,7 +424,7 @@ function handleUpdateClick() {
           @keydown.enter="openChangelog"
           @keydown.space.prevent="openChangelog"
         >
-          Studio v{{ appStore.serverVersion || "0.1.0" }}
+          Core Hub v{{ appStore.serverVersion || "0.1.0" }}
         </span>
         <ThemeSwitch />
       </div>

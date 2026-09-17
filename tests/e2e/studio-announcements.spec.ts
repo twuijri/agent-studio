@@ -33,6 +33,6 @@ test('announcement errors do not block the Studio shell', async ({ page }) => {
   await mockHermesApi(page)
   await page.route('**/api/studio/announcements?*', route => route.fulfill({ status: 502, json: { ok: false } }))
   await page.goto('/#/hermes/connections?view=download')
-  await expect(page.getByText('Agent Studio · personal server', { exact: true })).toBeVisible()
+  await expect(page.getByText('Core Hub · personal server', { exact: true })).toBeVisible()
   await expect(page.getByTestId('studio-announcement')).toHaveCount(0)
 })

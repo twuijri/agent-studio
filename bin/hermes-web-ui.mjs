@@ -747,7 +747,7 @@ Options:
 }
 
 function doUpdate() {
-  console.error('Agent Studio: update from a reviewed upstream merge; see docs/PERSONAL-FORK.md.')
+  console.error('Core Hub: update from a reviewed upstream merge; see docs/PERSONAL-FORK.md.')
   process.exit(1)
   console.log('  ⬆ Updating hermes-web-ui...')
 

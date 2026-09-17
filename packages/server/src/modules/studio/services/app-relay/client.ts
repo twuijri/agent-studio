@@ -950,7 +950,7 @@ export class AppRelayClient {
 const activeAppRelayClients = new Map<string, AppRelayClient>()
 
 export function startAppRelayClient(options: StartAppRelayClientOptions): AppRelayClient | null {
-  // Agent Studio does not connect to the official mobile cloud service.
+  // Core Hub does not connect to the official mobile cloud service.
   if (isOfficialStudioService(options.relayUrl)) return null
   const relayUrl = String(options.relayUrl || '').trim()
   const machineId = String(options.machineId || '').trim()
