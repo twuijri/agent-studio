@@ -186,15 +186,29 @@ export default {
     deleteProfileTitle: '프로필을 삭제할까요?', deleteProfileWarning: '관리 데이터는 휴지통으로 이동하며 사용자 지정 경로는 유지됩니다.', clearCache: '캐시 지우기', clearPermissionAudit: '권한 기록 지우기', clearSiteData: '사이트 데이터 지우기', clearSiteDataWarning: '선택한 프로필의 로그인, 쿠키 및 로컬 저장소를 지웁니다.', dataCleared: '브라우저 데이터를 지웠습니다', loadFailed: '내장 브라우저를 시작하지 못했습니다',
   },
   kanban: {
+    dnd: {
+      dropNotAllowed: '여기로 이동할 수 없습니다',
+      resetLayout: '레이아웃 초기화',
+      layoutHint: '열 안의 카드 순서는 이 브라우저에만 저장되며 에이전트의 실행 순서는 바뀌지 않습니다.',
+    },
     board: {
       defaultArchiveUnavailable: '기본 칸반은 보관할 수 없습니다',
     },
     action: {
       archive: '작업 보관',
       archiveConfirm: '완료된 이 작업을 보관하시겠습니까?',
+      promote: '준비로 승격',
+      schedule: '예약',
+      requestReview: '리뷰 요청',
+      reopenReview: '리뷰 다시 열기',
+      transitionNote: '메모 (선택)',
     },
     message: {
       taskArchived: '작업이 보관되었습니다',
+      taskPromoted: '작업을 준비 상태로 승격했습니다',
+      taskScheduled: '작업을 예약했습니다',
+      reviewRequested: '리뷰를 요청했습니다',
+      reviewReopened: '리뷰를 다시 열었습니다',
     },
   },
   // 로그인
