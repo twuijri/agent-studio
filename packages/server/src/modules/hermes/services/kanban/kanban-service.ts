@@ -263,6 +263,10 @@ export async function getCapabilities(): Promise<KanbanCapabilities> {
     { key: 'diagnostics', status: 'supported', canonicalRoute: '/diagnostics', canonicalCommand: 'diagnostics', requiresBoard: true },
     { key: 'reclaim', status: 'supported', canonicalRoute: '/tasks/{task_id}/reclaim', canonicalCommand: 'reclaim', requiresBoard: true },
     { key: 'reassign', status: 'supported', canonicalRoute: '/tasks/{task_id}/reassign', canonicalCommand: 'reassign', requiresBoard: true },
+    { key: 'promote', status: 'supported', canonicalRoute: '/tasks/{task_id}/promote', canonicalCommand: 'promote', requiresBoard: true },
+    { key: 'schedule', status: 'supported', canonicalRoute: '/tasks/{task_id}/schedule', canonicalCommand: 'schedule', requiresBoard: true },
+    { key: 'requestReview', status: 'supported', canonicalRoute: '/tasks/{task_id}/request-review', canonicalCommand: 'request-review', requiresBoard: true },
+    { key: 'reopenReview', status: 'supported', canonicalRoute: '/tasks/{task_id}/reopen-review', canonicalCommand: 'reopen-review', requiresBoard: true },
     { key: 'specify', status: 'supported', canonicalRoute: '/tasks/{task_id}/specify', canonicalCommand: 'specify', requiresBoard: true },
     { key: 'dispatch', status: 'supported', canonicalRoute: '/dispatch', canonicalCommand: 'dispatch', requiresBoard: true },
     { key: 'links', status: 'supported', canonicalRoute: '/links', canonicalCommand: 'link/unlink', requiresBoard: true },
@@ -647,6 +651,49 @@ export async function unblockTasks(taskIds: string[], opts?: KanbanBoardOptions)
     [...boardArgs(opts?.board), 'unblock', ...taskIds],
     'Hermes CLI: kanban unblock failed',
     'Failed to unblock kanban tasks',
+  )
+}
+
+// Manual board transitions that the Hermes CLI already exposes. Each maps to one
+// canonical command so the Web UI never writes to the Hermes database directly.
+export async function promoteTask(taskId: string, opts?: KanbanBoardOptions & { reason?: string }): Promise<void> {
+  const args = [...boardArgs(opts?.board), 'promote', taskId]
+  // `promote` takes the reason as trailing positional words, not a flag.
+  if (opts?.reason?.trim()) args.push(opts.reason.trim())
+  await execKanbanMutation(
+    args,
+    'Hermes CLI: kanban promote failed',
+    'Failed to promote kanban task',
+  )
+}
+
+export async function scheduleTask(taskId: string, opts?: KanbanBoardOptions & { reason?: string }): Promise<void> {
+  const args = [...boardArgs(opts?.board), 'schedule', taskId]
+  if (opts?.reason?.trim()) args.push(opts.reason.trim())
+  await execKanbanMutation(
+    args,
+    'Hermes CLI: kanban schedule failed',
+    'Failed to schedule kanban task',
+  )
+}
+
+export async function requestReview(taskId: string, opts?: KanbanBoardOptions & { summary?: string }): Promise<void> {
+  const args = [...boardArgs(opts?.board), 'request-review', taskId]
+  pushOptional(args, '--summary', opts?.summary?.trim())
+  await execKanbanMutation(
+    args,
+    'Hermes CLI: kanban request-review failed',
+    'Failed to request review for kanban task',
+  )
+}
+
+export async function reopenReviewTasks(taskIds: string[], opts?: KanbanBoardOptions & { reason?: string }): Promise<void> {
+  const args = [...boardArgs(opts?.board), 'reopen-review', ...taskIds]
+  pushOptional(args, '--reason', opts?.reason?.trim())
+  await execKanbanMutation(
+    args,
+    'Hermes CLI: kanban reopen-review failed',
+    'Failed to reopen kanban review task',
   )
 }
 

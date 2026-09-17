@@ -49,6 +49,7 @@ const taskLogLoading = ref(false)
 const diagnostics = ref<unknown[] | null>(null)
 const diagnosticsLoading = ref(false)
 const recoveryReason = ref('')
+const transitionNote = ref('')
 const runHistoryPage = ref(1)
 const attachments = ref<KanbanAttachment[]>([])
 const showAttachmentPreview = ref(false)
@@ -75,6 +76,12 @@ const canAssignTask = computed(() => canMutateTask.value && detail.value?.task.s
 const canReclaimTask = computed(() => detail.value?.task.status === 'running')
 const canReassignTask = computed(() => canMutateTask.value)
 const canSpecifyTask = computed(() => detail.value?.task.status === 'triage')
+// Manual transitions bridged to the Hermes CLI; guards mirror the server controller.
+const canPromoteTask = computed(() => ['todo', 'blocked'].includes(detail.value?.task.status || ''))
+const canScheduleTask = computed(() => ['todo', 'ready', 'running', 'blocked'].includes(detail.value?.task.status || ''))
+const canRequestReviewTask = computed(() => ['running', 'ready'].includes(detail.value?.task.status || ''))
+const canReopenReviewTask = computed(() => detail.value?.task.status === 'review')
+const canTransitionTask = computed(() => canPromoteTask.value || canScheduleTask.value || canRequestReviewTask.value || canReopenReviewTask.value)
 
 const sessionResults = ref<any[]>([])
 const sessionLoading = ref(false)
@@ -392,6 +399,46 @@ async function handleLoadDiagnostics() {
   }
 }
 
+async function runTransition(
+  action: () => Promise<unknown>,
+  successKey: string,
+) {
+  if (!props.taskId) return
+  try {
+    await action()
+    message.success(t(successKey))
+    transitionNote.value = ''
+    emit('updated')
+    emit('close')
+  } catch (err: any) {
+    message.error(err.message)
+  }
+}
+
+function handlePromote() {
+  const taskId = props.taskId
+  if (!taskId) return
+  return runTransition(() => kanbanStore.promoteTask(taskId, transitionNote.value.trim() || undefined), 'kanban.message.taskPromoted')
+}
+
+function handleSchedule() {
+  const taskId = props.taskId
+  if (!taskId) return
+  return runTransition(() => kanbanStore.scheduleTask(taskId, transitionNote.value.trim() || undefined), 'kanban.message.taskScheduled')
+}
+
+function handleRequestReview() {
+  const taskId = props.taskId
+  if (!taskId) return
+  return runTransition(() => kanbanStore.requestReview(taskId, transitionNote.value.trim() || undefined), 'kanban.message.reviewRequested')
+}
+
+function handleReopenReview() {
+  const taskId = props.taskId
+  if (!taskId) return
+  return runTransition(() => kanbanStore.reopenReview(taskId, transitionNote.value.trim() || undefined), 'kanban.message.reviewReopened')
+}
+
 async function handleReclaim() {
   if (!props.taskId) return
   try {
@@ -545,6 +592,13 @@ function handleNavigateTask(taskId: string) {
               <NButton v-if="canReclaimTask" size="small" secondary @click="handleReclaim">{{ t('kanban.action.reclaim') }}</NButton>
               <NButton v-if="canReassignTask" size="small" secondary :disabled="!assignProfile" @click="handleReassign">{{ t('kanban.action.reassign') }}</NButton>
               <NButton v-if="canSpecifyTask" size="small" secondary @click="handleSpecify">{{ t('kanban.action.specify') }}</NButton>
+            </div>
+            <div v-if="canTransitionTask" class="transition-group">
+              <NInput v-model:value="transitionNote" :input-props="contentInputProps" size="small" :placeholder="t('kanban.action.transitionNote')" />
+              <NButton v-if="canPromoteTask" size="small" secondary @click="handlePromote">{{ t('kanban.action.promote') }}</NButton>
+              <NButton v-if="canScheduleTask" size="small" secondary @click="handleSchedule">{{ t('kanban.action.schedule') }}</NButton>
+              <NButton v-if="canRequestReviewTask" size="small" secondary @click="handleRequestReview">{{ t('kanban.action.requestReview') }}</NButton>
+              <NButton v-if="canReopenReviewTask" size="small" secondary @click="handleReopenReview">{{ t('kanban.action.reopenReview') }}</NButton>
             </div>
           </div>
 
@@ -1072,6 +1126,7 @@ function handleNavigateTask(taskId: string) {
 }
 
 .recovery-group,
+.transition-group,
 .comment-input {
   display: flex;
   gap: 8px;
