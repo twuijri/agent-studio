@@ -1510,6 +1510,22 @@ export default {
       layoutHint: '列内卡片的手动顺序仅保存在当前浏览器中，不会改变智能体的执行顺序。',
     },
     board: {
+      columns: {
+        inbox: '收件箱',
+        queue: '队列',
+        running: '运行中',
+        waiting: '等待中',
+        review: '评审',
+        done: '已完成',
+      },
+      showArchived: '显示已归档 ({count})',
+      hideArchived: '隐藏已归档 ({count})',
+      inboxHint: '等待细化的任务。打开卡片并使用“细化”将其移入队列。',
+      loadingTasks: '正在加载任务…',
+      waitingKindTitle: '该任务应如何等待？',
+      waitingSchedule: '暂缓到稍后（已排期）',
+      waitingBlock: '阻塞直到有人处理（需要原因）',
+      scheduleNote: '备注（可选）',
       create: '新建看板',
       archive: '归档看板',
       slugPlaceholder: '看板标识，例如 project-a',
@@ -1564,6 +1580,7 @@ export default {
     },
     card: {
       assigneeTooltip: '负责人',
+      syncing: '保存中…',
       priority: {
         low: '低',
         medium: '中',
