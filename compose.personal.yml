@@ -1,7 +1,7 @@
 services:
   agent-studio:
     build: .
-    image: agent-studio:personal
+    image: core-hub:personal
     ports:
       - "127.0.0.1:6061:6060"
     volumes:

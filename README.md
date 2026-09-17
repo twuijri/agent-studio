@@ -12,8 +12,9 @@ the original license and contributor attribution are retained.
 - [Verification results and limitations](docs/PERSONAL-VALIDATION.md)
 - [Core Hub branding and repository rename](docs/CORE-HUB-BRANDING.md)
 
-The existing Docker image address remains `ghcr.io/twuijri/agent-studio:latest`
-for stack compatibility. Renaming the product does not move your data.
+The new Docker image address is `ghcr.io/twuijri/core-hub:latest`.
+Switch only after it has been published and verified; keep the existing service,
+volumes, and other stack settings unchanged. The old image remains a rollback option.
 
 Use the personal deployment guide, not the upstream install commands below.
 The original project README is preserved below as upstream documentation; official
