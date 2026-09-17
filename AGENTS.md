@@ -64,6 +64,7 @@ Use the smallest relevant check while iterating. Before a broad PR, run
 - Every task needs a maintained change record: human owner, branch, evidence, affected files, actual checks, limitations, and next step. Read only relevant prior records, not every historical note.
 - Do not claim a task is merged, published, deployed, or tested without evidence for that exact state. Never overwrite another contributor's work or approve your own high-risk changes.
 - Work on task branches and submit PRs; only owner `twuijri` decides and performs merges into `main`. Assistants must not merge or enable auto-merge. Before owner review, verify the latest base/head, conflict-free integration, and passing checks; no textual conflict alone is not evidence of behavioral compatibility.
+- Delivery flow for EVERY change (human or AI, any model): task branch from `origin/main` → change record → checks → push → PR to `main` → then merge the same branch into the integration branch `test` and push it directly (standing owner authorization, no PR and no per-change approval for `test`) → once CI passes on `test`, build the `test` image (`personal-image.yml` with `source_ref=test`, `publish_latest=false`, `preview_tag=test`) → tell the owner to pull/redeploy the test stack. `test` is preview-only and is never merged into `main`; `latest` and merges into `main` stay owner-only. Full procedure: `docs/TEAM-RULES.md` §3 and §9.
 
 ## Content Direction Contract
 

@@ -191,7 +191,26 @@ export default {
       resetLayout: 'Layout zurücksetzen',
       layoutHint: 'Die manuelle Reihenfolge der Karten in einer Spalte wird nur in diesem Browser gespeichert und ändert nicht, was der Agent zuerst ausführt.',
     },
+    card: {
+      syncing: 'Wird gespeichert…',
+    },
     board: {
+      columns: {
+        inbox: 'Eingang',
+        queue: 'Warteschlange',
+        running: 'Läuft',
+        waiting: 'Wartend',
+        review: 'Review',
+        done: 'Erledigt',
+      },
+      showArchived: 'Archivierte anzeigen ({count})',
+      hideArchived: 'Archivierte ausblenden ({count})',
+      inboxHint: 'Aufgaben, die noch spezifiziert werden müssen. Karte öffnen und „Spezifizieren“ nutzen, um sie in die Warteschlange zu verschieben.',
+      loadingTasks: 'Aufgaben werden geladen…',
+      waitingKindTitle: 'Wie soll diese Aufgabe warten?',
+      waitingSchedule: 'Bis später zurückstellen (eingeplant)',
+      waitingBlock: 'Blockieren, bis jemand handelt (Grund nötig)',
+      scheduleNote: 'Notiz (optional)',
       defaultArchiveUnavailable: 'Das Standard-Kanban kann nicht archiviert werden',
     },
     action: {

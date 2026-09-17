@@ -1503,6 +1503,22 @@ export default {
       layoutHint: 'ترتيب البطاقات داخل العمود محفوظ في هذا المتصفح فقط، ولا يغيّر ما ينفذه الوكيل أولًا.',
     },
     board: {
+      columns: {
+        inbox: 'الوارد',
+        queue: 'الطابور',
+        running: 'قيد التشغيل',
+        waiting: 'بانتظار',
+        review: 'المراجعة',
+        done: 'منتهية',
+      },
+      showArchived: 'إظهار المؤرشف ({count})',
+      hideArchived: 'إخفاء المؤرشف ({count})',
+      inboxHint: 'مهام تنتظر التحديد. افتح البطاقة واستخدم «تحديد» لنقلها إلى الطابور.',
+      loadingTasks: 'جارٍ تحميل المهام…',
+      waitingKindTitle: 'كيف تنتظر هذه المهمة؟',
+      waitingSchedule: 'تأجيل إلى وقت لاحق (مجدولة)',
+      waitingBlock: 'حجب حتى يتدخل أحد (يحتاج سببًا)',
+      scheduleNote: 'ملاحظة (اختياري)',
       create: 'لوحة جديدة',
       archive: 'أرشفة اللوحة',
       slugPlaceholder: 'معرّف اللوحة، مثل project-a',
@@ -1557,6 +1573,7 @@ export default {
     },
     card: {
       assigneeTooltip: 'المكلَّف',
+      syncing: 'جارٍ الحفظ…',
       priority: {
         low: 'منخفضة',
         medium: 'متوسطة',
