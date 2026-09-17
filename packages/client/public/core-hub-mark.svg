@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="#101010">
+  <title>Core Hub</title>
+  <!-- Vector master traced from the owner's supplied C + central core mark. -->
+  <path d="M302 110H738C847 110 922 180 922 286V425H713V328C713 287 687 263 648 263H381C326 263 287 299 287 353V671C287 725 326 761 381 761H648C687 761 713 737 713 696V599H922V738C922 844 847 914 738 914H302C180 914 102 840 102 720V304C102 184 180 110 302 110Z"/>
+  <rect x="369" y="373" width="278" height="278" rx="66"/>
+</svg>

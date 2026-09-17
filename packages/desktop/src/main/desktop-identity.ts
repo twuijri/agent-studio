@@ -5,5 +5,5 @@ export function configureDesktopIdentity(app: Pick<App, 'getPath' | 'setPath' | 
   // name. Pin the existing profile before changing the name used by the UI.
   const existingUserData = app.getPath('userData')
   app.setPath('userData', existingUserData)
-  app.setName('Agent Studio')
+  app.setName('Core Hub')
 }

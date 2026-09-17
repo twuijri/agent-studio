@@ -1,8 +1,21 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 const buildDir = new URL('../build/', import.meta.url)
+const publicDir = new URL('../../client/public/', import.meta.url)
+// One code-native vector master reproduces the owner's Core Hub mark. Generate
+// all package formats together; never replace Hermes/Ekko agent avatar assets.
+const mark = await readFile(new URL('core-hub-mark.svg', publicDir), 'utf8')
+const whiteMark = mark.replace('fill="#101010"', 'fill="#ffffff"')
+const tile = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024"><rect width="1024" height="1024" fill="#101010"/><g transform="translate(153.6 153.6) scale(.7)">${whiteMark.replace('<svg ', '<svg width="1024" height="1024" ')}</g></svg>`)
+const master = await sharp(tile).removeAlpha().png().toBuffer()
+await writeFile(new URL('icon.png', buildDir), master)
+await writeFile(new URL('icon.icon/Assets/hermes-logo.png', buildDir), master)
+await writeFile(new URL('logo.png', publicDir), master)
+await writeFile(new URL('logo-original.png', publicDir), master)
+await writeFile(new URL('core-hub-icon-192.png', publicDir), await sharp(master).resize(192).png().toBuffer())
+await writeFile(new URL('core-hub-icon-512.png', publicDir), await sharp(master).resize(512).png().toBuffer())
 // Keep the original artwork intact while rounding the tile's outside corners.
 function renderRounded(size, radius) {
   const mask = Buffer.from(`<svg width="${size}" height="${size}"><rect width="${size}" height="${size}" rx="${size * radius}" fill="white"/></svg>`)
@@ -57,3 +70,20 @@ for (let index = 0; index < entries.length; index++) {
   offset += entries[index].length
 }
 await writeFile(new URL('icon.ico', buildDir), Buffer.concat([header, ...entries]))
+await writeFile(new URL('favicon.ico', publicDir), Buffer.concat([header, ...entries]))
+
+// PNG-backed ICNS chunks provide the legacy fallback alongside Icon Composer.
+const icnsChunks = await Promise.all([
+  ['icp4', 16], ['icp5', 32], ['icp6', 64], ['ic07', 128],
+  ['ic08', 256], ['ic09', 512], ['ic10', 1024],
+].map(async ([type, size]) => {
+  const png = await sharp(master).resize(Number(size)).png().toBuffer()
+  const chunk = Buffer.alloc(8)
+  chunk.write(String(type), 0, 4, 'ascii')
+  chunk.writeUInt32BE(8 + png.length, 4)
+  return Buffer.concat([chunk, png])
+}))
+const icnsHeader = Buffer.alloc(8)
+icnsHeader.write('icns', 0, 4, 'ascii')
+icnsHeader.writeUInt32BE(8 + icnsChunks.reduce((sum, chunk) => sum + chunk.length, 0), 4)
+await writeFile(new URL('icon.icns', buildDir), Buffer.concat([icnsHeader, ...icnsChunks]))

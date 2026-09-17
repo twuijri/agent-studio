@@ -112,7 +112,7 @@ export async function deleteAppConnectionController(ctx: Context) {
 export async function createCloudAppAuthorizationCodeController(ctx: Context) {
   if (PERSONAL_FORK) {
     ctx.status = 410
-    ctx.body = { error: 'official_cloud_unavailable', message: 'Use the direct connection to your Agent Studio server.' }
+    ctx.body = { error: 'official_cloud_unavailable', message: 'Use the direct connection to your Core Hub server.' }
     return
   }
   const userId = Number(ctx.state.user?.id || 0)

@@ -232,10 +232,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/hermes-mac-assets
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'Hermes.Studio-*-arm64.zip' --dir /tmp/hermes-mac-assets
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'Hermes.Studio-*-arm64.dmg' --dir /tmp/hermes-mac-assets
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'Hermes.Studio-*-x64.zip' --dir /tmp/hermes-mac-assets
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'Hermes.Studio-*-x64.dmg' --dir /tmp/hermes-mac-assets
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'Core.Hub-*-arm64.zip' --dir /tmp/hermes-mac-assets
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'Core.Hub-*-arm64.dmg' --dir /tmp/hermes-mac-assets
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'Core.Hub-*-x64.zip' --dir /tmp/hermes-mac-assets
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'Core.Hub-*-x64.dmg' --dir /tmp/hermes-mac-assets
           ls -lh /tmp/hermes-mac-assets
 
       - name: Generate merged latest-mac.yml

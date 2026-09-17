@@ -1,4 +1,6 @@
-# Agent Studio — personal fork
+# Core Hub — كور هب
+
+<p align="center"><img src="./packages/client/public/logo.png" alt="Core Hub" width="120" /></p>
 
 Private, non-commercial fork maintained by twuijri. Based on
 [EKKOLearnAI/hermes-studio](https://github.com/EKKOLearnAI/hermes-studio);
@@ -8,12 +10,18 @@ the original license and contributor attribution are retained.
 - [Persistent development knowledge and decisions](docs/KNOWLEDGE-WORKFLOW.md)
 - [Existing-server deployment and backup guide](deploy/README.md)
 - [Verification results and limitations](docs/PERSONAL-VALIDATION.md)
+- [Core Hub branding and repository rename](docs/CORE-HUB-BRANDING.md)
+
+The new Docker image address is `ghcr.io/twuijri/core-hub:latest`.
+Switch only after it has been published and verified; keep the existing service,
+volumes, and other stack settings unchanged. The old image remains a rollback option.
 
 Use the personal deployment guide, not the upstream install commands below.
 The original project README is preserved below as upstream documentation; official
 cloud subscriptions, app downloads, and auto-updates are not features of this fork.
 
----
+<details>
+<summary>Original upstream documentation — reference only, not Core Hub installation instructions</summary>
 
 <p align="center">
   <strong>Ekko Studio</strong>
@@ -550,7 +558,9 @@ desktop applications, firmware, release
 artifacts, documentation, and associated files in this repository.
 
 The MCP entry point is `bin/ekko-studio-mcp.mjs`; tools use the `ekko_studio_*` prefix. Existing `hermes-studio-mcp` / `hermes-web-ui-mcp` commands and `hermes_studio_*` calls remain compatible. Restart the MCP client to discover the new tool names. Studio migrates managed server configurations to `ekko-studio-api`, `ekko-studio-browser`, `ekko-studio-devices`, and `ekko-studio-use`.
-# Agent Studio — إيجنت استديو
+</details>
+
+# Core Hub — كور هب
 
 Personal non-commercial derivative maintained by twuijri. Start with
 [the personal fork guide](docs/PERSONAL-FORK.md) and [attribution](NOTICE.personal.md).

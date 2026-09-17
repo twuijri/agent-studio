@@ -4,7 +4,7 @@
   TranslationsTest يرفض أي مفتاح ناقص أو زائد.
 -->
 <resources>
-    <string name="app_name">Hermes Studio</string>
+    <string name="app_name">كور هب</string>
 
     <!-- إجراءات وتسميات مشتركة -->
     <string name="action_back">رجوع</string>
