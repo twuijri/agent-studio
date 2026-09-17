@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, h, onBeforeUnmount, ref, watch } from 'vue'
 import { NModal, NForm, NFormItem, NInput, NButton, NSelect, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { probeVoiceProvider, type VoiceProviderProbeModel } from '@/api/studio/voice-provider-probe'
 import { VOICE_API_PRESETS } from '@/constants/voiceApiPresets'
 import { DOUBAO_TTS_2_RESOURCE_ID, DOUBAO_TTS_DEFAULT_VOICE, DOUBAO_TTS_VOICE_OPTIONS, doubaoTtsResourceForVoice } from '@/constants/doubaoTtsVoices'
 import type { VoiceApiKind, VoiceApiProviderCompatibility } from '@/types/voice-api'
+import ContentText from '@/components/common/ContentText.vue'
+import { technicalInputProps } from '@/utils/content-direction'
+import { GROQ_TTS_MODEL_OPTIONS, groqTtsVoiceOptions, groqTtsVoiceForModel } from '@/constants/groqTtsVoices'
 
 const props = defineProps<{
   kind: VoiceApiKind
@@ -62,8 +65,12 @@ const selectedPreset = computed(() =>
 
 const isCustomProvider = computed(() => selectedPreset.value?.provider === 'custom')
 const isDoubaoTtsPreset = computed(() => props.kind === 'tts' && selectedPreset.value?.provider === 'doubao')
+const isGroqTtsPreset = computed(() => props.kind === 'tts' && selectedPreset.value?.provider === 'groq')
+const groqVoiceOptions = computed(() => groqTtsVoiceOptions(formData.value.model))
+const renderGroqLabel = (option: { label?: string | number }) => h(ContentText, { technical: true }, { default: () => String(option.label || '') })
 const canProbeModels = computed(() => compatibility.value === 'openai-compatible')
 const modelOptions = computed(() => {
+  if (isGroqTtsPreset.value) return GROQ_TTS_MODEL_OPTIONS
   const discovered = probeModels.value.map(model => ({
     label: model.capability === 'preferred' ? `${model.label} · ${t('settings.voice.modelRecommendedSuffix')}` : model.label,
     value: model.id,
@@ -120,10 +127,12 @@ const canSave = computed(() => {
   }
   if (selectedPreset.value.capabilities?.models && !formData.value.model.trim()) return false
   if (isDoubaoTtsPreset.value && !formData.value.voice.trim()) return false
+  if (isGroqTtsPreset.value && !groqVoiceOptions.value.some(option => option.value === formData.value.voice)) return false
   return true
 })
 const connectHelpText = computed(() => {
   if (!selectedPreset.value) return ''
+  if (isGroqTtsPreset.value) return t('settings.voice.groqCatalogHint')
   if (compatibility.value === 'manual') {
     return t('settings.voice.discoveryManualHint')
   }
@@ -227,6 +236,7 @@ function handlePresetChange(id: string) {
 
 function handleModelUpdate(value: string) {
   formData.value.model = value || ''
+  if (isGroqTtsPreset.value) formData.value.voice = groqTtsVoiceForModel(formData.value.model, formData.value.voice)
   modelManuallyEdited.value = true
   modelTouched.value = true
 }
@@ -398,6 +408,7 @@ async function handleSave() {
           <NFormItem :label="t('models.baseUrl')" :required="selectedPreset.isSecretRequired" :feedback="baseUrlError">
             <NInput
               v-model:value="formData.baseUrl"
+              :input-props="technicalInputProps"
               :placeholder="t('models.baseUrlPlaceholder')"
               :disabled="!!selectedPreset.baseUrl && selectedPreset.provider !== 'custom'"
               data-testid="voice-provider-base-url"
@@ -408,6 +419,7 @@ async function handleSave() {
           <NFormItem :label="t('models.apiKey')" :required="selectedPreset.isSecretRequired" :feedback="apiKeyError">
             <NInput
               v-model:value="formData.apiKey"
+              :input-props="technicalInputProps"
               type="password"
               show-password-on="click"
               autocomplete="off"
@@ -441,17 +453,18 @@ async function handleSave() {
         <section v-if="selectedPreset.capabilities?.models" class="form-section">
           <div class="section-heading">
             <span>{{ t('settings.voice.model') }}</span>
-            <small>{{ t('settings.voice.modelConnectManualHint') }}</small>
+            <small>{{ t(isGroqTtsPreset ? 'models.selectModel' : 'settings.voice.modelConnectManualHint') }}</small>
           </div>
 
           <NFormItem :label="t('models.defaultModel')" :feedback="modelError">
             <NSelect
               :value="formData.model"
               :options="modelOptions"
-              tag
+              :tag="!isGroqTtsPreset"
+              :render-label="isGroqTtsPreset ? renderGroqLabel : undefined"
               filterable
               :loading="probeLoading"
-              :placeholder="t('settings.voice.modelConnectManualHint')"
+              :placeholder="t(isGroqTtsPreset ? 'models.selectModel' : 'settings.voice.modelConnectManualHint')"
               data-testid="voice-provider-model"
               @update:value="handleModelUpdate"
             />
@@ -469,12 +482,20 @@ async function handleSave() {
         <section v-if="kind === 'tts' && selectedPreset.capabilities?.voices" class="form-section">
           <div class="section-heading">
             <span>{{ t('settings.voice.voice') }}</span>
-            <small>{{ t('settings.voice.doubaoVoiceHint') }}</small>
+            <small>{{ t(isGroqTtsPreset ? 'settings.voice.groqVoiceHint' : 'settings.voice.doubaoVoiceHint') }}</small>
           </div>
 
           <NFormItem :label="t('settings.voice.voice')">
             <NSelect
-              v-if="isDoubaoTtsPreset"
+              v-if="isGroqTtsPreset"
+              v-model:value="formData.voice"
+              :options="groqVoiceOptions"
+              :render-label="renderGroqLabel"
+              filterable
+              data-testid="voice-provider-voice"
+            />
+            <NSelect
+              v-else-if="isDoubaoTtsPreset"
               v-model:value="formData.voice"
               :options="doubaoVoiceOptions"
               tag
