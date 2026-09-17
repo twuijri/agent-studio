@@ -36,7 +36,7 @@ interface TransitionCall {
   body: Record<string, unknown>
 }
 
-async function mockKanbanBoard(page: Page, tasks: MockTask[]) {
+async function mockKanbanBoard(page: Page, tasks: MockTask[], holdTransitions?: Promise<void>) {
   const transitions: TransitionCall[] = []
 
   await page.route(/\/api\/hermes\/kanban(?:\/|\?|$)/, async (route) => {
@@ -89,6 +89,7 @@ async function mockKanbanBoard(page: Page, tasks: MockTask[]) {
 
     const transition = pathname.match(/^\/api\/hermes\/kanban\/(task-\d+)\/(promote|schedule|request-review|reopen-review|block)$/)
     if (transition && request.method() === 'POST') {
+      if (holdTransitions) await holdTransitions
       const task = tasks.find(item => item.id === transition[1])
       const targetByAction: Record<string, string> = {
         promote: 'ready',
@@ -130,28 +131,27 @@ async function mockKanbanBoard(page: Page, tasks: MockTask[]) {
   return { transitions }
 }
 
-async function scrollColumnToStart(page: Page, status: string) {
-  await page.evaluate((columnStatus) => {
+async function scrollColumnToStart(page: Page, columnId: string) {
+  await page.evaluate((id) => {
     const board = document.querySelector('[data-testid="kanban-board"]') as HTMLElement
-    const column = document.querySelector(`.kanban-column[data-status="${columnStatus}"]`) as HTMLElement
+    const column = document.querySelector(`.kanban-column[data-column="${id}"]`) as HTMLElement
     board.scrollLeft += column.getBoundingClientRect().left - board.getBoundingClientRect().left - 20
-  }, status)
+  }, columnId)
 }
 
-async function dragCardToColumn(page: Page, taskId: string, targetStatus: string) {
+async function dragCardToColumn(page: Page, taskId: string, targetColumn: string) {
   // Never start a drag while a previous transition is still refreshing the board,
   // and let Sortable's 150ms reorder animation settle: it ignores a press on an
   // item that is still animating.
   await expect(page.getByTestId('kanban-board')).toHaveAttribute('data-busy', 'false')
   await page.waitForTimeout(250)
   const card = page.locator(`.task-slot[data-task-id="${taskId}"]`)
-  const sourceStatus = await card.evaluate(element => element.closest('.kanban-column')!.getAttribute('data-status'))
+  const sourceColumn = await card.evaluate(element => element.closest('.kanban-column')!.getAttribute('data-column'))
   // Keep both the source card and the target column inside the viewport so the
   // pointer path never leaves the board.
-  await scrollColumnToStart(page, sourceStatus!)
-  const target = page.locator(`.task-list[data-status="${targetStatus}"]`)
+  await scrollColumnToStart(page, sourceColumn!)
+  const target = page.locator(`.task-list[data-column="${targetColumn}"]`)
   const cardBox = (await card.boundingBox())!
-  const targetBox = (await target.boundingBox())!
   const startX = cardBox.x + cardBox.width / 2
   const startY = cardBox.y + Math.min(24, cardBox.height / 2)
   await page.mouse.move(startX, startY)
@@ -159,6 +159,11 @@ async function dragCardToColumn(page: Page, taskId: string, targetStatus: string
   // Sortable's fallback needs to pass its tolerance before the drag begins.
   await page.mouse.move(startX + 12, startY + 12, { steps: 4 })
   await expect(page.getByTestId('kanban-board')).toHaveClass(/dragging/)
+  // Measure the target only now: a collapsed empty column expands once a card
+  // that may land in it is being dragged.
+  await expect(target).toBeVisible()
+  await page.waitForTimeout(300)
+  const targetBox = (await target.boundingBox())!
   await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + Math.min(60, targetBox.height / 2), { steps: 16 })
   await page.mouse.up()
   await expect(page.getByTestId('kanban-board')).not.toHaveClass(/dragging/)
@@ -174,20 +179,21 @@ test('scrolls the board sideways, keeps columns scrollable, and opens cards', as
 
   const board = page.getByTestId('kanban-board')
   await expect(board).toBeVisible()
-  await expect(page.locator('.kanban-column')).toHaveCount(9)
-  expect(await page.locator('.kanban-column').evaluateAll(columns => columns.map(column => column.getAttribute('data-status')))).toEqual([
-    'triage', 'todo', 'scheduled', 'ready', 'running', 'blocked', 'review', 'done', 'archived',
+  await expect(page.locator('.kanban-column')).toHaveCount(4)
+  expect(await page.locator('.kanban-column').evaluateAll(columns => columns.map(column => column.getAttribute('data-column')))).toEqual([
+    'queue', 'waiting', 'review', 'done',
   ])
+  await expect(page.getByTestId('kanban-inbox')).toBeVisible()
   const boardMetrics = await board.evaluate(element => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }))
   expect(boardMetrics.scrollWidth).toBeGreaterThan(boardMetrics.clientWidth)
 
-  const taskList = page.locator('.status-todo .task-list')
+  const taskList = page.locator('.task-list[data-column="queue"]')
   const dimensions = await taskList.evaluate(element => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }))
   expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight)
 
-  await page.locator('.kanban-column.status-archived').scrollIntoViewIfNeeded()
+  await page.locator('.kanban-column.column-done').scrollIntoViewIfNeeded()
   await expect.poll(() => board.evaluate(element => Math.abs(element.scrollLeft))).toBeGreaterThan(0)
-  await page.locator('.kanban-column.status-triage').scrollIntoViewIfNeeded()
+  await page.locator('.kanban-column.column-queue').scrollIntoViewIfNeeded()
 
   await page.getByRole('button', { name: 'Board task 12' }).click()
   await expect(page.locator('.n-drawer').getByText('Board task 12', { exact: true })).toBeVisible()
@@ -198,36 +204,51 @@ test('moves cards between columns through the Hermes transition bridge', async (
   await page.setViewportSize({ width: 1600, height: 900 })
   await authenticate(page, TEST_ACCESS_KEY, 'research')
   const api = await mockHermesApi(page)
-  const tasks = [makeTask(1, 'todo', 'Promote me'), makeTask(2, 'ready', 'Block me')]
+  const tasks = [makeTask(1, 'todo', 'Promote me'), makeTask(2, 'ready', 'Review me'), makeTask(3, 'ready', 'Block me')]
   const { transitions } = await mockKanbanBoard(page, tasks)
 
   await page.goto('/#/hermes/kanban')
   await expect(page.locator('.task-slot[data-task-id="task-1"]')).toBeVisible()
+  // The empty waiting column starts as a narrow strip.
+  await expect(page.locator('.kanban-column.column-waiting')).toHaveAttribute('data-collapsed', 'true')
 
-  // todo -> running is not a manual Hermes transition, so the drop is refused.
-  await dragCardToColumn(page, 'task-1', 'running')
-  await expect(page.locator('.task-list[data-status="todo"] .task-slot[data-task-id="task-1"]')).toBeVisible()
+  // todo -> review is not a manual Hermes transition, so the drop is refused.
+  await dragCardToColumn(page, 'task-1', 'review')
+  await expect(page.locator('.task-list[data-column="queue"] .task-slot[data-task-id="task-1"]')).toBeVisible()
   expect(transitions).toEqual([])
 
-  // todo -> ready promotes through the CLI bridge.
-  await dragCardToColumn(page, 'task-1', 'ready')
+  // todo and ready share the queue column, so promotion is the card's quick action.
+  await page.locator('.task-slot[data-task-id="task-1"]').hover()
+  await page.locator('.task-slot[data-task-id="task-1"] .card-quick-action[data-action="promote"]').click()
   await expect.poll(() => transitions.map(call => call.path)).toEqual(['/api/hermes/kanban/task-1/promote'])
-  await expect(page.locator('.task-list[data-status="ready"] .task-slot[data-task-id="task-1"]')).toBeVisible()
-  await expect(page.locator('.task-list[data-status="todo"] .task-slot')).toHaveCount(0)
+  await expect(page.locator('.task-slot[data-task-id="task-1"][data-status="ready"]')).toBeVisible()
 
-  // ready -> blocked needs a reason before the CLI runs.
-  await dragCardToColumn(page, 'task-2', 'blocked')
+  // ready -> review requests a review through the CLI bridge.
+  await dragCardToColumn(page, 'task-2', 'review')
+  await expect.poll(() => transitions.map(call => call.path)).toEqual([
+    '/api/hermes/kanban/task-1/promote',
+    '/api/hermes/kanban/task-2/request-review',
+  ])
+  await expect(page.locator('.task-list[data-column="review"] .task-slot[data-task-id="task-2"]')).toBeVisible()
+
+  // ready -> waiting asks whether to schedule or block; blocking needs a reason.
+  await dragCardToColumn(page, 'task-3', 'waiting')
+  const choice = page.getByTestId('kanban-drop-choice')
+  await expect(choice).toBeVisible()
+  expect(transitions).toHaveLength(2)
+  await choice.locator('[data-choice="block"]').click()
   const reason = page.getByTestId('kanban-drop-reason').locator('input')
   await expect(reason).toBeVisible()
-  expect(transitions).toHaveLength(1)
   await reason.fill('waiting for credentials')
   await page.getByRole('button', { name: 'OK' }).click()
   await expect.poll(() => transitions.map(call => call.path)).toEqual([
     '/api/hermes/kanban/task-1/promote',
-    '/api/hermes/kanban/task-2/block',
+    '/api/hermes/kanban/task-2/request-review',
+    '/api/hermes/kanban/task-3/block',
   ])
-  expect(transitions[1].body).toEqual({ reason: 'waiting for credentials' })
-  await expect(page.locator('.task-list[data-status="blocked"] .task-slot[data-task-id="task-2"]')).toBeVisible()
+  expect(transitions[2].body).toEqual({ reason: 'waiting for credentials' })
+  await expect(page.locator('.task-list[data-column="waiting"] .task-slot[data-task-id="task-3"][data-status="blocked"]')).toBeVisible()
+  await expect(page.locator('.kanban-column.column-waiting')).toHaveAttribute('data-collapsed', 'false')
   expect(api.unexpectedRequests).toEqual([])
 })
 
@@ -237,22 +258,22 @@ test('keeps manual card order in the browser only and never moves columns', asyn
   const { transitions } = await mockKanbanBoard(page, [makeTask(1, 'todo', 'Older card'), makeTask(2, 'todo', 'Newer card')])
 
   await page.goto('/#/hermes/kanban')
-  const todoSlots = page.locator('.task-list[data-status="todo"] .task-slot')
+  const todoSlots = page.locator('.task-list[data-column="queue"] .task-slot')
   await expect(todoSlots).toHaveCount(2)
   const order = () => todoSlots.evaluateAll(slots => slots.map(slot => slot.getAttribute('data-task-id')))
   expect(await order()).toEqual(['task-2', 'task-1'])
 
   // Column headers are not drag handles: dragging one leaves the workflow order intact.
-  const todoHeader = page.locator('.kanban-column.status-todo .column-header')
-  const triageHeader = page.locator('.kanban-column.status-triage .column-header')
-  const from = (await todoHeader.boundingBox())!
-  const to = (await triageHeader.boundingBox())!
+  const queueHeader = page.locator('.kanban-column.column-queue .column-header')
+  const waitingHeader = page.locator('.kanban-column.column-waiting .column-header')
+  const from = (await queueHeader.boundingBox())!
+  const to = (await waitingHeader.boundingBox())!
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
   await page.mouse.down()
-  await page.mouse.move(from.x + from.width / 2 - 12, from.y + from.height / 2, { steps: 4 })
-  await page.mouse.move(to.x + 12, to.y + to.height / 2, { steps: 16 })
+  await page.mouse.move(from.x + from.width / 2 + 12, from.y + from.height / 2, { steps: 4 })
+  await page.mouse.move(to.x + to.width - 12, to.y + to.height / 2, { steps: 16 })
   await page.mouse.up()
-  expect(await page.locator('.kanban-column').evaluateAll(columns => columns.slice(0, 2).map(column => column.getAttribute('data-status')))).toEqual(['triage', 'todo'])
+  expect(await page.locator('.kanban-column').evaluateAll(columns => columns.slice(0, 2).map(column => column.getAttribute('data-column')))).toEqual(['queue', 'waiting'])
 
   // Reordering cards inside a column is a browser-only preference.
   await expect(page.getByTestId('kanban-board')).toHaveAttribute('data-busy', 'false')
@@ -266,7 +287,7 @@ test('keeps manual card order in the browser only and never moves columns', asyn
   await expect.poll(order).toEqual(['task-1', 'task-2'])
   await expect(page.getByRole('button', { name: 'Reset layout' })).toBeVisible()
   const stored = await page.evaluate(() => window.localStorage.getItem('hermes.kanban.layout.default'))
-  expect(JSON.parse(stored || '{}')).toEqual({ cards: { todo: ['task-1', 'task-2'] } })
+  expect(JSON.parse(stored || '{}')).toEqual({ cards: { queue: ['task-1', 'task-2'] } })
   expect(transitions).toEqual([])
 
   await page.reload()
@@ -288,9 +309,71 @@ test('scrolls sideways with a vertical wheel over a short card list', async ({ p
   await expect(page.locator('.task-slot[data-task-id="task-1"]')).toBeVisible()
   expect(await board.evaluate(element => element.scrollLeft)).toBe(0)
 
-  const list = page.locator('.task-list[data-status="todo"]')
+  const list = page.locator('.task-list[data-column="queue"]')
   const box = (await list.boundingBox())!
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
   await page.mouse.wheel(0, 240)
   await expect.poll(() => board.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
+})
+
+test('keeps triage in the inbox strip and archived tasks behind the done column toggle', async ({ page }) => {
+  await authenticate(page, TEST_ACCESS_KEY, 'research')
+  const api = await mockHermesApi(page)
+  await mockKanbanBoard(page, [makeTask(1, 'triage', 'Needs a spec'), makeTask(2, 'done', 'Shipped'), makeTask(3, 'archived', 'Old work')])
+
+  await page.goto('/#/hermes/kanban')
+  await expect(page.locator('.task-slot[data-task-id="task-2"]')).toBeVisible()
+  await expect(page.locator('.task-slot[data-task-id="task-1"]')).toHaveCount(0)
+  await expect(page.locator('.task-slot[data-task-id="task-3"]')).toHaveCount(0)
+
+  const inbox = page.getByTestId('kanban-inbox')
+  await expect(inbox.locator('.inbox-count')).toHaveText('1')
+  await inbox.locator('.inbox-toggle').click()
+  await expect(inbox.getByRole('button', { name: 'Needs a spec' })).toBeVisible()
+
+  const done = page.locator('.kanban-column.column-done')
+  await expect(done.locator('.archive-toggle')).toHaveText('Show archived (1)')
+  await done.locator('.archive-toggle').click()
+  await expect(done.getByTestId('kanban-archive-list').getByRole('button', { name: 'Old work' })).toBeVisible()
+  await done.getByTestId('kanban-archive-list').getByRole('button', { name: 'Old work' }).click()
+  await expect(page.locator('.n-drawer').getByText('Old work', { exact: true })).toBeVisible()
+  expect(api.unexpectedRequests).toEqual([])
+})
+
+test('keeps a moved card in its new column while Hermes is still applying the command', async ({ page }) => {
+  await page.clock.install()
+  await page.setViewportSize({ width: 1600, height: 900 })
+  await authenticate(page, TEST_ACCESS_KEY, 'research')
+  const api = await mockHermesApi(page)
+  let releaseBackend!: () => void
+  const backendBusy = new Promise<void>((resolve) => { releaseBackend = resolve })
+  const { transitions } = await mockKanbanBoard(page, [makeTask(1, 'ready', 'Block me')], backendBusy)
+
+  await page.goto('/#/hermes/kanban')
+  await expect(page.locator('.task-slot[data-task-id="task-1"]')).toBeVisible()
+
+  await dragCardToColumn(page, 'task-1', 'waiting')
+  await page.getByTestId('kanban-drop-choice').locator('[data-choice="block"]').click()
+  await page.getByTestId('kanban-drop-reason').locator('input').fill('waiting for credentials')
+  await page.getByRole('button', { name: 'OK' }).click()
+
+  const slot = page.locator('.task-list[data-column="waiting"] .task-slot[data-task-id="task-1"]')
+  await expect(slot).toBeVisible()
+  await expect(slot).toHaveAttribute('data-pending', 'true')
+  await expect(slot.locator('.pending-badge')).toHaveText('Saving…')
+  expect(transitions).toEqual([])
+
+  // The periodic refresh fires while the backend is still busy and still reports
+  // the old status; the card must stay where the user put it.
+  await page.clock.runFor(16_000)
+  await expect(slot).toBeVisible()
+  await expect(slot).toHaveAttribute('data-pending', 'true')
+  await expect(page.locator('.task-list[data-column="queue"] .task-slot')).toHaveCount(0)
+
+  releaseBackend()
+  await expect(slot).toHaveAttribute('data-pending', 'false')
+  await expect(slot).toHaveAttribute('data-status', 'blocked')
+  expect(transitions.map(call => call.path)).toEqual(['/api/hermes/kanban/task-1/block'])
+  await expect(page.getByTestId('kanban-board')).toHaveAttribute('data-busy', 'false')
+  expect(api.unexpectedRequests).toEqual([])
 })
