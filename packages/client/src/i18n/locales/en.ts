@@ -1461,7 +1461,7 @@ export default {
     dnd: {
       dropNotAllowed: 'Cannot move here',
       resetLayout: 'Reset layout',
-      layoutHint: 'Column and card order is saved only in this browser and does not change what the agent runs first.',
+      layoutHint: 'Manual card order inside a column is saved only in this browser and does not change what the agent runs first.',
     },
     board: {
       create: 'New Board',

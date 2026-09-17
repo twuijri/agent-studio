@@ -202,13 +202,7 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
   border-bottom: 1px solid $border-light;
   color: $text-primary;
   font-weight: 600;
-  cursor: grab;
   user-select: none;
-  touch-action: none;
-
-  &:active {
-    cursor: grabbing;
-  }
 }
 
 .status-dot {
@@ -255,8 +249,12 @@ function handleAdd(event: DraggableEvent<KanbanTask>) {
   gap: 8px;
   min-height: 96px;
   padding: 9px;
+  overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  // Keep vertical overscroll inside the list, but let horizontal wheel and
+  // trackpad gestures chain to the board so it scrolls sideways from anywhere.
+  overscroll-behavior-y: contain;
+  overscroll-behavior-x: auto;
   scrollbar-gutter: stable;
 }
 

@@ -189,7 +189,7 @@ export default {
     dnd: {
       dropNotAllowed: 'Não é possível mover para cá',
       resetLayout: 'Redefinir layout',
-      layoutHint: 'A ordem de colunas e cartões é salva apenas neste navegador e não muda o que o agente executa primeiro.',
+      layoutHint: 'A ordem manual dos cartões dentro de uma coluna é salva apenas neste navegador e não muda o que o agente executa primeiro.',
     },
     board: {
       defaultArchiveUnavailable: 'O quadro padrão não pode ser arquivado',

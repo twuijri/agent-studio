@@ -21,7 +21,6 @@ const storeState = vi.hoisted(() => ({
   capabilities: null as Record<string, any> | null,
   filterStatus: null as string | null,
   filterAssignee: null as string | null,
-  columnOrder: ['triage', 'todo', 'scheduled', 'ready', 'running', 'blocked', 'review', 'done', 'archived'] as string[],
   hasCustomLayout: false,
 }))
 
@@ -39,7 +38,6 @@ const mockDialogWarning = vi.hoisted(() => vi.fn())
 const mockStartEventStream = vi.hoisted(() => vi.fn())
 const mockStopEventStream = vi.hoisted(() => vi.fn())
 const mockFetchProfiles = vi.hoisted(() => vi.fn())
-const mockSetColumnOrder = vi.hoisted(() => vi.fn())
 const mockSetCardOrder = vi.hoisted(() => vi.fn())
 const mockResetLayout = vi.hoisted(() => vi.fn())
 const mockCompleteTasks = vi.hoisted(() => vi.fn())
@@ -86,7 +84,6 @@ vi.mock('@/stores/hermes/kanban', () => ({
     orderedTasksForStatus: (status: string) => storeState.tasks
       .filter(task => task.status === status)
       .sort((a, b) => b.created_at - a.created_at),
-    setColumnOrder: mockSetColumnOrder,
     setCardOrder: mockSetCardOrder,
     resetLayout: mockResetLayout,
     completeTasks: mockCompleteTasks,
@@ -146,19 +143,6 @@ vi.mock('@/components/hermes/kanban/KanbanCreateForm.vue', () => ({
     name: 'KanbanCreateForm',
     emits: ['created', 'close'],
     template: '<button class="form-created" @click="$emit(\'created\')">form</button>',
-  }),
-}))
-
-vi.mock('vue-draggable-plus', () => ({
-  VueDraggable: defineComponent({
-    name: 'VueDraggable',
-    props: {
-      modelValue: { type: Array, default: () => [] },
-      handle: { type: String, required: false },
-      disabled: { type: Boolean, default: false },
-    },
-    emits: ['update:modelValue', 'update', 'start', 'end'],
-    template: '<div class="vue-draggable-stub" :data-handle="handle" :data-disabled="disabled ? \'true\' : \'false\'"><slot /></div>',
   }),
 }))
 
@@ -229,7 +213,6 @@ describe('KanbanView', () => {
     storeState.capabilities = null
     storeState.filterStatus = null
     storeState.filterAssignee = null
-    storeState.columnOrder = ['triage', 'todo', 'scheduled', 'ready', 'running', 'blocked', 'review', 'done', 'archived']
     storeState.hasCustomLayout = false
     mockPromoteTask.mockResolvedValue(undefined)
     mockCompleteTasks.mockResolvedValue(undefined)
@@ -282,8 +265,7 @@ describe('KanbanView', () => {
       'archived',
     ])
     expect(wrapper.find('.kanban-board').exists()).toBe(true)
-    expect(wrapper.find('.vue-draggable-stub').attributes('data-handle')).toBe('.column-header')
-    expect(wrapper.find('.vue-draggable-stub').attributes('data-disabled')).toBe('false')
+    expect(wrapper.find('.kanban-columns').exists()).toBe(true)
 
     await wrapper.find('.drawer-updated').trigger('click')
     expect(mockFetchTasks).toHaveBeenCalledTimes(1)
@@ -321,14 +303,14 @@ describe('KanbanView', () => {
     expect(wrapper.find('.kanban-task-card-stub').attributes('data-avatar-seed')).toBe('alice-seed')
   })
 
-  it('opens the drawer from a card and renders columns in the stored order', async () => {
-    storeState.columnOrder = ['done', 'todo', 'triage', 'scheduled', 'ready', 'running', 'blocked', 'review', 'archived']
+  it('opens the drawer from a card and always keeps the Hermes workflow column order', async () => {
     const wrapper = mount(KanbanView)
     await flushPromises()
 
-    expect(wrapper.findAll('.kanban-column').slice(0, 2).map(column => column.attributes('data-status'))).toEqual(['done', 'todo'])
+    expect(wrapper.findAll('.kanban-column').slice(0, 2).map(column => column.attributes('data-status'))).toEqual(['triage', 'todo'])
+    expect(wrapper.findAllComponents({ name: 'VueDraggable' })).toHaveLength(0)
     await wrapper.find('.kanban-task-card-stub').trigger('click')
-    expect(wrapper.find('.drawer-updated').attributes('data-task-id')).toBe('task-2')
+    expect(wrapper.find('.drawer-updated').attributes('data-task-id')).toBe('task-1')
   })
 
   it('runs the bridged Hermes transition for a dropped card and reloads unsupported drops', async () => {
@@ -411,16 +393,13 @@ describe('KanbanView', () => {
     expect(mockArchiveTasks).toHaveBeenCalledWith(['task-2'])
   })
 
-  it('persists manual card and column order through the store and offers a reset', async () => {
+  it('persists manual card order through the store and offers a reset', async () => {
     const wrapper = mount(KanbanView)
     await flushPromises()
     const todoColumn = wrapper.findAllComponents({ name: 'KanbanColumn' }).find(column => column.props('status') === 'todo')!
 
     todoColumn.vm.$emit('reorder', ['task-9', 'task-1'])
     expect(mockSetCardOrder).toHaveBeenCalledWith('todo', ['task-9', 'task-1'])
-
-    wrapper.findComponent({ name: 'VueDraggable' }).vm.$emit('update')
-    expect(mockSetColumnOrder).toHaveBeenCalledWith(storeState.columnOrder)
     expect(wrapper.findAll('.n-button-stub').some(node => node.text() === 'kanban.dnd.resetLayout')).toBe(false)
 
     storeState.hasCustomLayout = true
@@ -441,7 +420,6 @@ describe('KanbanView', () => {
 
     const columns = wrapper.findAll('.kanban-column')
     expect(wrapper.find('.kanban-board').classes()).toContain('filtered')
-    expect(wrapper.find('.vue-draggable-stub').attributes('data-disabled')).toBe('true')
     expect(columns).toHaveLength(1)
     expect(columns[0].attributes('data-status')).toBe('done')
     expect(wrapper.text()).toContain('Task two')

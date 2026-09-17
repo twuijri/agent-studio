@@ -333,7 +333,7 @@ describe('Kanban store', () => {
     expect(store.tasks[0]).toMatchObject({ id: 'task-1', status: 'ready' })
   })
 
-  it('keeps a browser-local column and card layout per board without touching the server', async () => {
+  it('keeps a browser-local card order per board without touching the server', async () => {
     const store = useKanbanStore()
     store.setSelectedBoard('project-a')
     store.tasks = [
@@ -343,31 +343,26 @@ describe('Kanban store', () => {
     ] as any
 
     expect(store.hasCustomLayout).toBe(false)
-    expect(store.columnOrder[0]).toBe('triage')
     expect(store.orderedTasksForStatus('todo').map(task => task.id)).toEqual(['b', 'a'])
 
     store.setCardOrder('todo', ['a', 'b'])
     expect(store.orderedTasksForStatus('todo').map(task => task.id)).toEqual(['a', 'b'])
     expect(store.orderedTasksForStatus('ready').map(task => task.id)).toEqual(['c'])
     expect(store.hasCustomLayout).toBe(true)
-    expect(JSON.parse(window.localStorage.getItem('hermes.kanban.layout.project-a') || '{}')).toEqual({ columns: [], cards: { todo: ['a', 'b'] } })
-
-    store.setColumnOrder(['done', 'todo'])
-    expect(store.columnOrder.slice(0, 3)).toEqual(['done', 'todo', 'triage'])
+    expect(JSON.parse(window.localStorage.getItem('hermes.kanban.layout.project-a') || '{}')).toEqual({ cards: { todo: ['a', 'b'] } })
 
     store.tasks = [...store.tasks, { id: 'd', status: 'todo', created_at: 4 }] as any
     expect(store.orderedTasksForStatus('todo').map(task => task.id)).toEqual(['d', 'a', 'b'])
 
     store.setSelectedBoard('default')
     expect(store.hasCustomLayout).toBe(false)
-    expect(store.columnOrder[0]).toBe('triage')
+    expect(store.orderedTasksForStatus('todo')).toEqual([])
 
     store.setSelectedBoard('project-a')
-    expect(store.columnOrder[0]).toBe('done')
+    expect(store.hasCustomLayout).toBe(true)
 
     store.resetLayout()
     expect(store.hasCustomLayout).toBe(false)
-    expect(store.columnOrder[0]).toBe('triage')
     expect(window.localStorage.getItem('hermes.kanban.layout.project-a')).toBeNull()
     expect(mockKanbanApi.listTasks).not.toHaveBeenCalled()
   })

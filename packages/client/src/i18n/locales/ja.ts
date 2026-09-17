@@ -189,7 +189,7 @@ export default {
     dnd: {
       dropNotAllowed: 'ここには移動できません',
       resetLayout: 'レイアウトをリセット',
-      layoutHint: '列とカードの並び順はこのブラウザにのみ保存され、エージェントの実行順には影響しません。',
+      layoutHint: '列内のカードの並び順はこのブラウザにのみ保存され、エージェントの実行順には影響しません。',
     },
     board: {
       defaultArchiveUnavailable: 'デフォルトのカンバンはアーカイブできません',

@@ -231,15 +231,20 @@ test('moves cards between columns through the Hermes transition bridge', async (
   expect(api.unexpectedRequests).toEqual([])
 })
 
-test('keeps manual column order in the browser only', async ({ page }) => {
+test('keeps manual card order in the browser only and never moves columns', async ({ page }) => {
   await authenticate(page, TEST_ACCESS_KEY, 'research')
   const api = await mockHermesApi(page)
-  const { transitions } = await mockKanbanBoard(page, [makeTask(1, 'todo')])
+  const { transitions } = await mockKanbanBoard(page, [makeTask(1, 'todo', 'Older card'), makeTask(2, 'todo', 'Newer card')])
 
   await page.goto('/#/hermes/kanban')
+  const todoSlots = page.locator('.task-list[data-status="todo"] .task-slot')
+  await expect(todoSlots).toHaveCount(2)
+  const order = () => todoSlots.evaluateAll(slots => slots.map(slot => slot.getAttribute('data-task-id')))
+  expect(await order()).toEqual(['task-2', 'task-1'])
+
+  // Column headers are not drag handles: dragging one leaves the workflow order intact.
   const todoHeader = page.locator('.kanban-column.status-todo .column-header')
   const triageHeader = page.locator('.kanban-column.status-triage .column-header')
-  await expect(todoHeader).toBeVisible()
   const from = (await todoHeader.boundingBox())!
   const to = (await triageHeader.boundingBox())!
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
@@ -247,18 +252,45 @@ test('keeps manual column order in the browser only', async ({ page }) => {
   await page.mouse.move(from.x + from.width / 2 - 12, from.y + from.height / 2, { steps: 4 })
   await page.mouse.move(to.x + 12, to.y + to.height / 2, { steps: 16 })
   await page.mouse.up()
+  expect(await page.locator('.kanban-column').evaluateAll(columns => columns.slice(0, 2).map(column => column.getAttribute('data-status')))).toEqual(['triage', 'todo'])
 
-  await expect.poll(() => page.locator('.kanban-column').evaluateAll(columns => columns.slice(0, 2).map(column => column.getAttribute('data-status')))).toEqual(['todo', 'triage'])
+  // Reordering cards inside a column is a browser-only preference.
+  await expect(page.getByTestId('kanban-board')).toHaveAttribute('data-busy', 'false')
+  const lower = (await page.locator('.task-slot[data-task-id="task-1"]').boundingBox())!
+  const upper = (await page.locator('.task-slot[data-task-id="task-2"]').boundingBox())!
+  await page.mouse.move(lower.x + lower.width / 2, lower.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(lower.x + lower.width / 2, lower.y + 34, { steps: 4 })
+  await page.mouse.move(upper.x + upper.width / 2, upper.y + 8, { steps: 16 })
+  await page.mouse.up()
+  await expect.poll(order).toEqual(['task-1', 'task-2'])
   await expect(page.getByRole('button', { name: 'Reset layout' })).toBeVisible()
   const stored = await page.evaluate(() => window.localStorage.getItem('hermes.kanban.layout.default'))
-  expect(JSON.parse(stored || '{}').columns.slice(0, 2)).toEqual(['todo', 'triage'])
+  expect(JSON.parse(stored || '{}')).toEqual({ cards: { todo: ['task-1', 'task-2'] } })
   expect(transitions).toEqual([])
 
   await page.reload()
-  await expect.poll(() => page.locator('.kanban-column').evaluateAll(columns => columns.slice(0, 2).map(column => column.getAttribute('data-status')))).toEqual(['todo', 'triage'])
+  await expect.poll(order).toEqual(['task-1', 'task-2'])
 
   await page.getByRole('button', { name: 'Reset layout' }).click()
-  await expect.poll(() => page.locator('.kanban-column').evaluateAll(columns => columns.slice(0, 2).map(column => column.getAttribute('data-status')))).toEqual(['triage', 'todo'])
+  await expect.poll(order).toEqual(['task-2', 'task-1'])
   expect(await page.evaluate(() => window.localStorage.getItem('hermes.kanban.layout.default'))).toBeNull()
   expect(api.unexpectedRequests).toEqual([])
+})
+
+test('scrolls sideways with a vertical wheel over a short card list', async ({ page }) => {
+  await authenticate(page, TEST_ACCESS_KEY, 'research')
+  await mockHermesApi(page)
+  await mockKanbanBoard(page, [makeTask(1, 'todo')])
+
+  await page.goto('/#/hermes/kanban')
+  const board = page.getByTestId('kanban-board')
+  await expect(page.locator('.task-slot[data-task-id="task-1"]')).toBeVisible()
+  expect(await board.evaluate(element => element.scrollLeft)).toBe(0)
+
+  const list = page.locator('.task-list[data-status="todo"]')
+  const box = (await list.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.wheel(0, 240)
+  await expect.poll(() => board.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
 })

@@ -189,7 +189,7 @@ export default {
     dnd: {
       dropNotAllowed: '여기로 이동할 수 없습니다',
       resetLayout: '레이아웃 초기화',
-      layoutHint: '열과 카드 순서는 이 브라우저에만 저장되며 에이전트의 실행 순서는 바뀌지 않습니다.',
+      layoutHint: '열 안의 카드 순서는 이 브라우저에만 저장되며 에이전트의 실행 순서는 바뀌지 않습니다.',
     },
     board: {
       defaultArchiveUnavailable: '기본 칸반은 보관할 수 없습니다',

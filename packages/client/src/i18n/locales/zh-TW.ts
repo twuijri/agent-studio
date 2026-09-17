@@ -1495,7 +1495,7 @@ export default {
     dnd: {
       dropNotAllowed: '無法移動到此處',
       resetLayout: '重設版面',
-      layoutHint: '欄位與卡片的順序只儲存在此瀏覽器中，不會改變代理的執行順序。',
+      layoutHint: '欄內卡片的手動順序只儲存在此瀏覽器中，不會改變代理的執行順序。',
     },
     board: {
       create: '新增看板',

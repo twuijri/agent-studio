@@ -82,13 +82,13 @@ export function isKanbanDropTarget(from: KanbanTaskStatus, to: KanbanTaskStatus)
   return from === to || resolveKanbanTransition(from, to) !== null
 }
 
-// ─── Browser-local layout (column order and manual card order) ───
+// ─── Browser-local layout (manual card order inside a column) ───
 //
-// Hermes has no column or card ordering fields, so this layout lives only in the
-// viewer's browser. It never changes what the dispatcher runs first.
+// Hermes has no card ordering field, so this layout lives only in the viewer's
+// browser. It never changes what the dispatcher runs first. Columns always keep
+// the Hermes workflow order and cannot be rearranged.
 
 export interface KanbanBoardLayout {
-  columns: KanbanTaskStatus[]
   cards: Partial<Record<KanbanTaskStatus, string[]>>
 }
 
@@ -103,14 +103,14 @@ function isStatus(value: unknown): value is KanbanTaskStatus {
 }
 
 export function emptyKanbanLayout(): KanbanBoardLayout {
-  return { columns: [], cards: {} }
+  return { cards: {} }
 }
 
+/** Older layouts also stored a column order; it is ignored and dropped on the next save. */
 export function parseKanbanLayout(raw: string | null | undefined): KanbanBoardLayout {
   if (!raw) return emptyKanbanLayout()
   try {
-    const parsed = JSON.parse(raw) as { columns?: unknown; cards?: unknown }
-    const columns = Array.isArray(parsed?.columns) ? parsed.columns.filter(isStatus) : []
+    const parsed = JSON.parse(raw) as { cards?: unknown }
     const cards: KanbanBoardLayout['cards'] = {}
     if (parsed?.cards && typeof parsed.cards === 'object') {
       for (const [status, ids] of Object.entries(parsed.cards as Record<string, unknown>)) {
@@ -119,30 +119,14 @@ export function parseKanbanLayout(raw: string | null | undefined): KanbanBoardLa
         if (clean.length) cards[status] = clean
       }
     }
-    return { columns: [...new Set(columns)], cards }
+    return { cards }
   } catch {
     return emptyKanbanLayout()
   }
 }
 
 export function hasCustomKanbanLayout(layout: KanbanBoardLayout): boolean {
-  return layout.columns.length > 0 || Object.keys(layout.cards).length > 0
-}
-
-/** Saved order first (unknown statuses dropped), then any status not yet saved in default order. */
-export function orderKanbanColumns(saved: readonly KanbanTaskStatus[] | undefined): KanbanTaskStatus[] {
-  const seen = new Set<KanbanTaskStatus>()
-  const ordered: KanbanTaskStatus[] = []
-  for (const status of saved || []) {
-    if (isStatus(status) && !seen.has(status)) {
-      seen.add(status)
-      ordered.push(status)
-    }
-  }
-  for (const status of KANBAN_BOARD_STATUSES) {
-    if (!seen.has(status)) ordered.push(status)
-  }
-  return ordered
+  return Object.keys(layout.cards).length > 0
 }
 
 function defaultCardOrder(tasks: readonly KanbanTask[]): KanbanTask[] {
