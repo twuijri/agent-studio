@@ -6,6 +6,7 @@ import { basename } from 'node:path'
 import { promisify } from 'node:util'
 import { t } from './desktop-i18n'
 import { isWindowsUpdaterLockError, pendingUpdateDirectories } from './updater-helpers'
+import { runReleaseNoticeCheck } from './release-notice'
 
 let initialized = false
 const PERSONAL_FORK = true
@@ -229,12 +230,9 @@ export function initAutoUpdater(nextOptions: AutoUpdaterOptions = {}) {
 
 export async function checkForDesktopUpdates(manual: boolean): Promise<void> {
   if (PERSONAL_FORK) {
-    if (manual) await dialog.showMessageBox({
-      type: 'info', title: 'Core Hub',
-      message: 'Updates are installed from your personal fork after review.',
-      detail: 'See docs/PERSONAL-FORK.md in the source checkout.',
-      buttons: [t('common.ok')],
-    })
+    // The fork never downloads or installs builds; it only tells the user a
+    // newer release exists and opens the release page on request.
+    await runReleaseNoticeCheck(manual)
     return
   }
   if (!app.isPackaged) {

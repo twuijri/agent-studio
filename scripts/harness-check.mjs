@@ -430,6 +430,18 @@ if (desktopUpdater.includes('fetch(')) {
   fail('desktop updater must not make custom fetch requests to resolve the latest release tag')
 }
 
+// Personal fork: the "new version available" notice may read the release list,
+// but it must never download or install builds (the auto-updater stays off).
+const desktopReleaseNotice = await readText('packages/desktop/src/main/release-notice.ts')
+for (const phrase of ['electron-updater', 'downloadUpdate', 'quitAndInstall']) {
+  if (desktopReleaseNotice.includes(phrase)) {
+    fail(`desktop release notice must not re-enable the auto-updater: ${phrase}`)
+  }
+}
+if (!desktopUpdater.includes('const PERSONAL_FORK = true')) {
+  fail('desktop updater must stay disabled in the personal fork (PERSONAL_FORK = true)')
+}
+
 for (const phrase of [
   'HERMES_DESKTOP_RUNTIME_URL',
   'HERMES_DESKTOP_RUNTIME_BASE_URL',
