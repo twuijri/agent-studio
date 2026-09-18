@@ -42,6 +42,25 @@ Hermes Agent data is stored in `~/.hermes` on Windows, macOS, and Linux.
 The desktop wrapper's own Web UI state is stored separately in
 `~/.hermes-web-ui` unless `HERMES_WEB_UI_HOME` is set.
 
+## Connection mode
+
+The app has two connection modes (see `docs/DESKTOP-SERVER-MODE.md`):
+
+- **Local** (default, unchanged): the bundled Web UI, Hermes, models and data
+  run on this machine. Existing installs stay in this mode and are never asked.
+- **Linked to a server**: the window loads the Web UI of a Core Hub server you
+  own and signs in with that server's account, like a browser would. Nothing
+  local is started: no Python, no Hermes, no local Web UI server, no command
+  shims. Local-only controls (Runtime directory picker, login reset, the
+  desktop agent browser) are hidden.
+
+Open **Connection mode…** from the tray menu, or **Settings → Display → App
+connection**, to switch. The page checks `/health/ready` (then `/health`) on
+the address before saving to `desktop-mode.json` under the Electron userData
+directory and restarting the app. Automation can pin the mode with
+`HERMES_DESKTOP_MODE=local|server` and `HERMES_DESKTOP_SERVER_URL=https://…`;
+when set, the page is read-only.
+
 ## Desktop and tray icons
 
 Regenerate the rounded Windows desktop icon and macOS, Windows, and Linux tray

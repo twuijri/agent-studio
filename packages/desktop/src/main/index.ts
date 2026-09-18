@@ -27,7 +27,18 @@ import {
 } from './webui-server'
 import { bundledNode, desktopIcon, desktopLinuxTrayIcon, desktopMacTrayIcon, desktopRuntimeVersion, desktopWindowsTrayIcon, runtimeStorageRoot, webuiDir, webUiHome } from './paths'
 import { checkForDesktopUpdates, initAutoUpdater } from './updater'
-import { t } from './desktop-i18n'
+import { isRtlDesktopLocale, t } from './desktop-i18n'
+import {
+  DESKTOP_MODE_FILE_NAME,
+  LOCAL_DESKTOP_MODE,
+  isDesktopMode,
+  isDesktopModeLockedByEnv,
+  normalizeStudioServerUrl,
+  probeStudioServer,
+  resolveDesktopMode,
+  writeDesktopModeConfig,
+  type ResolvedDesktopMode,
+} from './desktop-mode'
 import { resetDesktopDefaultLogin } from './desktop-login-reset'
 import { installHermesStudioCliShim, installHermesStudioMcpShim } from './cli-shim'
 import { parseHermesCliArgs, runBundledHermesCli } from './hermes-cli'
@@ -75,6 +86,9 @@ let petWindow: BrowserWindow | null = null
 let petWindowLoadPromise: Promise<void> | null = null
 const chatWindows = new Map<string, BrowserWindow>()
 let serverUrl: string | null = null
+// Connection mode (local runtime vs. linked Studio server). Resolved once
+// Electron is ready, before any window loads; see desktop-mode.ts.
+let desktopMode: ResolvedDesktopMode = LOCAL_DESKTOP_MODE
 let tray: Tray | null = null
 let appShutdownPromise: Promise<void> | null = null
 let isBootstrapping = false
@@ -435,6 +449,14 @@ function updateTrayMenu() {
       },
     },
     {
+      label: t('tray.connectionMode'),
+      click: () => {
+        openConnectionModePage().catch(err => {
+          console.error('[tray] failed to open the connection mode page:', err)
+        })
+      },
+    },
+    ...(isServerLinkedMode() ? [] : [{
       label: isResettingLogin ? t('loginReset.resetting') : t('tray.resetLogin'),
       enabled: !isResettingLogin && (!isBootstrapping || !!serverUrl),
       click: () => {
@@ -442,7 +464,7 @@ function updateTrayMenu() {
           console.error('[tray] reset login failed:', err)
         })
       },
-    },
+    }]),
     {
       label: t('tray.openAtLogin'),
       type: 'checkbox',
@@ -543,6 +565,14 @@ async function createWindow(): Promise<void> {
     cancelWindowFade()
     mainWindow?.hide()
     updateTrayMenu()
+  })
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+    // Only the linked-server mode has a remote page that can fail to load;
+    // local mode reports startup failures from bootstrap(). -3 is ERR_ABORTED.
+    if (!isMainFrame || errorCode === -3 || !isServerLinkedMode()) return
+    console.error(`[desktop] failed to load ${validatedUrl}: ${errorDescription} (${errorCode})`)
+    void loadServiceFailurePage(new Error(`${validatedUrl}: ${errorDescription} (${errorCode})`))
   })
 
   mainWindow.on('show', updateTrayMenu)
@@ -941,6 +971,11 @@ async function bootstrap(source?: RuntimeDownloadSource) {
   if (isBootstrapping) return
   isBootstrapping = true
 
+  if (isServerLinkedMode()) {
+    await bootstrapServerLinkedMode()
+    return
+  }
+
   try {
     const legacyMigration = await migratePendingLegacyWindowsData()
     if (legacyMigration.completed) {
@@ -996,13 +1031,19 @@ async function loadServiceFailurePage(error: unknown): Promise<void> {
   const pageBackground = process.platform === 'win32' ? 'transparent' : '#1a1a1a'
   const html = `<html><body style="margin:0;font-family:system-ui;background:${pageBackground};color:#eee">
     <main style="min-height:100vh;padding:32px;background:#1a1a1a;box-sizing:border-box">
-      <h2>${escapeHtml(t('desktop.failedStartServices'))}</h2>
+      <h2>${escapeHtml(t(isServerLinkedMode() ? 'desktop.failedReachServer' : 'desktop.failedStartServices'))}</h2>
       <pre style="white-space:pre-wrap;color:#f88">${msg}</pre>
-      <button id="retry" style="padding:8px 14px;cursor:pointer">Retry</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button id="retry" style="padding:8px 14px;cursor:pointer">${escapeHtml(t('common.retry'))}</button>
+        <button id="mode" style="padding:8px 14px;cursor:pointer">${escapeHtml(t('desktop.changeConnectionMode'))}</button>
+      </div>
       <script>
         document.getElementById('retry').addEventListener('click', async function () {
           this.disabled = true
           try { await window.hermesDesktop.retryBootstrap() } finally { this.disabled = false }
+        })
+        document.getElementById('mode').addEventListener('click', function () {
+          window.hermesDesktop?.desktopMode?.openSettings?.()
         })
       </script>
     </main>
@@ -1035,7 +1076,7 @@ async function recoverUnexpectedWebUiExit(details: { code: number | null; signal
   if (!serverUrl) await loadServiceFailurePage(error)
 }
 
-ipcMain.handle('hermes-desktop:get-token', () => getToken())
+ipcMain.handle('hermes-desktop:get-token', () => (isServerLinkedMode() ? '' : getToken()))
 ipcMain.handle('hermes-desktop:restart-app', event => {
   if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
     throw new Error('Desktop restart can only be requested from the main window')
@@ -1285,6 +1326,246 @@ ipcMain.handle('hermes-desktop:retry-bootstrap', async (_event, source?: Runtime
   await bootstrap(selectedSource)
 })
 
+// ---------------------------------------------------------------------------
+// Connection mode: local runtime vs. linked Studio server.
+// ---------------------------------------------------------------------------
+
+function desktopModeFilePath(): string {
+  return join(app.getPath('userData'), DESKTOP_MODE_FILE_NAME)
+}
+
+function isServerLinkedMode(): boolean {
+  return desktopMode.mode === 'server' && !!desktopMode.serverUrl
+}
+
+function desktopModeSnapshot() {
+  return {
+    mode: desktopMode.mode,
+    serverUrl: desktopMode.serverUrl,
+    source: desktopMode.source,
+    locked: isDesktopModeLockedByEnv(process.env),
+  }
+}
+
+async function bootstrapServerLinkedMode(): Promise<void> {
+  const url = desktopMode.serverUrl as string
+  try {
+    updateSplash({ stage: 'resolve', message: t('desktop.connectingToServer', { url }) })
+    serverUrl = url
+    updateTrayMenu()
+    if (mainWindow && !mainWindow.isDestroyed()) await mainWindow.loadURL(mainRouteUrl() || url)
+    await loadPetWindowRoute()
+  } catch (err) {
+    // did-fail-load already swapped in the failure page for a main-frame
+    // error; the superseded loadURL then rejects with ERR_ABORTED.
+    if (err instanceof Error && err.message.includes('ERR_ABORTED')) return
+    console.error('[desktop-mode] failed to open the linked Studio server:', err)
+    await loadServiceFailurePage(err)
+  } finally {
+    isBootstrapping = false
+  }
+}
+
+function connectionModeHtml(): string {
+  const snapshot = desktopModeSnapshot()
+  const logoUrl = runtimeSourceLogoDataUri()
+  const pageBackground = process.platform === 'win32' ? 'transparent' : '#191919'
+  const strings = {
+    title: t('mode.title'),
+    intro: t('mode.intro'),
+    localTitle: t('mode.localTitle'),
+    localDetail: t('mode.localDetail'),
+    serverTitle: t('mode.serverTitle'),
+    serverDetail: t('mode.serverDetail'),
+    serverUrlLabel: t('mode.serverUrlLabel'),
+    serverUrlPlaceholder: t('mode.serverUrlPlaceholder'),
+    testConnection: t('mode.testConnection'),
+    testing: t('mode.testing'),
+    testOk: t('mode.testOk'),
+    testFailed: t('mode.testFailed'),
+    apply: t('mode.apply'),
+    cancel: t('common.cancel'),
+    restarting: t('mode.restarting'),
+    lockedByEnv: t('mode.lockedByEnv'),
+    currentLocal: t('mode.currentLocal'),
+    currentServer: t('mode.currentServer'),
+  }
+  const current = snapshot.mode === 'server' && snapshot.serverUrl
+    ? strings.currentServer.replace('{url}', snapshot.serverUrl)
+    : strings.currentLocal
+  const dir = isRtlDesktopLocale() ? 'rtl' : 'ltr'
+  const html = `<!doctype html><html dir="${dir}"><head><meta charset="utf-8"><title>Core Hub</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;background:${pageBackground};color:#f1f1f1;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;}
+  body{min-height:100%;-webkit-app-region:drag;}
+  .surface{width:100%;min-height:100%;display:grid;place-items:center;padding:32px;background:#191919}
+  .wrap{width:min(680px,100%);display:flex;flex-direction:column;gap:18px}
+  .brand{display:flex;align-items:center;gap:10px;color:#f6f6f6;justify-content:center}
+  .mark{width:34px;height:34px;border-radius:8px;object-fit:contain;display:block}
+  h1{font-weight:560;margin:0;font-size:22px;line-height:1.25;text-align:center}
+  p{margin:0;font-size:14px;line-height:1.6;color:#b9b9b9;text-align:center}
+  .current{font-size:12px;color:#8f8f8f;text-align:center}
+  .options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  label.option{display:flex;flex-direction:column;gap:7px;min-height:96px;border:1px solid #4c4c4c;border-radius:10px;background:#242424;padding:16px;cursor:pointer;-webkit-app-region:no-drag;transition:border-color .14s ease,background .14s ease}
+  label.option:hover{background:#2d2d2d;border-color:#747474}
+  label.option.selected{border-color:#dcdcdc;background:#2a2a2a}
+  label.option input{position:absolute;opacity:0;pointer-events:none}
+  .option-title{font-size:15px;font-weight:650;line-height:1.2}
+  .option-detail{font-size:12px;line-height:1.45;color:#aaaaaa}
+  .server-form{display:flex;flex-direction:column;gap:10px;border:1px solid #333;border-radius:10px;padding:16px;background:#202020;-webkit-app-region:no-drag}
+  .server-form[hidden]{display:none}
+  .field{display:flex;flex-direction:column;gap:6px;font-size:13px;color:#cfcfcf}
+  input[type=url]{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #4c4c4c;background:#151515;color:#f1f1f1;font-size:14px;direction:ltr;text-align:left}
+  input[type=url]:focus{outline:2px solid #dcdcdc;outline-offset:1px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .status{font-size:12px;min-height:16px;color:#aaaaaa}
+  .status.ok{color:#9be29b}.status.err{color:#ffaaaa}
+  .actions{display:flex;gap:10px;justify-content:flex-end;-webkit-app-region:no-drag}
+  button{padding:9px 16px;border:1px solid #4c4c4c;border-radius:8px;background:#242424;color:#f2f2f2;cursor:pointer;font-size:13px;-webkit-app-region:no-drag}
+  button:hover{background:#2d2d2d;border-color:#747474}
+  button:disabled{opacity:.5;cursor:default}
+  button.primary{background:#e8e8e8;color:#111;border-color:#e8e8e8;font-weight:600}
+  button.primary:hover{background:#ffffff}
+  .locked{font-size:12px;color:#ffc27a;text-align:center}
+  @media (max-width:560px){.surface{padding:24px}.options{grid-template-columns:1fr}}
+</style></head><body><main class="surface"><div class="wrap">
+<div class="brand">${logoUrl ? `<img class="mark" src="${logoUrl}" alt="Core Hub">` : ''}<h1>${escapeHtml(strings.title)}</h1></div>
+<p>${escapeHtml(strings.intro)}</p>
+<div class="current">${escapeHtml(current)}</div>
+${snapshot.locked ? `<div class="locked">${escapeHtml(strings.lockedByEnv)}</div>` : ''}
+<div class="options" role="radiogroup">
+  <label class="option" id="opt-local"><input type="radio" name="mode" value="local">
+    <span class="option-title">${escapeHtml(strings.localTitle)}</span>
+    <span class="option-detail">${escapeHtml(strings.localDetail)}</span>
+  </label>
+  <label class="option" id="opt-server"><input type="radio" name="mode" value="server">
+    <span class="option-title">${escapeHtml(strings.serverTitle)}</span>
+    <span class="option-detail">${escapeHtml(strings.serverDetail)}</span>
+  </label>
+</div>
+<div class="server-form" id="server-form" hidden>
+  <label class="field" for="server-url">${escapeHtml(strings.serverUrlLabel)}
+    <input id="server-url" type="url" autocomplete="off" spellcheck="false" placeholder="${escapeHtml(strings.serverUrlPlaceholder)}">
+  </label>
+  <div class="row">
+    <button id="test" type="button">${escapeHtml(strings.testConnection)}</button>
+    <span class="status" id="status" aria-live="polite"></span>
+  </div>
+</div>
+<div class="actions">
+  <button id="cancel" type="button">${escapeHtml(strings.cancel)}</button>
+  <button id="apply" type="button" class="primary">${escapeHtml(strings.apply)}</button>
+</div>
+<script>
+  const STRINGS = ${JSON.stringify(strings)}
+  const SNAPSHOT = ${JSON.stringify(snapshot)}
+  const api = window.hermesDesktop && window.hermesDesktop.desktopMode
+  const form = document.getElementById('server-form')
+  const urlInput = document.getElementById('server-url')
+  const status = document.getElementById('status')
+  const apply = document.getElementById('apply')
+  const radios = Array.from(document.querySelectorAll('input[name=mode]'))
+  function selectedMode() { const r = radios.find(item => item.checked); return r ? r.value : 'local' }
+  function render() {
+    const mode = selectedMode()
+    document.getElementById('opt-local').classList.toggle('selected', mode === 'local')
+    document.getElementById('opt-server').classList.toggle('selected', mode === 'server')
+    form.hidden = mode !== 'server'
+    apply.disabled = SNAPSHOT.locked || (mode === 'server' && !urlInput.value.trim())
+  }
+  radios.forEach(r => r.addEventListener('change', render))
+  urlInput.addEventListener('input', () => { status.textContent = ''; status.className = 'status'; render() })
+  const initial = radios.find(r => r.value === SNAPSHOT.mode) || radios[0]
+  initial.checked = true
+  if (SNAPSHOT.serverUrl) urlInput.value = SNAPSHOT.serverUrl
+  render()
+  document.getElementById('test').addEventListener('click', async function () {
+    this.disabled = true
+    status.className = 'status'
+    status.textContent = STRINGS.testing
+    try {
+      const result = await api.probe(urlInput.value)
+      if (result.ok) { status.className = 'status ok'; status.textContent = STRINGS.testOk; if (result.url) urlInput.value = result.url }
+      else { status.className = 'status err'; status.textContent = STRINGS.testFailed.replace('{error}', result.error || 'unknown') }
+    } catch (error) {
+      status.className = 'status err'
+      status.textContent = STRINGS.testFailed.replace('{error}', String(error && error.message || error))
+    } finally { this.disabled = false }
+  })
+  apply.addEventListener('click', async function () {
+    this.disabled = true
+    try {
+      await api.apply({ mode: selectedMode(), serverUrl: urlInput.value })
+    } catch (error) {
+      status.className = 'status err'
+      status.textContent = String(error && error.message || error)
+      this.disabled = false
+    }
+  })
+  document.getElementById('cancel').addEventListener('click', () => { api.close() })
+</script>
+</div></main></body></html>`
+  return 'data:text/html;charset=utf-8,' + encodeURIComponent(html)
+}
+
+async function openConnectionModePage(): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed()) await createWindow()
+  showMainWindow()
+  await mainWindow?.loadURL(connectionModeHtml())
+}
+
+async function returnToCurrentUi(): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (serverUrl) {
+    await mainWindow.loadURL(mainRouteUrl() || serverUrl)
+    return
+  }
+  await mainWindow.loadURL(splashHtml())
+  void bootstrap()
+}
+
+function requireMainWindowSender(event: IpcMainInvokeEvent, action: string): void {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+    throw new Error(`${action} can only be requested from the main window`)
+  }
+}
+
+// Synchronous variant so the preload can learn the mode before the page runs.
+ipcMain.on('hermes-desktop:get-desktop-mode', event => {
+  event.returnValue = desktopModeSnapshot()
+})
+ipcMain.handle('hermes-desktop:get-desktop-mode', () => desktopModeSnapshot())
+ipcMain.handle('hermes-desktop:probe-studio-server', async (event, url?: unknown) => {
+  if (!isTrustedDesktopWindowSender(event.sender)) throw new Error('Server probes can only be requested from a Hermes desktop window')
+  return probeStudioServer(url)
+})
+ipcMain.handle('hermes-desktop:open-desktop-mode-settings', async event => {
+  if (!isTrustedDesktopWindowSender(event.sender)) throw new Error('Connection settings can only be opened from a Hermes desktop window')
+  await openConnectionModePage()
+  return true
+})
+ipcMain.handle('hermes-desktop:close-desktop-mode-settings', async event => {
+  requireMainWindowSender(event, 'Closing connection settings')
+  await returnToCurrentUi()
+  return true
+})
+ipcMain.handle('hermes-desktop:set-desktop-mode', async (event, input?: unknown) => {
+  requireMainWindowSender(event, 'Changing the connection mode')
+  if (isDesktopModeLockedByEnv(process.env)) throw new Error(t('mode.lockedByEnv'))
+  const record = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
+  const mode = isDesktopMode(record.mode) ? record.mode : 'local'
+  const serverUrlInput = normalizeStudioServerUrl(record.serverUrl)
+  if (mode === 'server' && !serverUrlInput) throw new Error('A valid http(s) server address is required')
+  const saved = writeDesktopModeConfig(desktopModeFilePath(), { mode, serverUrl: serverUrlInput })
+  console.log(`[desktop-mode] saved mode=${saved.mode}${saved.serverUrl ? ` server=${saved.serverUrl}` : ''}; restarting`)
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    await mainWindow.loadURL(splashHtml(t('mode.restarting'))).catch(() => undefined)
+  }
+  return scheduleAppRestart(300)
+})
+
 function runDesktopApp() {
   setWebUiRestartRequestHandler(() => {
     // Leave enough time for the authenticated relay HTTP request to flush its 202 response.
@@ -1324,6 +1605,10 @@ function runDesktopApp() {
       console.warn('[desktop] failed to migrate the Windows login item:', error)
     }
     installMicrophonePermissionHandler()
+    desktopMode = resolveDesktopMode(process.env, desktopModeFilePath())
+    if (desktopMode.mode === 'server') {
+      console.log(`[desktop-mode] linked to ${desktopMode.serverUrl} (${desktopMode.source})`)
+    }
     createTray()
     await createWindow()
     await initializeDesktopBrowser().catch(error => {

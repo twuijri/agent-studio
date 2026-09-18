@@ -301,10 +301,12 @@ async function ensureDesktopAuth(): Promise<void> {
   }
 }
 
-function isDesktopShell(): boolean {
-  return (window as typeof window & {
-    hermesDesktop?: { isDesktop?: boolean }
-  }).hermesDesktop?.isDesktop === true
+function isDesktopLocalShell(): boolean {
+  const bridge = (window as typeof window & {
+    hermesDesktop?: { isDesktop?: boolean; mode?: string }
+  }).hermesDesktop
+  // A shell linked to a Studio server logs in like a browser would.
+  return bridge?.isDesktop === true && bridge.mode !== 'server'
 }
 
 router.beforeEach(async (to, _from, next) => {
@@ -318,7 +320,7 @@ router.beforeEach(async (to, _from, next) => {
   // Public pages don't need auth
   if (to.meta.public) {
     // Already has key, skip login
-    if (to.name === 'login' && hasApiKey() && !isDesktopShell()) {
+    if (to.name === 'login' && hasApiKey() && !isDesktopLocalShell()) {
       next(resolveLoginRedirect(to.query.redirect))
       return
     }

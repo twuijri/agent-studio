@@ -2479,6 +2479,11 @@ export default {
       linkOpenTargetHint: '選擇訊息與 Markdown 預覽中的網頁連結要在哪裡開啟。',
       linkOpenTargetHermesStudio: 'Core Hub',
       linkOpenTargetDefaultBrowser: '預設瀏覽器',
+      connectionMode: '應用程式連線',
+      connectionModeHint: '此桌面應用程式執行 Hermes 的位置：在這台電腦上，或連線到你的 Core Hub 伺服器。變更後應用程式會重新啟動。',
+      connectionModeLocal: '在這台電腦上',
+      connectionModeServer: '已連線到 {url}',
+      connectionModeChange: '變更...',
     },
     agent: {
       maxTurns: '最大輪次',

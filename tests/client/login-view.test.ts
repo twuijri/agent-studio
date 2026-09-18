@@ -38,6 +38,8 @@ vi.mock('@/api/studio/auth', () => ({
 
 vi.mock('@/utils/desktop-bridge', () => ({
   isDesktopShell: mockIsDesktopShell,
+  // The login view treats the shell as desktop only for the local runtime.
+  isDesktopLocalRuntime: mockIsDesktopShell,
 }))
 
 vi.mock('@/composables/useTheme', () => ({

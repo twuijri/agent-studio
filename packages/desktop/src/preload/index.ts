@@ -9,11 +9,50 @@ function desktopWindowKind(): DesktopWindowKind {
   return kind === 'pet' || kind === 'chat' ? kind : 'main'
 }
 
+type DesktopConnectionMode = 'local' | 'server'
+interface DesktopModeSnapshot {
+  mode: DesktopConnectionMode
+  serverUrl: string | null
+  source: 'default' | 'file' | 'env'
+  locked: boolean
+}
+
+// Learn the connection mode before the page runs so local-only behaviour
+// (credential-flag stripping, Runtime directory picker) can be withheld when
+// the window shows a linked Studio server instead of the bundled Web UI.
+function readDesktopModeSnapshot(): DesktopModeSnapshot {
+  try {
+    const snapshot = ipcRenderer.sendSync('hermes-desktop:get-desktop-mode') as Partial<DesktopModeSnapshot> | null
+    if (snapshot && (snapshot.mode === 'local' || snapshot.mode === 'server')) {
+      return {
+        mode: snapshot.mode,
+        serverUrl: typeof snapshot.serverUrl === 'string' ? snapshot.serverUrl : null,
+        source: snapshot.source === 'file' || snapshot.source === 'env' ? snapshot.source : 'default',
+        locked: snapshot.locked === true,
+      }
+    }
+  } catch { /* main process not ready; behave like the historical local mode */ }
+  return { mode: 'local', serverUrl: null, source: 'default', locked: false }
+}
+
+const desktopModeSnapshot = readDesktopModeSnapshot()
+const serverLinked = desktopModeSnapshot.mode === 'server'
+
 contextBridge.exposeInMainWorld('hermesDesktop', {
   getToken: (): Promise<string> => ipcRenderer.invoke('hermes-desktop:get-token'),
   retryBootstrap: (source?: 'cf' | 'github'): Promise<void> => ipcRenderer.invoke('hermes-desktop:retry-bootstrap', source),
   restartApp: (): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:restart-app'),
-  selectRuntimeDirectory: (defaultPath?: string): Promise<string | null> => ipcRenderer.invoke('hermes-desktop:select-runtime-directory', defaultPath),
+  ...(serverLinked ? {} : {
+    selectRuntimeDirectory: (defaultPath?: string): Promise<string | null> => ipcRenderer.invoke('hermes-desktop:select-runtime-directory', defaultPath),
+  }),
+  mode: desktopModeSnapshot.mode,
+  desktopMode: {
+    get: (): Promise<DesktopModeSnapshot> => ipcRenderer.invoke('hermes-desktop:get-desktop-mode'),
+    probe: (url: string): Promise<{ ok: boolean; url: string; status?: number; error?: string }> => ipcRenderer.invoke('hermes-desktop:probe-studio-server', url),
+    apply: (config: { mode: DesktopConnectionMode; serverUrl?: string | null }): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:set-desktop-mode', config),
+    openSettings: (): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:open-desktop-mode-settings'),
+    close: (): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:close-desktop-mode-settings'),
+  },
   notifyCompletion: (payload: { title: string; body?: string; icon?: string; tag?: string; clickUrl?: string }): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:notify-completion', payload),
   openExternalUrl: (url: string): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:open-external-url', url),
   openChatWindow: (sessionId: string, profile?: string): Promise<void> => ipcRenderer.invoke('hermes-desktop:open-chat-window', sessionId, profile),
@@ -165,7 +204,9 @@ function installFetchPatch(): void {
   }
 }
 
-installFetchPatch()
+// A linked Studio server manages its own accounts; keep its "change the
+// default password" prompt intact instead of hiding it like the local install.
+if (!serverLinked) installFetchPatch()
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
