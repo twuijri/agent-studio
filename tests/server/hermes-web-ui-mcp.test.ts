@@ -1134,7 +1134,7 @@ describe('hermes-web-ui MCP server', () => {
     expect(list.result.tools[0].description).toContain('remote file upload/download')
 
     const catalog = JSON.parse((await waitForRpc(responses, 5)).result.content[0].text)
-    expect(catalog).toMatchObject({ toolset: 'devices', operation_count: 14 })
+    expect(catalog).toMatchObject({ toolset: 'devices', operation_count: 16 })
     expect(catalog.operations.map((tool: any) => tool.name)).toEqual(expect.arrayContaining([
       'ekko_studio_lan_devices_list',
       'ekko_studio_lan_command_exec',
@@ -1142,6 +1142,8 @@ describe('hermes-web-ui MCP server', () => {
       'ekko_studio_lan_terminal_read',
       'ekko_studio_lan_file_download',
       'ekko_studio_lan_file_upload',
+      'ekko_studio_lan_screen_capture',
+      'ekko_studio_lan_screen_action',
     ]))
 
     const hiddenCall = await waitForRpc(responses, 3)
