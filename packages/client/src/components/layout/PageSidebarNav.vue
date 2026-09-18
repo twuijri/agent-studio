@@ -6,7 +6,7 @@ import { useRouter } from 'vue-router'
 import { isStoredSuperAdmin } from '@/api/client'
 import { useSessionSearch } from '@/composables/useSessionSearch'
 
-type ActiveSection = 'chat' | 'history' | 'connections' | 'agents' | 'models' | 'group' | 'global' | 'workflow'
+type ActiveSection = 'chat' | 'history' | 'connections' | 'apps' | 'agents' | 'models' | 'group' | 'global' | 'workflow'
 
 const props = defineProps<{
   active: ActiveSection
@@ -21,6 +21,8 @@ const { t } = useI18n()
 const router = useRouter()
 const { openSessionSearch } = useSessionSearch()
 const canManageAgents = computed(() => isStoredSuperAdmin())
+// Apps on this computer (desktop shell only): the route exists only when the shell can discover them.
+const hasComputerApps = computed(() => router.hasRoute('hermes.appConnections'))
 
 const primaryText = computed(() => props.primaryLabel || t('chat.newChat'))
 
@@ -37,6 +39,11 @@ function openHistory() {
 function openConnections() {
   if (props.active === 'connections') return
   void router.push({ name: 'hermes.connections' })
+}
+
+function openComputerApps() {
+  if (props.active === 'apps') return
+  void router.push({ name: 'hermes.appConnections' })
 }
 
 function openAgentManager() {
@@ -120,6 +127,33 @@ function openWorkflow() {
           <path d="m8.2 10.7 7.6-4.4M8.2 13.3l7.6 4.4" />
         </svg>
         <span>{{ t('sidebar.connections') }}</span>
+      </button>
+      <button
+        v-if="hasComputerApps"
+        class="page-sidebar-tab"
+        :class="{ active: active === 'apps' }"
+        type="button"
+        :aria-current="active === 'apps' ? 'page' : undefined"
+        data-testid="sidebar-app-connections"
+        @click="openComputerApps"
+      >
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          <path d="M17.5 14v7M14 17.5h7" />
+        </svg>
+        <span>{{ t('sidebar.appConnections') }}</span>
       </button>
       <button
         v-if="canManageAgents"

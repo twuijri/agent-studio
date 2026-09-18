@@ -317,7 +317,7 @@ export default {
     gateways: 'Шлюзы',
     terminal: 'Терминал',
     browser: 'Браузер',
-    appConnections: 'Подключения приложений',
+    appConnections: 'Приложения компьютера',
     singleChat: 'Чат',
     globalAgent: 'Global Agent',
     groupChat: 'Групповой чат',
@@ -625,7 +625,7 @@ export default {
   },
 
   appConnections: {
-    title: 'Подключения приложений',
+    title: 'Приложения на этом компьютере',
     subtitle: 'Приложения на этом компьютере с MCP-сервером. Откройте доступ, и Hermes на вашем сервере сможет использовать их через этот компьютер.',
     rescan: 'Пересканировать',
     desktopOnly: 'Откройте эту страницу из настольного приложения Core Hub, связанного с этим сервером.',

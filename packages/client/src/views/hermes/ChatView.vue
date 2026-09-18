@@ -25,12 +25,13 @@ const routeProfile = computed(() => {
 })
 
 const isStandaloneChat = computed(() => route.meta?.standaloneChat === true)
-type ChatContentMode = 'chat' | 'connections' | 'agents' | 'models'
+type ChatContentMode = 'chat' | 'connections' | 'agents' | 'models' | 'apps'
 
 const contentMode = computed<ChatContentMode>(() => {
   if (route.name === 'hermes.connections') return 'connections'
   if (route.name === 'hermes.agentManager') return 'agents'
   if (route.name === 'hermes.models') return 'models'
+  if (route.name === 'hermes.appConnections') return 'apps'
   return 'chat'
 })
 const productTitle = 'Core Hub'

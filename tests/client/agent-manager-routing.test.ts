@@ -33,7 +33,7 @@ describe('Agent Manager routing', () => {
     expect(manager).not.toContain('sidebar-summary')
     expect(chatView).toContain("if (route.name === 'hermes.agentManager') return 'agents'")
     expect(chatView).toContain("if (route.name === 'hermes.models') return 'models'")
-    expect(chatPanel).toContain('contentMode?: "chat" | "connections" | "agents" | "models";')
+    expect(chatPanel).toContain('contentMode?: "chat" | "connections" | "agents" | "models" | "apps";')
     expect(chatPanel).toContain("const AgentManagerPanel = defineAsyncComponent")
     expect(chatPanel).toContain("contentMode === 'agents' ? 'agents'")
     expect(chatPanel).toContain('v-else-if="contentMode === \'agents\'"')

@@ -11,6 +11,8 @@ import { desktopAppConnectionsBridge, desktopConnectionMode, type DesktopDeviceA
 // which wires it into every profile on this computer. Either way the app never
 // edits agent configs itself.
 
+const props = defineProps<{ sidebarCollapsed?: boolean }>()
+const emit = defineEmits<{ toggleSidebar: [] }>()
 const { t } = useI18n()
 const message = useMessage()
 const bridge = desktopAppConnectionsBridge()
@@ -75,7 +77,27 @@ onBeforeUnmount(() => { stopUpdates?.() })
   <div class="app-connections">
     <header class="page-header">
       <div class="header-heading">
-        <h2 class="header-title">{{ t('appConnections.title') }}</h2>
+        <div class="header-title-row">
+          <NButton
+            class="apps-sidebar-toggle"
+            quaternary
+            size="small"
+            circle
+            :title="props.sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')"
+            :aria-label="props.sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')"
+            @click="emit('toggleSidebar')"
+          >
+            <template #icon>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+              </svg>
+            </template>
+          </NButton>
+          <h2 class="header-title">{{ t('appConnections.title') }}</h2>
+        </div>
         <p>{{ t('appConnections.subtitle') }}</p>
       </div>
       <div class="header-actions">
@@ -133,6 +155,15 @@ onBeforeUnmount(() => { stopUpdates?.() })
   flex-direction: column;
   gap: 16px;
   padding: 20px 24px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .page-header {
@@ -144,7 +175,7 @@ onBeforeUnmount(() => { stopUpdates?.() })
 }
 
 .header-title {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 20px;
 }
 

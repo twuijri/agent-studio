@@ -434,7 +434,7 @@ export default {
     socialMessages: 'Envoyer des messages',
     terminal: 'Terminal',
     browser: 'Navigateur',
-    appConnections: 'Connexions d’applications',
+    appConnections: 'Apps de l’ordinateur',
     singleChat: 'Discussion',
     globalAgent: 'Global Agent',
     files: 'Fichiers',
@@ -741,7 +741,7 @@ export default {
   },
 
   appConnections: {
-    title: 'Connexions d’applications',
+    title: 'Apps de cet ordinateur',
     subtitle: 'Applications de cet ordinateur qui exposent un serveur MCP. Partagez-en une et Hermes sur votre serveur pourra l’utiliser via cet ordinateur.',
     rescan: 'Rescanner',
     desktopOnly: 'Ouvrez cette page depuis l’application de bureau Core Hub reliée à ce serveur.',

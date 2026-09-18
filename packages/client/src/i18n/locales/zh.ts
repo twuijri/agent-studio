@@ -392,7 +392,7 @@ export default {
     gateways: '网关',
     terminal: '终端',
     browser: '浏览器',
-    appConnections: '应用连接',
+    appConnections: '本机应用',
     singleChat: '单聊',
     globalAgent: '全局',
     groupChat: '群聊',
@@ -703,7 +703,7 @@ export default {
   },
 
   appConnections: {
-    title: '应用连接',
+    title: '这台电脑上的应用',
     subtitle: '这台电脑上提供 MCP 服务器的应用。共享后，服务器上的 Hermes 可通过这台电脑使用它。',
     rescan: '重新扫描',
     desktopOnly: '请从关联到此服务器的 Core Hub 桌面应用打开此页面。',
