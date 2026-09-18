@@ -71,8 +71,7 @@ jobs:
             win32-x64)
               write_common_outputs "Windows x64" "windows-latest" "--win nsis --x64" "desktop-win32-x64" \
                 "packages/desktop/release/*.exe" \
-                "packages/desktop/release/*.exe.blockmap" \
-                "packages/desktop/release/latest*.yml"
+                "packages/desktop/release/*.exe.blockmap"
               ;;
             darwin-arm64)
               write_common_outputs "macOS arm64" "macos-26" "--mac dmg zip --arm64" "desktop-darwin-arm64" \
@@ -91,13 +90,11 @@ jobs:
             linux-x64)
               write_common_outputs "Linux x64" "ubuntu-22.04" "--linux AppImage deb --x64" "desktop-linux-x64" \
                 "packages/desktop/release/*.AppImage" \
-                "packages/desktop/release/*.deb" \
-                "packages/desktop/release/latest*.yml"
+                "packages/desktop/release/*.deb"
               ;;
             linux-arm64)
               write_common_outputs "Linux arm64" "ubuntu-22.04-arm" "--linux AppImage --arm64" "desktop-linux-arm64" \
-                "packages/desktop/release/*.AppImage" \
-                "packages/desktop/release/latest*.yml"
+                "packages/desktop/release/*.AppImage"
               ;;
             *)
               echo "Unsupported desktop target: ${{ github.event.inputs.target_os }} ${{ github.event.inputs.target_arch }}" >&2
@@ -192,7 +189,8 @@ jobs:
   mac-update-manifest:
     name: Repair macOS update manifest
     needs: [validate, desktop]
-    if: needs.validate.outputs.target_os == 'darwin' && github.event.inputs.release_tag != ''
+    # Updater manifests are not produced in this fork (updater disabled).
+    if: false
     runs-on: ubuntu-22.04
     steps:
       - name: Check macOS release asset completeness
