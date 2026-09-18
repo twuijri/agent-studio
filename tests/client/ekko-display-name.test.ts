@@ -57,8 +57,12 @@ describe('Ekko display name', () => {
   })
 
   it('uses Claude everywhere in the client without changing the internal runtime id', () => {
+    // The App Connections page names the external assistants it scans
+    // (Claude Desktop, Claude Code, Codex, Cursor, Windsurf) verbatim; those
+    // are third-party product names, not the display name of the coding agent.
+    const isExternalAssistantLine = (line: string) => /claude_code:|Codex/.test(line)
     const occurrences = clientSourceFiles('packages/client/src')
-      .flatMap(path => readFileSync(path, 'utf8').includes('Claude Code') ? [path] : [])
+      .flatMap(path => readFileSync(path, 'utf8').split('\n').filter(line => !isExternalAssistantLine(line)).join('\n').includes('Claude Code') ? [path] : [])
 
     expect(occurrences).toEqual([])
     expect(readFileSync('packages/client/src/components/hermes/chat/ChatPanel.vue', 'utf8'))

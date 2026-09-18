@@ -84,6 +84,13 @@ Two more capabilities can be shared from the same page:
   for approval; a red banner with a **Stop** button shows while it is active.
   macOS asks for Screen Recording and Accessibility permissions the first time.
 
+- **App connections** (sidebar entry in the linked app): MCP servers that other assistants
+  already have on this computer (Claude Desktop and its extensions, Claude Code, Codex,
+  Cursor, Windsurf — macOS, Windows, Linux paths) can be shared one by one. The app runs
+  the program's MCP server locally and pipes it over the device channel; the server turns
+  it into a managed MCP server of the allowed Hermes/Ekko profiles automatically. The
+  first use per connection asks for approval on this computer.
+
 On the server, **Devices → Linked devices** lists connected devices and lets you
 restrict each one to specific Hermes profiles (empty = every profile).
 

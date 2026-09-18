@@ -148,17 +148,47 @@ export interface DesktopDeviceAgentSnapshot {
   computerName: string
   config: {
     enabled: boolean
-    capabilities: { exec: boolean; files: boolean; browser: boolean; screen: boolean }
+    capabilities: { exec: boolean; files: boolean; browser: boolean; screen: boolean; apps?: boolean }
     allowedFolders: string[]
     approvalMode: 'ask' | 'always'
     pairedServerUrl: string | null
+    sharedApps?: DesktopSharedApp[]
   }
   lastError: string | null
+}
+
+export interface DesktopDiscoveredApp {
+  id: string
+  name: string
+  source: string
+  origin: string
+  transport: 'stdio' | 'remote'
+  command?: string
+  args: string[]
+  env: Record<string, string>
+  cwd?: string
+  url?: string
+  unresolved: string[]
+}
+
+export interface DesktopSharedApp {
+  id: string
+  name: string
+  source: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+  cwd?: string
+  enabled: boolean
 }
 
 export interface DesktopDeviceAgentBridge {
   getState: () => Promise<DesktopDeviceAgentSnapshot>
   openSettings: () => Promise<boolean>
+  /** MCP apps found in other assistants' configs on this computer. */
+  discoverApps?: () => Promise<DesktopDiscoveredApp[]>
+  /** Replace the list of apps shared with the server. */
+  setApps?: (apps: DesktopSharedApp[]) => Promise<DesktopDeviceAgentSnapshot>
   /** Send the pairing request with a pairing link or code copied from the server. */
   pair?: (codeOrLink: string) => Promise<DesktopDeviceAgentSnapshot>
   onState?: (callback: (state: DesktopDeviceAgentSnapshot) => void) => () => void

@@ -46,8 +46,8 @@ describe('device agent store', () => {
     const dir = tempDir()
     const config = join(dir, 'device-agent.json')
     expect(readDeviceAgentConfig(config)).toEqual(defaultDeviceAgentConfig())
-    writeDeviceAgentConfig(config, { ...defaultDeviceAgentConfig(), enabled: true, capabilities: { exec: true, files: false, browser: true, screen: false }, allowedFolders: [' /tmp/a ', '/tmp/a', ''], approvalMode: 'always', pairedServerUrl: 'https://s.example', pairedAt: 5 })
-    expect(readDeviceAgentConfig(config)).toEqual({ enabled: true, capabilities: { exec: true, files: false, browser: true, screen: false }, allowedFolders: ['/tmp/a'], approvalMode: 'always', pairedServerUrl: 'https://s.example', pairedAt: 5 })
+    writeDeviceAgentConfig(config, { ...defaultDeviceAgentConfig(), enabled: true, capabilities: { exec: true, files: false, browser: true, screen: false, apps: false }, allowedFolders: [' /tmp/a ', '/tmp/a', ''], approvalMode: 'always', pairedServerUrl: 'https://s.example', pairedAt: 5, sharedApps: [] })
+    expect(readDeviceAgentConfig(config)).toEqual({ enabled: true, capabilities: { exec: true, files: false, browser: true, screen: false, apps: false }, allowedFolders: ['/tmp/a'], approvalMode: 'always', pairedServerUrl: 'https://s.example', pairedAt: 5, sharedApps: [] })
 
     const audit = join(dir, 'audit.jsonl')
     appendDeviceAgentAudit(audit, { at: 1, kind: 'exec', detail: 'first', ok: true })
@@ -218,7 +218,7 @@ describe('device agent pairing and connection', () => {
 
   it('pairs, waits for approval, then opens a controllable peer socket declaring the enabled capabilities', async () => {
     const { agent, requests } = makeAgent({ linkStatuses: ['pending', 'approved'] })
-    await agent.setConfig({ capabilities: { exec: true, files: true, browser: false, screen: false }, allowedFolders: ['/tmp/shared'] })
+    await agent.setConfig({ capabilities: { exec: true, files: true, browser: false, screen: false, apps: false }, allowedFolders: ['/tmp/shared'] })
     const state = await agent.pair('https://ai.example/#/hermes/devices?pairing_code=pair-secret')
     expect(state.status).toBe('pending')
     expect(state.config.pairedServerUrl).toBe('https://ai.example')
@@ -241,8 +241,10 @@ describe('device agent pairing and connection', () => {
     socket.open()
     expect(agent.getState().status).toBe('connected')
 
+    // The agent announces its shared apps right after connecting; skip that frame.
+    expect(socket.sent.map(raw => JSON.parse(raw).type)).toEqual(['device.apps'])
     socket.emit('message', { data: JSON.stringify({ type: 'terminal.create', request_id: 'x' }) })
-    expect(JSON.parse(socket.sent[0])).toMatchObject({ type: 'terminal.error', request_id: 'x' })
+    expect(JSON.parse(socket.sent[1])).toMatchObject({ type: 'terminal.error', request_id: 'x' })
     agent.stop()
     expect(agent.getState().status).toBe('offline')
   })
@@ -280,7 +282,7 @@ describe('device agent pairing and connection', () => {
     const approve = vi.fn(async () => 'allow-session' as const)
     const root = tempDir()
     const { agent } = makeAgent({ linkStatuses: ['approved'], approve })
-    await agent.setConfig({ capabilities: { exec: true, files: false, browser: false, screen: false }, allowedFolders: [root] })
+    await agent.setConfig({ capabilities: { exec: true, files: false, browser: false, screen: false, apps: false }, allowedFolders: [root] })
     await agent.pair('pair-secret')
     const deadline = Date.now() + 3000
     while (FakeSocket.instances.length === 0 && Date.now() < deadline) await wait(10)
@@ -291,7 +293,7 @@ describe('device agent pairing and connection', () => {
       const until = Date.now() + 5000
       while (!socket.sent.some(raw => JSON.parse(raw).request_id === id) && Date.now() < until) await wait(10)
     }
-    expect(socket.sent.map(raw => JSON.parse(raw).type)).toEqual(['terminal.exec.result', 'terminal.exec.result'])
+    expect(socket.sent.map(raw => JSON.parse(raw).type).filter(type => type !== 'device.apps')).toEqual(['terminal.exec.result', 'terminal.exec.result'])
     expect(approve).toHaveBeenCalledTimes(1)
     expect(agent.getState().sessionApprovedAll).toBe(true)
     agent.stop()

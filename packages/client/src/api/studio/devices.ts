@@ -55,6 +55,8 @@ export interface LanPeerConnectionInfo {
   capabilities?: LanPeerCapability[]
   /** Workspace folder on a linked desktop device. */
   workspace?: string
+  /** MCP apps the device shares (available to agents as managed MCP servers). */
+  apps?: Array<{ id: string; name: string; source: string }>
 }
 
 export interface DevicePairingLink {

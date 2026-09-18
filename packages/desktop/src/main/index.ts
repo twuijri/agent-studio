@@ -44,6 +44,9 @@ import {
 import { DeviceAgent, type DeviceAgentState, type ExecApprovalDecision } from './device-agent/agent'
 import type { DeviceAgentProxyRequest, DeviceAgentProxyResponse, DeviceAgentScreenCapture } from './device-agent/protocol'
 import { parseScreenAction, runScreenAction } from './device-agent/screen-input'
+import { discoverMcpApps } from './device-agent/mcp-discovery'
+import { parseSharedMcpApps } from './device-agent/store'
+import type { SharedAppDefinition } from './device-agent/protocol'
 import {
   DEVICE_AGENT_AUDIT_FILE_NAME,
   DEVICE_AGENT_CONFIG_FILE_NAME,
@@ -1642,6 +1645,21 @@ async function askScreenApproval(): Promise<boolean> {
   return result.response === 0
 }
 
+async function askAppApproval(appDef: SharedAppDefinition): Promise<boolean> {
+  showMainWindow()
+  const result = await showDesktopMessageBox({
+    type: 'question',
+    buttons: [t('agent.allowSession'), t('agent.deny')],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+    title: t('agent.appApproveTitle'),
+    message: t('agent.appApproveMessage'),
+    detail: t('agent.appApproveDetail', { app: appDef.name }),
+  })
+  return result.response === 0
+}
+
 async function proxyToDesktopBrowserBroker(request: DeviceAgentProxyRequest): Promise<DeviceAgentProxyResponse> {
   const descriptor = browserBroker?.currentDescriptor()
   if (!descriptor) throw new Error('The desktop agent browser is not running')
@@ -1777,6 +1795,7 @@ function ensureDeviceAgent(): DeviceAgent {
     serverUrl: () => (isServerLinkedMode() ? desktopMode.serverUrl : null),
     approveExec: askExecApproval,
     approveScreen: askScreenApproval,
+    approveApp: askAppApproval,
     browserProxy: proxyToDesktopBrowserBroker,
     screen: { capture: captureDeviceScreen, action: performDeviceScreenAction },
     audit: entry => appendDeviceAgentAudit(deviceAgentFile(DEVICE_AGENT_AUDIT_FILE_NAME), entry),
@@ -2012,6 +2031,7 @@ function sanitizeDeviceAgentConfigPatch(input: unknown): Partial<Pick<DeviceAgen
       files: typeof caps.files === 'boolean' ? caps.files : current.files,
       browser: typeof caps.browser === 'boolean' ? caps.browser : current.browser,
       screen: typeof caps.screen === 'boolean' ? caps.screen : current.screen,
+      apps: typeof caps.apps === 'boolean' ? caps.apps : current.apps,
     }
   }
   if (Array.isArray(record.allowedFolders)) {
@@ -2065,6 +2085,15 @@ ipcMain.handle('hermes-desktop:device-agent-unpair', event => {
 ipcMain.handle('hermes-desktop:device-agent-set-config', async (event, input?: unknown) => {
   requireMainWindowSender(event, 'Changing device access settings')
   const state = await ensureDeviceAgent().setConfig(sanitizeDeviceAgentConfigPatch(input))
+  return deviceAgentSnapshot(state)
+})
+ipcMain.handle('hermes-desktop:device-agent-discover-apps', event => {
+  if (!isTrustedDesktopWindowSender(event.sender)) throw new Error('App discovery can only be requested from a Hermes desktop window')
+  return discoverMcpApps({ platform: process.platform, homeDir: app.getPath('home'), env: process.env })
+})
+ipcMain.handle('hermes-desktop:device-agent-set-apps', async (event, input?: unknown) => {
+  requireMainWindowSender(event, 'Changing shared apps')
+  const state = await ensureDeviceAgent().setSharedApps(parseSharedMcpApps(input))
   return deviceAgentSnapshot(state)
 })
 ipcMain.handle('hermes-desktop:device-agent-stop-screen', event => {

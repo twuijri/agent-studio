@@ -7,14 +7,27 @@ import type { DeviceAgentAuditEntry } from './protocol'
 
 export type DeviceAgentApprovalMode = 'ask' | 'always'
 
+/** An MCP app on this computer the user chose to share with the server. */
+export interface SharedMcpApp {
+  id: string
+  name: string
+  source: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+  cwd?: string
+  enabled: boolean
+}
+
 export interface DeviceAgentConfig {
   enabled: boolean
-  capabilities: { exec: boolean; files: boolean; browser: boolean; screen: boolean }
+  capabilities: { exec: boolean; files: boolean; browser: boolean; screen: boolean; apps: boolean }
   allowedFolders: string[]
   approvalMode: DeviceAgentApprovalMode
   /** Studio server this device identity was paired with (normalized origin + path). */
   pairedServerUrl: string | null
   pairedAt: number | null
+  sharedApps: SharedMcpApp[]
 }
 
 export const DEVICE_AGENT_CONFIG_FILE_NAME = 'device-agent.json'
@@ -27,12 +40,42 @@ const AUDIT_KEEP_LINES = 2000
 export function defaultDeviceAgentConfig(): DeviceAgentConfig {
   return {
     enabled: false,
-    capabilities: { exec: false, files: false, browser: false, screen: false },
+    capabilities: { exec: false, files: false, browser: false, screen: false, apps: false },
     allowedFolders: [],
     approvalMode: 'ask',
     pairedServerUrl: null,
     pairedAt: null,
+    sharedApps: [],
   }
+}
+
+export function parseSharedMcpApps(raw: unknown): SharedMcpApp[] {
+  if (!Array.isArray(raw)) return []
+  const apps: SharedMcpApp[] = []
+  const seen = new Set<string>()
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const record = item as Record<string, unknown>
+    const id = typeof record.id === 'string' ? record.id.trim() : ''
+    const name = typeof record.name === 'string' ? record.name.trim() : ''
+    const command = typeof record.command === 'string' ? record.command.trim() : ''
+    if (!id || !name || !command || seen.has(id)) continue
+    seen.add(id)
+    const env = record.env && typeof record.env === 'object'
+      ? Object.fromEntries(Object.entries(record.env as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+      : {}
+    apps.push({
+      id,
+      name,
+      source: typeof record.source === 'string' ? record.source : 'manual',
+      command,
+      args: Array.isArray(record.args) ? record.args.filter((arg): arg is string => typeof arg === 'string') : [],
+      env,
+      cwd: typeof record.cwd === 'string' && record.cwd.trim() ? record.cwd : undefined,
+      enabled: record.enabled !== false,
+    })
+  }
+  return apps
 }
 
 export function parseDeviceAgentConfig(raw: unknown): DeviceAgentConfig {
@@ -45,11 +88,12 @@ export function parseDeviceAgentConfig(raw: unknown): DeviceAgentConfig {
     : []
   return {
     enabled: record.enabled === true,
-    capabilities: { exec: capabilities.exec === true, files: capabilities.files === true, browser: capabilities.browser === true, screen: capabilities.screen === true },
+    capabilities: { exec: capabilities.exec === true, files: capabilities.files === true, browser: capabilities.browser === true, screen: capabilities.screen === true, apps: capabilities.apps === true },
     allowedFolders: [...new Set(folders)],
     approvalMode: record.approvalMode === 'always' ? 'always' : 'ask',
     pairedServerUrl: typeof record.pairedServerUrl === 'string' && record.pairedServerUrl.trim() ? record.pairedServerUrl.trim() : null,
     pairedAt: typeof record.pairedAt === 'number' && Number.isFinite(record.pairedAt) ? record.pairedAt : null,
+    sharedApps: parseSharedMcpApps(record.sharedApps),
   }
 }
 

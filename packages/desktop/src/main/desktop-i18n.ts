@@ -126,6 +126,9 @@ type TranslationKey =
   | 'agent.screenApproveDetail'
   | 'agent.overlayLabel'
   | 'agent.overlayStop'
+  | 'agent.appApproveTitle'
+  | 'agent.appApproveMessage'
+  | 'agent.appApproveDetail'
 
 const supportedLocales: DesktopLocale[] = ['en', 'zh', 'zh-TW', 'ja', 'ko', 'fr', 'es', 'de', 'pt', 'ar']
 
@@ -254,6 +257,9 @@ const translations: Record<Exclude<DesktopLocale, 'ar'>, Record<TranslationKey, 
     'agent.screenApproveDetail': 'Allow for this session to let Hermes take screenshots and use the mouse and keyboard until this connection ends. A banner shows while it is active; you can stop it at any time.',
     'agent.overlayLabel': 'Hermes is controlling this screen',
     'agent.overlayStop': 'Stop',
+    'agent.appApproveTitle': 'App access request from the server',
+    'agent.appApproveMessage': 'The server wants to use an app on this computer.',
+    'agent.appApproveDetail': 'App: {app}\n"Allow for this session" lets Hermes use it until this connection ends.',
   },
   zh: {
     'tray.show': '显示 Core Hub',
@@ -379,6 +385,9 @@ const translations: Record<Exclude<DesktopLocale, 'ar'>, Record<TranslationKey, 
     'agent.screenApproveDetail': '选择“本次会话允许”后，Hermes 可在此连接结束前截图并使用鼠标和键盘。激活期间会显示横幅，你可以随时停止。',
     'agent.overlayLabel': 'Hermes 正在控制此屏幕',
     'agent.overlayStop': '停止',
+    'agent.appApproveTitle': '来自服务器的应用访问请求',
+    'agent.appApproveMessage': '服务器想使用这台电脑上的一个应用。',
+    'agent.appApproveDetail': '应用：{app}\n“本次会话允许”后，Hermes 可在此连接结束前使用它。',
   },
   'zh-TW': {
     'tray.show': '顯示 Core Hub',
@@ -504,6 +513,9 @@ const translations: Record<Exclude<DesktopLocale, 'ar'>, Record<TranslationKey, 
     'agent.screenApproveDetail': '選擇「本次工作階段允許」後，Hermes 可在此連線結束前截圖並使用滑鼠和鍵盤。啟用期間會顯示橫幅，你可以隨時停止。',
     'agent.overlayLabel': 'Hermes 正在控制此螢幕',
     'agent.overlayStop': '停止',
+    'agent.appApproveTitle': '來自伺服器的應用程式存取請求',
+    'agent.appApproveMessage': '伺服器想使用這台電腦上的一個應用程式。',
+    'agent.appApproveDetail': '應用程式：{app}\n「本次工作階段允許」後，Hermes 可在此連線結束前使用它。',
   },
   ja: {
     'tray.show': 'Core Hub を表示',
@@ -629,6 +641,9 @@ const translations: Record<Exclude<DesktopLocale, 'ar'>, Record<TranslationKey, 
     'agent.screenApproveDetail': '「このセッションでは許可」を選ぶと、この接続が終わるまで Hermes がスクリーンショットを撮り、マウスとキーボードを使えます。有効な間はバナーが表示され、いつでも停止できます。',
     'agent.overlayLabel': 'Hermes がこの画面を操作しています',
     'agent.overlayStop': '停止',
+    'agent.appApproveTitle': 'サーバーからのアプリアクセス要求',
+    'agent.appApproveMessage': 'サーバーがこのコンピューター上のアプリを使用しようとしています。',
+    'agent.appApproveDetail': 'アプリ: {app}\n「このセッションでは許可」を選ぶと、この接続が終わるまで Hermes が使用できます。',
   },
   ko: {
     'tray.show': 'Core Hub 표시',
@@ -754,6 +769,9 @@ const translations: Record<Exclude<DesktopLocale, 'ar'>, Record<TranslationKey, 
     'agent.screenApproveDetail': '"이 세션 동안 허용"을 선택하면 이 연결이 끝날 때까지 Hermes가 스크린샷을 찍고 마우스와 키보드를 사용할 수 있습니다. 활성 상태에서는 배너가 표시되며 언제든지 중지할 수 있습니다.',
     'agent.overlayLabel': 'Hermes가 이 화면을 제어하고 있습니다',
     'agent.overlayStop': '중지',
+    'agent.appApproveTitle': '서버의 앱 접근 요청',
+    'agent.appApproveMessage': '서버가 이 컴퓨터의 앱을 사용하려고 합니다.',
+    'agent.appApproveDetail': '앱: {app}\n"이 세션 동안 허용"을 선택하면 이 연결이 끝날 때까지 Hermes가 사용할 수 있습니다.',
   },
   fr: {
     'tray.show': 'Afficher Core Hub',
@@ -879,6 +897,9 @@ const translations: Record<Exclude<DesktopLocale, 'ar'>, Record<TranslationKey, 
     'agent.screenApproveDetail': '« Autoriser pour cette session » permet à Hermes de faire des captures et d’utiliser la souris et le clavier jusqu’à la fin de cette connexion. Un bandeau s’affiche pendant l’activité ; vous pouvez arrêter à tout moment.',
     'agent.overlayLabel': 'Hermes contrôle cet écran',
     'agent.overlayStop': 'Arrêter',
+    'agent.appApproveTitle': 'Demande d’accès à une application du serveur',
+    'agent.appApproveMessage': 'Le serveur souhaite utiliser une application sur cet ordinateur.',
+    'agent.appApproveDetail': 'Application : {app}\n« Autoriser pour cette session » permet à Hermes de l’utiliser jusqu’à la fin de cette connexion.',
   },
   es: {
     'tray.show': 'Mostrar Core Hub',
@@ -1004,6 +1025,9 @@ const translations: Record<Exclude<DesktopLocale, 'ar'>, Record<TranslationKey, 
     'agent.screenApproveDetail': '«Permitir en esta sesión» deja que Hermes haga capturas y use el ratón y el teclado hasta que termine esta conexión. Se muestra un aviso mientras está activo; puedes detenerlo en cualquier momento.',
     'agent.overlayLabel': 'Hermes está controlando esta pantalla',
     'agent.overlayStop': 'Detener',
+    'agent.appApproveTitle': 'Solicitud de acceso a una aplicación del servidor',
+    'agent.appApproveMessage': 'El servidor quiere usar una aplicación en este equipo.',
+    'agent.appApproveDetail': 'Aplicación: {app}\n«Permitir en esta sesión» deja que Hermes la use hasta que termine esta conexión.',
   },
   de: {
     'tray.show': 'Core Hub anzeigen',
@@ -1129,6 +1153,9 @@ const translations: Record<Exclude<DesktopLocale, 'ar'>, Record<TranslationKey, 
     'agent.screenApproveDetail': '„Für diese Sitzung erlauben“ lässt Hermes bis zum Ende dieser Verbindung Screenshots machen und Maus und Tastatur nutzen. Solange es aktiv ist, wird ein Banner angezeigt; du kannst jederzeit stoppen.',
     'agent.overlayLabel': 'Hermes steuert diesen Bildschirm',
     'agent.overlayStop': 'Stopp',
+    'agent.appApproveTitle': 'App-Zugriff vom Server angefragt',
+    'agent.appApproveMessage': 'Der Server möchte eine App auf diesem Computer verwenden.',
+    'agent.appApproveDetail': 'App: {app}\n„Für diese Sitzung erlauben“ lässt Hermes sie bis zum Ende dieser Verbindung verwenden.',
   },
   pt: {
     'tray.show': 'Mostrar Core Hub',
@@ -1254,6 +1281,9 @@ const translations: Record<Exclude<DesktopLocale, 'ar'>, Record<TranslationKey, 
     'agent.screenApproveDetail': '"Permitir nesta sessão" deixa o Hermes tirar capturas e usar o mouse e o teclado até esta conexão terminar. Um aviso aparece enquanto estiver ativo; você pode parar a qualquer momento.',
     'agent.overlayLabel': 'O Hermes está controlando esta tela',
     'agent.overlayStop': 'Parar',
+    'agent.appApproveTitle': 'Solicitação de acesso a um aplicativo do servidor',
+    'agent.appApproveMessage': 'O servidor quer usar um aplicativo neste computador.',
+    'agent.appApproveDetail': 'Aplicativo: {app}\n"Permitir nesta sessão" deixa o Hermes usá-lo até esta conexão terminar.',
   },
 }
 
@@ -1339,6 +1369,9 @@ const arabicTranslations: Partial<Record<TranslationKey, string>> = {
   'agent.screenApproveDetail': '«اسمح لهذه الجلسة» يتيح لـ Hermes أخذ لقطات واستخدام الفأرة ولوحة المفاتيح حتى انتهاء هذا الاتصال. يظهر شريط طوال فترة التفعيل ويمكنك الإيقاف في أي وقت.',
   'agent.overlayLabel': 'Hermes يتحكم بهذه الشاشة الآن',
   'agent.overlayStop': 'إيقاف',
+  'agent.appApproveTitle': 'طلب استخدام تطبيق من السيرفر',
+  'agent.appApproveMessage': 'يريد السيرفر استخدام تطبيق على هذا الجهاز.',
+  'agent.appApproveDetail': 'التطبيق: {app}\n«اسمح لهذه الجلسة» يتيح لـ Hermes استخدامه حتى انتهاء هذا الاتصال.',
 }
 
 function resolveLocale(): DesktopLocale {

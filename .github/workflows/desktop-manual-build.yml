@@ -189,8 +189,9 @@ jobs:
   mac-update-manifest:
     name: Repair macOS update manifest
     needs: [validate, desktop]
-    # Updater manifests are not produced in this fork (updater disabled).
-    if: false
+    if: needs.validate.outputs.target_os == 'darwin' && github.event.inputs.release_tag != ''
+    # Updater manifests are not produced in this fork (updater disabled); never fail the build on them.
+    continue-on-error: true
     runs-on: ubuntu-22.04
     steps:
       - name: Check macOS release asset completeness

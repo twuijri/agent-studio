@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import { arch, hostname, platform, release, type } from 'node:os'
 import { loadOrCreateDeviceIdentity, signDeviceChallenge, type DeviceIdentity } from './identity'
-import { DeviceAgentProtocol, type DeviceAgentAuditEntry, type DeviceAgentCapability, type DeviceAgentPolicy, type DeviceAgentProxyRequest, type DeviceAgentProxyResponse, type DeviceAgentScreenCapture } from './protocol'
+import { DeviceAgentProtocol, type DeviceAgentAuditEntry, type DeviceAgentCapability, type DeviceAgentPolicy, type DeviceAgentProxyRequest, type DeviceAgentProxyResponse, type DeviceAgentScreenCapture, type SharedAppDefinition } from './protocol'
 import type { DeviceAgentConfig } from './store'
 
 // The desktop Device Agent: pairs this machine with the linked Studio server
@@ -36,6 +36,8 @@ export interface DeviceAgentState {
   sessionApprovedAll: boolean
   /** The user allowed screen access for this connection session. */
   screenSessionApproved: boolean
+  /** Apps the user approved for this connection session. */
+  approvedAppIds: string[]
 }
 
 export interface DeviceAgentDependencies {
@@ -47,6 +49,8 @@ export interface DeviceAgentDependencies {
   approveExec: (request: { command: string; args: string[]; cwd: string }) => Promise<ExecApprovalDecision>
   /** Ask once per session before the server may capture or drive the screen. */
   approveScreen?: () => Promise<boolean>
+  /** Ask once per session before the server may use a shared app. */
+  approveApp?: (app: SharedAppDefinition) => Promise<boolean>
   browserProxy?: (request: DeviceAgentProxyRequest) => Promise<DeviceAgentProxyResponse>
   screen?: {
     capture: (options: { displayId?: string; maxWidth?: number }) => Promise<DeviceAgentScreenCapture>
@@ -116,7 +120,37 @@ export class DeviceAgent extends EventEmitter {
       reconnectAttempt: 0,
       sessionApprovedAll: false,
       screenSessionApproved: false,
+      approvedAppIds: [],
     }
+  }
+
+  /** Apps currently shared (enabled) with the server. */
+  sharedApps(): SharedAppDefinition[] {
+    return this.state.config.sharedApps.filter(app => app.enabled).map(app => ({
+      id: app.id, name: app.name, command: app.command, args: [...app.args], env: { ...app.env }, cwd: app.cwd,
+    }))
+  }
+
+  /** Announce the shared app list to the server (on connect and when it changes). */
+  private announceApps(): void {
+    const ws = this.ws
+    if (!ws || ws.readyState !== 1) return
+    ws.send(JSON.stringify({
+      type: 'device.apps',
+      apps: this.state.config.sharedApps.filter(app => app.enabled).map(app => ({ id: app.id, name: app.name, source: app.source })),
+    }))
+  }
+
+  /** Replace the shared app list; announces the change when connected. */
+  async setSharedApps(apps: DeviceAgentConfig['sharedApps']): Promise<DeviceAgentState> {
+    const next = this.deps.saveConfig({ ...this.state.config, sharedApps: apps })
+    const hadApps = this.state.config.capabilities.apps
+    this.setState({ config: next })
+    if (next.sharedApps.some(app => app.enabled) !== hadApps) {
+      return this.setConfig({ capabilities: { ...next.capabilities, apps: next.sharedApps.some(app => app.enabled) } })
+    }
+    this.announceApps()
+    return this.getState()
   }
 
   /** Withdraw screen access for the rest of this session (the on-screen "stop" control). */
@@ -166,6 +200,7 @@ export class DeviceAgent extends EventEmitter {
     if (this.state.config.capabilities.files) list.push('files')
     if (this.state.config.capabilities.browser && this.deps.browserProxy) list.push('browser')
     if (this.state.config.capabilities.screen && this.deps.screen) list.push('screen')
+    if (this.state.config.capabilities.apps && this.state.config.sharedApps.some(app => app.enabled)) list.push('apps')
     return list
   }
 
@@ -179,6 +214,17 @@ export class DeviceAgent extends EventEmitter {
         const decision = await this.deps.approveExec(request)
         if (decision === 'allow-session') this.setState({ sessionApprovedAll: true })
         return decision !== 'deny'
+      },
+      apps: this.sharedApps(),
+      approveApp: async app => {
+        if (this.state.approvedAppIds.includes(app.id)) return true
+        if (this.state.config.approvalMode === 'always') {
+          this.setState({ approvedAppIds: [...this.state.approvedAppIds, app.id] })
+          return true
+        }
+        const approved = this.deps.approveApp ? await this.deps.approveApp(app) : false
+        if (approved) this.setState({ approvedAppIds: [...this.state.approvedAppIds, app.id] })
+        return approved
       },
       approveScreen: async () => {
         if (this.state.screenSessionApproved) return true
@@ -218,7 +264,7 @@ export class DeviceAgent extends EventEmitter {
     this.stopped = true
     this.clearTimers()
     this.closeSocket()
-    this.setState({ status: this.state.config.enabled ? 'offline' : 'disabled', connectedAt: null, sessionApprovedAll: false, screenSessionApproved: false })
+    this.setState({ status: this.state.config.enabled ? 'offline' : 'disabled', connectedAt: null, sessionApprovedAll: false, screenSessionApproved: false, approvedAppIds: [] })
   }
 
   async setConfig(patch: Partial<Pick<DeviceAgentConfig, 'enabled' | 'capabilities' | 'allowedFolders' | 'approvalMode'>>): Promise<DeviceAgentState> {
@@ -403,6 +449,7 @@ export class DeviceAgent extends EventEmitter {
       if (this.ws !== ws) return
       this.log(`connected to ${this.state.serverUrl}`)
       this.setState({ status: 'connected', connectedAt: Date.now(), reconnectAttempt: 0, lastError: null })
+      this.announceApps()
     })
     ws.addEventListener('message', event => {
       if (this.ws !== ws) return
@@ -419,7 +466,7 @@ export class DeviceAgent extends EventEmitter {
       this.ws = null
       this.protocol = null
       this.log(`disconnected (${event.code})`)
-      this.setState({ status: 'offline', connectedAt: null, sessionApprovedAll: false, screenSessionApproved: false })
+      this.setState({ status: 'offline', connectedAt: null, sessionApprovedAll: false, screenSessionApproved: false, approvedAppIds: [] })
       if (!this.stopped) this.scheduleReconnect()
     })
   }
