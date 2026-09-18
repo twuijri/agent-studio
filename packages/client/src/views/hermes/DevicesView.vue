@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { NButton, NDrawer, NDrawerContent, NInput, NModal, NPopconfirm, NSelect, NSpin, NTag, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { copyToClipboard } from '@/utils/clipboard'
@@ -27,6 +27,7 @@ import {
   type LanPeerConnectionInfo,
 } from '@/api/studio/devices'
 import { fetchProfiles } from '@/api/hermes/profiles'
+import { desktopDeviceAgentBridge, type DesktopDeviceAgentSnapshot } from '@/utils/desktop-bridge'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -48,6 +49,26 @@ const showPairingCodeModal = ref(false)
 const pairingCodeInput = ref('')
 const pendingPairingDevice = ref<LanDeviceInfo | null>(null)
 // Devices that dialled in and let this Studio operate them (desktop Device Agent).
+// Running inside the desktop app linked to this server: offer the Device Access page here too.
+const deviceAgentBridge = desktopDeviceAgentBridge()
+const thisComputer = ref<DesktopDeviceAgentSnapshot | null>(null)
+let stopThisComputerUpdates: (() => void) | null = null
+const thisComputerStatusLabel = computed(() => {
+  const status = thisComputer.value?.status
+  if (status === 'connected') return t('devices.thisComputer.connected')
+  if (status === 'pending') return t('devices.thisComputer.pending')
+  if (status === 'connecting' || status === 'offline') return t('devices.thisComputer.connecting')
+  return t('devices.thisComputer.notLinked')
+})
+const thisComputerTagType = computed(() => {
+  const status = thisComputer.value?.status
+  if (status === 'connected') return 'success'
+  if (status === 'pending' || status === 'connecting' || status === 'offline') return 'warning'
+  return 'default'
+})
+function openThisComputerAccess() {
+  deviceAgentBridge?.openSettings().catch(() => undefined)
+}
 const linkedConnections = ref<LanPeerConnectionInfo[]>([])
 const disconnectingConnectionId = ref('')
 // Which Hermes profiles may use each linked device (empty = every profile).
@@ -341,7 +362,13 @@ async function requestManualPairing() {
   }
 }
 
+onBeforeUnmount(() => { stopThisComputerUpdates?.() })
+
 onMounted(() => {
+  if (deviceAgentBridge) {
+    deviceAgentBridge.getState().then(state => { thisComputer.value = state }).catch(() => undefined)
+    stopThisComputerUpdates = deviceAgentBridge.onState?.(state => { thisComputer.value = state }) ?? null
+  }
   void loadDevices()
 })
 </script>
@@ -384,6 +411,18 @@ onMounted(() => {
 
     <NSpin :show="loading" class="devices-spin">
       <div class="devices-content">
+        <section v-if="deviceAgentBridge" class="this-computer" data-testid="this-computer">
+          <div class="this-computer-text">
+            <div class="this-computer-title">
+              {{ t('devices.thisComputer.title', { name: thisComputer?.computerName || '' }) }}
+              <NTag size="small" :type="thisComputerTagType" round>{{ thisComputerStatusLabel }}</NTag>
+            </div>
+            <div class="this-computer-hint">{{ t('devices.thisComputer.hint') }}</div>
+          </div>
+          <NButton size="small" type="primary" data-testid="this-computer-open" @click="openThisComputerAccess">
+            {{ thisComputer?.status === 'connected' ? t('devices.thisComputer.manage') : t('devices.thisComputer.link') }}
+          </NButton>
+        </section>
         <section v-if="linkedConnections.length > 0" class="linked-devices" data-testid="linked-devices">
           <h3 class="linked-title">{{ t('devices.linked.title') }}</h3>
           <p class="linked-subtitle">{{ t('devices.linked.subtitle') }}</p>
@@ -401,6 +440,10 @@ onMounted(() => {
                   {{ capabilityLabel(capability) }}
                 </NTag>
                 <span v-if="!connection.capabilities?.length" class="linked-none">{{ t('devices.linked.noCapabilities') }}</span>
+              </div>
+              <div v-if="connection.workspace" class="linked-workspace">
+                <span class="linked-binding-label">{{ t('devices.linked.workspace') }}</span>
+                <code>{{ connection.workspace }}</code>
               </div>
               <div class="linked-binding">
                 <span class="linked-binding-label">{{ t('devices.linked.profiles') }}</span>
@@ -856,6 +899,20 @@ onMounted(() => {
   color: var(--text-secondary, #888);
 }
 
+.linked-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.linked-workspace code {
+  direction: ltr;
+  unicode-bidi: isolate;
+  word-break: break-all;
+}
+
 .linked-binding {
   display: flex;
   flex-direction: column;
@@ -866,6 +923,31 @@ onMounted(() => {
 .linked-binding-label {
   font-size: 12px;
   font-weight: 600;
+}
+
+.this-computer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color, rgba(128, 128, 128, 0.25));
+  border-radius: 10px;
+}
+
+.this-computer-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.this-computer-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #888);
 }
 
 </style>

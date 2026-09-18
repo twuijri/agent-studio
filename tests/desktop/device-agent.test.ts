@@ -298,3 +298,14 @@ describe('device agent pairing and connection', () => {
     expect(agent.getState().sessionApprovedAll).toBe(false)
   })
 })
+
+describe('default workspace on first pairing', () => {
+  it('creates ~/Core Hub, enables commands and files, and declares the workspace at handshake', () => {
+    const mainSource = readFileSync(join(process.cwd(), 'packages/desktop/src/main/index.ts'), 'utf8')
+    expect(mainSource).toContain("export const DEFAULT_DEVICE_WORKSPACE_DIR_NAME = 'Core Hub'")
+    expect(mainSource).toContain('await ensureDefaultDeviceWorkspace(agent)')
+    expect(mainSource).toContain('capabilities: { ...config.capabilities, exec: true, files: true }')
+    const agentSource = readFileSync(join(process.cwd(), 'packages/desktop/src/main/device-agent/agent.ts'), 'utf8')
+    expect(agentSource).toContain("url.searchParams.set('workspace', this.state.config.allowedFolders[0])")
+  })
+})

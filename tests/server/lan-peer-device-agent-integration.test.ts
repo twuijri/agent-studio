@@ -94,7 +94,7 @@ describe('desktop Device Agent against the real peer socket manager', () => {
 
     const connections = manager.listConnections()
     expect(connections).toHaveLength(1)
-    expect(connections[0]).toMatchObject({ role: 'server', device_id: approvedDeviceId, controllable: true, capabilities: ['exec', 'files'] })
+    expect(connections[0]).toMatchObject({ role: 'server', device_id: approvedDeviceId, controllable: true, capabilities: ['exec', 'files'], workspace: shared })
     const connectionId = connections[0].id
 
     const tools = getLanPeerToolsService()
