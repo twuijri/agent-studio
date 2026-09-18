@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { NButton, NModal, useMessage, NTag } from "naive-ui";
@@ -16,7 +16,7 @@ import {
   isStoredSuperAdmin,
 } from "@/api/client";
 import { clearThemeBackgroundCache } from "@/api/studio/theme";
-import { maybeAutoPairDesktopDevice } from "@/utils/desktop-device-autopair";
+import { watchDesktopDeviceAutoPair } from "@/utils/desktop-device-autopair";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -38,7 +38,9 @@ const isDesktopShell = computed(() => {
 });
 const showChangelog = ref(false);
 // Linked desktop app: request device pairing automatically; the owner approves on the server.
-onMounted(() => { void maybeAutoPairDesktopDevice(); });
+let stopAutoPairWatch: (() => void) | null = null;
+onMounted(() => { stopAutoPairWatch = watchDesktopDeviceAutoPair(); });
+onBeforeUnmount(() => { stopAutoPairWatch?.(); stopAutoPairWatch = null; });
 const showDockerUpdateTip = ref(false);
 const isDockerRuntime = computed(() => appStore.isDocker);
 
