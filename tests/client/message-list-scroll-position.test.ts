@@ -160,16 +160,23 @@ describe('MessageList session scroll position', () => {
     expect(wrapper.getComponent({ name: 'VirtualMessageList' }).props('virtualized')).toBe(false)
   })
 
-  it('shows Ekko while the session is pending, then displays the loaded Agent', async () => {
+  it('shows the composer agent (Hermes by default) while the session is pending, then displays the loaded Agent', async () => {
     const chatStore = useChatStore()
     chatStore.activeSessionId = 'pending-session'
     chatStore.activeSession = null
     const wrapper = mount(MessageList, { global: { stubs: { Transition: false } } })
     await flushSessionScroll()
 
-    expect(wrapper.get('.empty-logo').attributes('src')).toBe('/coding-agents/ekko-agent.png')
-    expect(wrapper.get('.empty-logo').attributes('alt')).toBe('Ekko')
-    expect(wrapper.get('.empty-state p').text()).toBe('chat.emptyStateAgent')
+    // Core Hub: a new chat runs with Hermes unless the composer picks another agent.
+    expect(wrapper.get('.empty-logo').attributes('src')).toBe('/coding-agents/hermes.png')
+    expect(wrapper.get('.empty-logo').attributes('alt')).toBe('Hermes')
+    expect(wrapper.get('.empty-state p').text()).toBe('chat.emptyState')
+
+    const ekko = mount(MessageList, { props: { newChatAgent: 'ekko-agent' }, global: { stubs: { Transition: false } } })
+    await flushSessionScroll()
+    expect(ekko.get('.empty-logo').attributes('alt')).toBe('Ekko')
+    expect(ekko.get('.empty-state p').text()).toBe('chat.emptyStateAgent')
+    ekko.unmount()
 
     chatStore.activeSession = {
       ...makeSession('pending-session'),
