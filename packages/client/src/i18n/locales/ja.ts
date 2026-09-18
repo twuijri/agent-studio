@@ -2030,6 +2030,11 @@ export default {
       linkOpenTargetHint: 'メッセージと Markdown プレビュー内のリンクを開く場所を選択します。',
       linkOpenTargetHermesStudio: 'Core Hub',
       linkOpenTargetDefaultBrowser: '既定のブラウザ',
+      connectionMode: 'アプリの接続',
+      connectionModeHint: 'このデスクトップアプリが Hermes を実行する場所: このコンピューター上、または自分の Core Hub サーバーに接続。変更するとアプリが再起動します。',
+      connectionModeLocal: 'このコンピューター上',
+      connectionModeServer: '{url} に接続中',
+      connectionModeChange: '変更...',
     },
     agent: {
       maxTurns: '最大ターン数',

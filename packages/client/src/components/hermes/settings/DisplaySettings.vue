@@ -6,7 +6,7 @@ import { useSettingsStore } from '@/stores/hermes/settings'
 import { primeCompletionSound } from '@/utils/completion-sound'
 import { requestCompletionNotificationPermission, showCompletionNotification, showSystemNotification, type CompletionNotificationPermissionResult } from '@/utils/completion-notification'
 import { clampChatInputHeight, MAX_CHAT_INPUT_HEIGHT, MIN_CHAT_INPUT_HEIGHT } from '@/utils/chat-input-height'
-import { isDesktopShell } from '@/utils/desktop-bridge'
+import { canOpenDesktopConnectionSettings, desktopBridge, desktopConnectionMode, isDesktopShell } from '@/utils/desktop-bridge'
 import { getLinkOpenTarget, setLinkOpenTarget, type LinkOpenTarget } from '@/utils/desktop-browser'
 import SettingRow from './SettingRow.vue'
 
@@ -15,6 +15,21 @@ const message = useMessage()
 const { t } = useI18n()
 const chatInputHeight = computed(() => clampChatInputHeight(settingsStore.display.chat_input_height))
 const desktopLinkSettingsAvailable = isDesktopShell()
+const connectionModeAvailable = canOpenDesktopConnectionSettings()
+const connectionModeServerUrl = ref<string | null>(null)
+const connectionModeLabel = computed(() => (
+  desktopConnectionMode() === 'server'
+    ? t('settings.display.connectionModeServer', { url: connectionModeServerUrl.value || '' })
+    : t('settings.display.connectionModeLocal')
+))
+if (connectionModeAvailable) {
+  desktopBridge()?.desktopMode?.get()
+    .then(snapshot => { connectionModeServerUrl.value = snapshot?.serverUrl ?? null })
+    .catch(() => undefined)
+}
+function openConnectionSettings() {
+  desktopBridge()?.desktopMode?.openSettings().catch(() => undefined)
+}
 const linkOpenTarget = ref<LinkOpenTarget>(getLinkOpenTarget())
 const linkOpenTargetOptions = computed(() => [
   { label: t('settings.display.linkOpenTargetHermesStudio'), value: 'hermes-studio' as const },
@@ -189,6 +204,18 @@ async function testCompletionNotification() {
         @update:value="handleLinkOpenTargetChange"
       />
     </SettingRow>
+    <SettingRow
+      v-if="connectionModeAvailable"
+      :label="t('settings.display.connectionMode')"
+      :hint="t('settings.display.connectionModeHint')"
+    >
+      <div class="connection-mode-controls">
+        <span class="connection-mode-current" data-testid="connection-mode-current">{{ connectionModeLabel }}</span>
+        <NButton size="small" data-testid="connection-mode-change" @click="openConnectionSettings">
+          {{ t('settings.display.connectionModeChange') }}
+        </NButton>
+      </div>
+    </SettingRow>
     <SettingRow :label="t('settings.display.bellOnComplete')" :hint="t('settings.display.bellOnCompleteHint')">
       <NSwitch :value="settingsStore.display.bell_on_complete" @update:value="v => save({ bell_on_complete: v })" />
     </SettingRow>
@@ -238,6 +265,19 @@ async function testCompletionNotification() {
 
 .settings-section {
   margin-top: 16px;
+}
+
+.connection-mode-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.connection-mode-current {
+  font-size: 13px;
+  color: var(--text-secondary, #888);
+  word-break: break-all;
 }
 
 .notify-controls {

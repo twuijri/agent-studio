@@ -120,6 +120,23 @@ export interface DesktopBrowserBridge {
   onStateChange: (callback: (state: DesktopBrowserState) => void) => () => void
 }
 
+export type DesktopConnectionMode = 'local' | 'server'
+
+export interface DesktopModeSnapshot {
+  mode: DesktopConnectionMode
+  serverUrl: string | null
+  source: 'default' | 'file' | 'env'
+  locked: boolean
+}
+
+export interface DesktopModeBridge {
+  get: () => Promise<DesktopModeSnapshot>
+  probe: (url: string) => Promise<{ ok: boolean; url: string; status?: number; error?: string }>
+  apply: (config: { mode: DesktopConnectionMode; serverUrl?: string | null }) => Promise<boolean>
+  openSettings: () => Promise<boolean>
+  close: () => Promise<boolean>
+}
+
 export interface HermesDesktopBridge {
   getToken: () => Promise<string>
   ensureAuth?: () => Promise<boolean>
@@ -140,6 +157,9 @@ export interface HermesDesktopBridge {
   platform: string
   isDesktop: boolean
   windowKind?: 'main' | 'pet' | 'chat'
+  /** Connection mode of the desktop shell; absent on builds before server mode existed (= local). */
+  mode?: DesktopConnectionMode
+  desktopMode?: DesktopModeBridge
 }
 
 export type WindowWithHermesDesktop = Window & typeof globalThis & {
@@ -168,6 +188,30 @@ export function hasDesktopBrowserBridge(): boolean {
 
 export function isDesktopShell(): boolean {
   return desktopBridge()?.isDesktop === true
+}
+
+/**
+ * `local`  — the shell runs the bundled Web UI with Hermes on this machine.
+ * `server` — the shell shows a linked Studio server; local-only affordances
+ *            (runtime picker, default-login shortcuts, agent browser) do not apply.
+ * `null`   — not running inside the desktop shell.
+ */
+export function desktopConnectionMode(): DesktopConnectionMode | null {
+  const bridge = desktopBridge()
+  if (bridge?.isDesktop !== true) return null
+  return bridge.mode === 'server' ? 'server' : 'local'
+}
+
+export function isDesktopServerLinked(): boolean {
+  return desktopConnectionMode() === 'server'
+}
+
+export function isDesktopLocalRuntime(): boolean {
+  return desktopConnectionMode() === 'local'
+}
+
+export function canOpenDesktopConnectionSettings(): boolean {
+  return typeof desktopBridge()?.desktopMode?.openSettings === 'function'
 }
 
 export function isDesktopPetWindow(): boolean {

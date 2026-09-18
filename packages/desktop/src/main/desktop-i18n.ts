@@ -1,6 +1,6 @@
 import { app } from 'electron'
 
-type DesktopLocale = 'en' | 'zh' | 'zh-TW' | 'ja' | 'ko' | 'fr' | 'es' | 'de' | 'pt'
+export type DesktopLocale = 'en' | 'zh' | 'zh-TW' | 'ja' | 'ko' | 'fr' | 'es' | 'de' | 'pt' | 'ar'
 
 type TranslationKey =
   | 'tray.show'
@@ -57,10 +57,32 @@ type TranslationKey =
   | 'loginReset.successMessage'
   | 'loginReset.failedTitle'
   | 'loginReset.failedMessage'
+  | 'tray.connectionMode'
+  | 'mode.title'
+  | 'mode.intro'
+  | 'mode.localTitle'
+  | 'mode.localDetail'
+  | 'mode.serverTitle'
+  | 'mode.serverDetail'
+  | 'mode.serverUrlLabel'
+  | 'mode.serverUrlPlaceholder'
+  | 'mode.testConnection'
+  | 'mode.testing'
+  | 'mode.testOk'
+  | 'mode.testFailed'
+  | 'mode.apply'
+  | 'mode.restarting'
+  | 'mode.lockedByEnv'
+  | 'mode.currentLocal'
+  | 'mode.currentServer'
+  | 'desktop.connectingToServer'
+  | 'desktop.failedReachServer'
+  | 'desktop.changeConnectionMode'
+  | 'common.retry'
 
-const supportedLocales: DesktopLocale[] = ['en', 'zh', 'zh-TW', 'ja', 'ko', 'fr', 'es', 'de', 'pt']
+const supportedLocales: DesktopLocale[] = ['en', 'zh', 'zh-TW', 'ja', 'ko', 'fr', 'es', 'de', 'pt', 'ar']
 
-const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
+const translations: Record<Exclude<DesktopLocale, 'ar'>, Record<TranslationKey, string>> = {
   en: {
     'tray.show': 'Show Core Hub',
     'tray.hide': 'Hide Core Hub',
@@ -116,6 +138,28 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'loginReset.successMessage': 'Login has been reset to {username} / {password}.',
     'loginReset.failedTitle': 'Login reset failed',
     'loginReset.failedMessage': 'Could not reset the desktop login.',
+    'tray.connectionMode': 'Connection mode...',
+    'mode.title': 'How should Core Hub run?',
+    'mode.intro': 'Choose where Hermes, models and your data run. You can change this later from the tray menu or Settings.',
+    'mode.localTitle': 'On this computer',
+    'mode.localDetail': 'Run Hermes, models and data locally, as before.',
+    'mode.serverTitle': 'Connected to my server',
+    'mode.serverDetail': 'Use the Hermes, models and memory of a Core Hub server you own. This app becomes its desktop client.',
+    'mode.serverUrlLabel': 'Server address',
+    'mode.serverUrlPlaceholder': 'https://studio.example.com',
+    'mode.testConnection': 'Test connection',
+    'mode.testing': 'Testing...',
+    'mode.testOk': 'Server reachable.',
+    'mode.testFailed': 'Could not reach the server: {error}',
+    'mode.apply': 'Apply and restart',
+    'mode.restarting': 'Applying the connection mode and restarting...',
+    'mode.lockedByEnv': 'The connection mode is fixed by environment variables on this machine.',
+    'mode.currentLocal': 'Current: on this computer',
+    'mode.currentServer': 'Current: connected to {url}',
+    'desktop.connectingToServer': 'Connecting to {url}...',
+    'desktop.failedReachServer': 'Could not reach the server',
+    'desktop.changeConnectionMode': 'Change connection mode',
+    'common.retry': 'Retry',
   },
   zh: {
     'tray.show': '显示 Core Hub',
@@ -172,6 +216,28 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'loginReset.successMessage': '登录已重置为 {username} / {password}。',
     'loginReset.failedTitle': '重置登录失败',
     'loginReset.failedMessage': '无法重置桌面端登录。',
+    'tray.connectionMode': '连接模式...',
+    'mode.title': 'Core Hub 应如何运行？',
+    'mode.intro': '选择 Hermes、模型和数据的运行位置。之后可在托盘菜单或设置中更改。',
+    'mode.localTitle': '在这台电脑上',
+    'mode.localDetail': '像以前一样在本地运行 Hermes、模型和数据。',
+    'mode.serverTitle': '连接到我的服务器',
+    'mode.serverDetail': '使用你自己的 Core Hub 服务器上的 Hermes、模型和记忆。此应用将成为它的桌面客户端。',
+    'mode.serverUrlLabel': '服务器地址',
+    'mode.serverUrlPlaceholder': 'https://studio.example.com',
+    'mode.testConnection': '测试连接',
+    'mode.testing': '正在测试...',
+    'mode.testOk': '服务器可访问。',
+    'mode.testFailed': '无法访问服务器：{error}',
+    'mode.apply': '应用并重启',
+    'mode.restarting': '正在应用连接模式并重启...',
+    'mode.lockedByEnv': '此设备的连接模式由环境变量固定。',
+    'mode.currentLocal': '当前：在这台电脑上',
+    'mode.currentServer': '当前：已连接到 {url}',
+    'desktop.connectingToServer': '正在连接 {url}...',
+    'desktop.failedReachServer': '无法访问服务器',
+    'desktop.changeConnectionMode': '更改连接模式',
+    'common.retry': '重试',
   },
   'zh-TW': {
     'tray.show': '顯示 Core Hub',
@@ -228,6 +294,28 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'loginReset.successMessage': '登入已重置為 {username} / {password}。',
     'loginReset.failedTitle': '重置登入失敗',
     'loginReset.failedMessage': '無法重置桌面端登入。',
+    'tray.connectionMode': '連線模式...',
+    'mode.title': 'Core Hub 應如何執行？',
+    'mode.intro': '選擇 Hermes、模型與資料的執行位置。之後可在系統匣選單或設定中變更。',
+    'mode.localTitle': '在這台電腦上',
+    'mode.localDetail': '像以前一樣在本機執行 Hermes、模型與資料。',
+    'mode.serverTitle': '連線到我的伺服器',
+    'mode.serverDetail': '使用你自己的 Core Hub 伺服器上的 Hermes、模型與記憶。此應用程式將成為它的桌面用戶端。',
+    'mode.serverUrlLabel': '伺服器位址',
+    'mode.serverUrlPlaceholder': 'https://studio.example.com',
+    'mode.testConnection': '測試連線',
+    'mode.testing': '測試中...',
+    'mode.testOk': '伺服器可連線。',
+    'mode.testFailed': '無法連線到伺服器：{error}',
+    'mode.apply': '套用並重新啟動',
+    'mode.restarting': '正在套用連線模式並重新啟動...',
+    'mode.lockedByEnv': '此裝置的連線模式由環境變數固定。',
+    'mode.currentLocal': '目前：在這台電腦上',
+    'mode.currentServer': '目前：已連線到 {url}',
+    'desktop.connectingToServer': '正在連線 {url}...',
+    'desktop.failedReachServer': '無法連線到伺服器',
+    'desktop.changeConnectionMode': '變更連線模式',
+    'common.retry': '重試',
   },
   ja: {
     'tray.show': 'Core Hub を表示',
@@ -284,6 +372,28 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'loginReset.successMessage': 'Login has been reset to {username} / {password}.',
     'loginReset.failedTitle': 'Login reset failed',
     'loginReset.failedMessage': 'Could not reset the desktop login.',
+    'tray.connectionMode': '接続モード...',
+    'mode.title': 'Core Hub をどのように実行しますか？',
+    'mode.intro': 'Hermes、モデル、データをどこで実行するか選択します。後でトレイメニューまたは設定から変更できます。',
+    'mode.localTitle': 'このコンピューター上',
+    'mode.localDetail': 'これまで通り Hermes、モデル、データをローカルで実行します。',
+    'mode.serverTitle': '自分のサーバーに接続',
+    'mode.serverDetail': '自分の Core Hub サーバー上の Hermes、モデル、メモリを使用します。このアプリはそのデスクトップクライアントになります。',
+    'mode.serverUrlLabel': 'サーバーアドレス',
+    'mode.serverUrlPlaceholder': 'https://studio.example.com',
+    'mode.testConnection': '接続をテスト',
+    'mode.testing': 'テスト中...',
+    'mode.testOk': 'サーバーに接続できます。',
+    'mode.testFailed': 'サーバーに接続できません: {error}',
+    'mode.apply': '適用して再起動',
+    'mode.restarting': '接続モードを適用して再起動しています...',
+    'mode.lockedByEnv': 'このマシンでは接続モードが環境変数で固定されています。',
+    'mode.currentLocal': '現在: このコンピューター上',
+    'mode.currentServer': '現在: {url} に接続中',
+    'desktop.connectingToServer': '{url} に接続しています...',
+    'desktop.failedReachServer': 'サーバーに接続できません',
+    'desktop.changeConnectionMode': '接続モードを変更',
+    'common.retry': '再試行',
   },
   ko: {
     'tray.show': 'Core Hub 표시',
@@ -340,6 +450,28 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'loginReset.successMessage': 'Login has been reset to {username} / {password}.',
     'loginReset.failedTitle': 'Login reset failed',
     'loginReset.failedMessage': 'Could not reset the desktop login.',
+    'tray.connectionMode': '연결 모드...',
+    'mode.title': 'Core Hub를 어떻게 실행할까요?',
+    'mode.intro': 'Hermes, 모델, 데이터를 실행할 위치를 선택하세요. 나중에 트레이 메뉴나 설정에서 변경할 수 있습니다.',
+    'mode.localTitle': '이 컴퓨터에서',
+    'mode.localDetail': '이전처럼 Hermes, 모델, 데이터를 로컬에서 실행합니다.',
+    'mode.serverTitle': '내 서버에 연결',
+    'mode.serverDetail': '내 Core Hub 서버의 Hermes, 모델, 메모리를 사용합니다. 이 앱은 해당 서버의 데스크톱 클라이언트가 됩니다.',
+    'mode.serverUrlLabel': '서버 주소',
+    'mode.serverUrlPlaceholder': 'https://studio.example.com',
+    'mode.testConnection': '연결 테스트',
+    'mode.testing': '테스트 중...',
+    'mode.testOk': '서버에 연결할 수 있습니다.',
+    'mode.testFailed': '서버에 연결할 수 없습니다: {error}',
+    'mode.apply': '적용 후 다시 시작',
+    'mode.restarting': '연결 모드를 적용하고 다시 시작하는 중...',
+    'mode.lockedByEnv': '이 컴퓨터의 연결 모드는 환경 변수로 고정되어 있습니다.',
+    'mode.currentLocal': '현재: 이 컴퓨터에서',
+    'mode.currentServer': '현재: {url}에 연결됨',
+    'desktop.connectingToServer': '{url}에 연결하는 중...',
+    'desktop.failedReachServer': '서버에 연결할 수 없습니다',
+    'desktop.changeConnectionMode': '연결 모드 변경',
+    'common.retry': '다시 시도',
   },
   fr: {
     'tray.show': 'Afficher Core Hub',
@@ -396,6 +528,28 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'loginReset.successMessage': 'Login has been reset to {username} / {password}.',
     'loginReset.failedTitle': 'Login reset failed',
     'loginReset.failedMessage': 'Could not reset the desktop login.',
+    'tray.connectionMode': 'Mode de connexion...',
+    'mode.title': 'Comment Core Hub doit-il fonctionner ?',
+    'mode.intro': 'Choisissez où s’exécutent Hermes, les modèles et vos données. Vous pourrez le changer plus tard depuis le menu de la barre d’état ou les Réglages.',
+    'mode.localTitle': 'Sur cet ordinateur',
+    'mode.localDetail': 'Exécuter Hermes, les modèles et les données en local, comme avant.',
+    'mode.serverTitle': 'Connecté à mon serveur',
+    'mode.serverDetail': 'Utiliser Hermes, les modèles et la mémoire d’un serveur Core Hub qui vous appartient. Cette application devient son client de bureau.',
+    'mode.serverUrlLabel': 'Adresse du serveur',
+    'mode.serverUrlPlaceholder': 'https://studio.example.com',
+    'mode.testConnection': 'Tester la connexion',
+    'mode.testing': 'Test en cours...',
+    'mode.testOk': 'Serveur joignable.',
+    'mode.testFailed': 'Impossible de joindre le serveur : {error}',
+    'mode.apply': 'Appliquer et redémarrer',
+    'mode.restarting': 'Application du mode de connexion et redémarrage...',
+    'mode.lockedByEnv': 'Le mode de connexion est fixé par des variables d’environnement sur cette machine.',
+    'mode.currentLocal': 'Actuel : sur cet ordinateur',
+    'mode.currentServer': 'Actuel : connecté à {url}',
+    'desktop.connectingToServer': 'Connexion à {url}...',
+    'desktop.failedReachServer': 'Impossible de joindre le serveur',
+    'desktop.changeConnectionMode': 'Changer le mode de connexion',
+    'common.retry': 'Réessayer',
   },
   es: {
     'tray.show': 'Mostrar Core Hub',
@@ -452,6 +606,28 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'loginReset.successMessage': 'Login has been reset to {username} / {password}.',
     'loginReset.failedTitle': 'Login reset failed',
     'loginReset.failedMessage': 'Could not reset the desktop login.',
+    'tray.connectionMode': 'Modo de conexión...',
+    'mode.title': '¿Cómo debe funcionar Core Hub?',
+    'mode.intro': 'Elige dónde se ejecutan Hermes, los modelos y tus datos. Puedes cambiarlo después desde el menú de la bandeja o los Ajustes.',
+    'mode.localTitle': 'En este equipo',
+    'mode.localDetail': 'Ejecutar Hermes, los modelos y los datos en local, como antes.',
+    'mode.serverTitle': 'Conectado a mi servidor',
+    'mode.serverDetail': 'Usar Hermes, los modelos y la memoria de un servidor Core Hub propio. Esta aplicación se convierte en su cliente de escritorio.',
+    'mode.serverUrlLabel': 'Dirección del servidor',
+    'mode.serverUrlPlaceholder': 'https://studio.example.com',
+    'mode.testConnection': 'Probar conexión',
+    'mode.testing': 'Probando...',
+    'mode.testOk': 'Servidor accesible.',
+    'mode.testFailed': 'No se pudo conectar con el servidor: {error}',
+    'mode.apply': 'Aplicar y reiniciar',
+    'mode.restarting': 'Aplicando el modo de conexión y reiniciando...',
+    'mode.lockedByEnv': 'El modo de conexión está fijado por variables de entorno en este equipo.',
+    'mode.currentLocal': 'Actual: en este equipo',
+    'mode.currentServer': 'Actual: conectado a {url}',
+    'desktop.connectingToServer': 'Conectando con {url}...',
+    'desktop.failedReachServer': 'No se pudo conectar con el servidor',
+    'desktop.changeConnectionMode': 'Cambiar el modo de conexión',
+    'common.retry': 'Reintentar',
   },
   de: {
     'tray.show': 'Core Hub anzeigen',
@@ -508,6 +684,28 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'loginReset.successMessage': 'Login has been reset to {username} / {password}.',
     'loginReset.failedTitle': 'Login reset failed',
     'loginReset.failedMessage': 'Could not reset the desktop login.',
+    'tray.connectionMode': 'Verbindungsmodus...',
+    'mode.title': 'Wie soll Core Hub laufen?',
+    'mode.intro': 'Wähle, wo Hermes, Modelle und deine Daten laufen. Das lässt sich später über das Tray-Menü oder die Einstellungen ändern.',
+    'mode.localTitle': 'Auf diesem Computer',
+    'mode.localDetail': 'Hermes, Modelle und Daten wie bisher lokal ausführen.',
+    'mode.serverTitle': 'Mit meinem Server verbunden',
+    'mode.serverDetail': 'Hermes, Modelle und Gedächtnis eines eigenen Core Hub-Servers nutzen. Diese App wird zu dessen Desktop-Client.',
+    'mode.serverUrlLabel': 'Serveradresse',
+    'mode.serverUrlPlaceholder': 'https://studio.example.com',
+    'mode.testConnection': 'Verbindung testen',
+    'mode.testing': 'Wird getestet...',
+    'mode.testOk': 'Server erreichbar.',
+    'mode.testFailed': 'Server nicht erreichbar: {error}',
+    'mode.apply': 'Übernehmen und neu starten',
+    'mode.restarting': 'Verbindungsmodus wird übernommen, Neustart...',
+    'mode.lockedByEnv': 'Der Verbindungsmodus ist auf diesem Rechner durch Umgebungsvariablen festgelegt.',
+    'mode.currentLocal': 'Aktuell: auf diesem Computer',
+    'mode.currentServer': 'Aktuell: verbunden mit {url}',
+    'desktop.connectingToServer': 'Verbindung mit {url}...',
+    'desktop.failedReachServer': 'Server nicht erreichbar',
+    'desktop.changeConnectionMode': 'Verbindungsmodus ändern',
+    'common.retry': 'Erneut versuchen',
   },
   pt: {
     'tray.show': 'Mostrar Core Hub',
@@ -564,7 +762,66 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'loginReset.successMessage': 'Login has been reset to {username} / {password}.',
     'loginReset.failedTitle': 'Login reset failed',
     'loginReset.failedMessage': 'Could not reset the desktop login.',
+    'tray.connectionMode': 'Modo de conexão...',
+    'mode.title': 'Como o Core Hub deve funcionar?',
+    'mode.intro': 'Escolha onde o Hermes, os modelos e os seus dados são executados. Pode alterar isso depois no menu da bandeja ou nas Configurações.',
+    'mode.localTitle': 'Neste computador',
+    'mode.localDetail': 'Executar o Hermes, os modelos e os dados localmente, como antes.',
+    'mode.serverTitle': 'Conectado ao meu servidor',
+    'mode.serverDetail': 'Usar o Hermes, os modelos e a memória de um servidor Core Hub seu. Este aplicativo passa a ser o cliente de desktop dele.',
+    'mode.serverUrlLabel': 'Endereço do servidor',
+    'mode.serverUrlPlaceholder': 'https://studio.example.com',
+    'mode.testConnection': 'Testar conexão',
+    'mode.testing': 'Testando...',
+    'mode.testOk': 'Servidor acessível.',
+    'mode.testFailed': 'Não foi possível acessar o servidor: {error}',
+    'mode.apply': 'Aplicar e reiniciar',
+    'mode.restarting': 'Aplicando o modo de conexão e reiniciando...',
+    'mode.lockedByEnv': 'O modo de conexão está fixado por variáveis de ambiente nesta máquina.',
+    'mode.currentLocal': 'Atual: neste computador',
+    'mode.currentServer': 'Atual: conectado a {url}',
+    'desktop.connectingToServer': 'Conectando a {url}...',
+    'desktop.failedReachServer': 'Não foi possível acessar o servidor',
+    'desktop.changeConnectionMode': 'Alterar o modo de conexão',
+    'common.retry': 'Tentar novamente',
   },
+}
+
+// Arabic covers the tray and connection-mode surface; other keys fall back to English.
+const arabicTranslations: Partial<Record<TranslationKey, string>> = {
+  'tray.show': 'إظهار كور هب',
+  'tray.hide': 'إخفاء كور هب',
+  'tray.checkForUpdates': 'التحقق من التحديثات',
+  'tray.resetLogin': 'إعادة تعيين تسجيل الدخول',
+  'tray.openAtLogin': 'فتح عند تسجيل الدخول',
+  'tray.quit': 'إنهاء كور هب',
+  'tray.connectionMode': 'وضع الاتصال...',
+  'mode.title': 'كيف تريد تشغيل كور هب؟',
+  'mode.intro': 'اختر مكان تشغيل Hermes والنماذج وبياناتك. يمكنك تغيير ذلك لاحقاً من قائمة شريط النظام أو من الإعدادات.',
+  'mode.localTitle': 'على هذا الجهاز',
+  'mode.localDetail': 'تشغيل Hermes والنماذج والبيانات محلياً كما في السابق.',
+  'mode.serverTitle': 'مرتبط بسيرفري',
+  'mode.serverDetail': 'استخدام Hermes والنماذج والذاكرة على سيرفر كور هب الخاص بك. يصبح هذا التطبيق واجهته على سطح المكتب.',
+  'mode.serverUrlLabel': 'عنوان السيرفر',
+  'mode.serverUrlPlaceholder': 'https://studio.example.com',
+  'mode.testConnection': 'اختبار الاتصال',
+  'mode.testing': 'جارٍ الاختبار...',
+  'mode.testOk': 'السيرفر متاح.',
+  'mode.testFailed': 'تعذر الوصول إلى السيرفر: {error}',
+  'mode.apply': 'تطبيق وإعادة التشغيل',
+  'mode.restarting': 'جارٍ تطبيق وضع الاتصال وإعادة التشغيل...',
+  'mode.lockedByEnv': 'وضع الاتصال مثبّت عبر متغيرات البيئة على هذا الجهاز.',
+  'mode.currentLocal': 'الحالي: على هذا الجهاز',
+  'mode.currentServer': 'الحالي: مرتبط بـ {url}',
+  'desktop.startingLocalServices': 'جارٍ تشغيل الخدمات المحلية...',
+  'desktop.failedStartServices': 'تعذر تشغيل الخدمات المحلية',
+  'desktop.connectingToServer': 'جارٍ الاتصال بـ {url}...',
+  'desktop.failedReachServer': 'تعذر الوصول إلى السيرفر',
+  'desktop.changeConnectionMode': 'تغيير وضع الاتصال',
+  'runtime.checking': 'جارٍ فحص بيئة Hermes...',
+  'common.ok': 'موافق',
+  'common.cancel': 'إلغاء',
+  'common.retry': 'إعادة المحاولة',
 }
 
 function resolveLocale(): DesktopLocale {
@@ -580,8 +837,18 @@ function resolveLocale(): DesktopLocale {
   return supportedLocales.includes(short) ? short : 'en'
 }
 
+export function currentDesktopLocale(): DesktopLocale {
+  return resolveLocale()
+}
+
+export function isRtlDesktopLocale(): boolean {
+  return resolveLocale() === 'ar'
+}
+
 export function t(key: TranslationKey, params: Record<string, string> = {}): string {
-  const message = translations[resolveLocale()][key] || translations.en[key]
+  const locale = resolveLocale()
+  const table = locale === 'ar' ? arabicTranslations : translations[locale]
+  const message = table[key] || translations.en[key]
   return Object.entries(params).reduce(
     (value, [name, replacement]) => value.replaceAll(`{${name}}`, replacement),
     message,
