@@ -33,9 +33,12 @@ import { groupCompletedToolsByRun } from "./tool-run-grouping";
 const props = withDefaults(defineProps<{
   approvalPortalToBody?: boolean
   scrollScope?: string
+  /** Agent a brand-new chat will run with (composer selection); shown before a session exists. */
+  newChatAgent?: string
 }>(), {
   approvalPortalToBody: false,
   scrollScope: "chat",
+  newChatAgent: "hermes",
 })
 
 const chatStore = useChatStore();
@@ -176,7 +179,11 @@ const liveReasoningDetail = computed<{
   return null;
 });
 
-const assistantAgent = computed(() => chatSessionAgentAvatar(chatStore.activeSession));
+// Before a session exists the empty state must show the agent the composer will
+// actually use (Hermes by default), not a hard-coded upstream default.
+const assistantAgent = computed(() => chatSessionAgentAvatar(
+  chatStore.activeSession || { agent: props.newChatAgent || "hermes" },
+));
 const activeSessionProfileName = computed(() => (
   chatStore.activeSession?.profile || profilesStore.activeProfileName || "default"
 ));
