@@ -374,6 +374,7 @@ export class DeviceAgent extends EventEmitter {
     url.searchParams.set('signature', signed.signature)
     url.searchParams.set('controllable', '1')
     url.searchParams.set('capabilities', this.capabilityList().join(','))
+    if (this.state.config.allowedFolders[0]) url.searchParams.set('workspace', this.state.config.allowedFolders[0])
 
     this.closeSocket()
     this.setState({ status: 'connecting', lastError: null })

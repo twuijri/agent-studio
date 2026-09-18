@@ -51,6 +51,20 @@ for (const [name, pixels, radius] of [
 ]) {
   await writeFile(new URL(name, buildDir), await renderRounded(pixels, radius))
 }
+// macOS menu bar: a monochrome "template" glyph (black on transparent) that the
+// system tints for light/dark menu bars, matching Apple's own status icons.
+// The mark alone is used, without the dark tile.
+for (const [name, pixels] of [['trayMacTemplate.png', 18], ['trayMacTemplate@2x.png', 36]]) {
+  const inset = Math.round(pixels * 0.08)
+  const glyph = Buffer.from(mark.replace('fill="#101010"', 'fill="#000000"').replace('<svg ', `<svg width="${pixels - inset * 2}" height="${pixels - inset * 2}" `))
+  const png = await sharp(glyph)
+    .png()
+    .toBuffer()
+  await writeFile(new URL(name, buildDir), await sharp(png)
+    .extend({ top: inset, bottom: inset, left: inset, right: inset, background: '#00000000' })
+    .png()
+    .toBuffer())
+}
 
 // PNG-backed ICO entries retain alpha at both standard and high-DPI sizes.
 const iconSizes = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]

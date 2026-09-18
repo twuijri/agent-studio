@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   canOpenDesktopConnectionSettings,
   desktopConnectionMode,
+  desktopDeviceAgentBridge,
   isDesktopLocalRuntime,
   isDesktopServerLinked,
   isDesktopShell,
@@ -70,5 +71,24 @@ describe('client surfaces that only apply to the local desktop runtime', () => {
     expect(display).toContain('v-if="connectionModeAvailable"')
     expect(display).toContain('data-testid="connection-mode-change"')
     expect(display).toContain("t('settings.display.connectionModeServer', { url: connectionModeServerUrl.value || '' })")
+  })
+})
+
+describe('this-computer device access entry on the Devices page', () => {
+  it('exposes the device agent bridge only for a linked desktop shell', () => {
+    expect(desktopDeviceAgentBridge()).toBeNull()
+    setBridge({ isDesktop: true, mode: 'local', deviceAgent: { getState: async () => ({}), openSettings: async () => true } })
+    expect(desktopDeviceAgentBridge()).toBeNull()
+    setBridge({ isDesktop: true, mode: 'server', deviceAgent: { getState: async () => ({}), openSettings: async () => true } })
+    expect(desktopDeviceAgentBridge()).not.toBeNull()
+  })
+
+  it('renders the card with a status tag and a button that opens Device Access', () => {
+    const view = readFileSync(resolve(process.cwd(), 'packages/client/src/views/hermes/DevicesView.vue'), 'utf8')
+    expect(view).toContain('v-if="deviceAgentBridge"')
+    expect(view).toContain('data-testid="this-computer-open"')
+    expect(view).toContain("t('devices.thisComputer.connected')")
+    expect(view).toContain('deviceAgentBridge?.openSettings()')
+    expect(view).toContain('deviceAgentBridge.onState?.(')
   })
 })

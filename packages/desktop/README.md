@@ -70,7 +70,8 @@ machine through the server's existing device tools (`ekko_studio_devices`):
 2. On the server open **Devices → Copy pairing link**, paste it into the page and
    send the pairing request; approve it on the server under **Devices → Requests**.
 3. Share at least one folder and enable **Run commands** and/or **Read and write
-   files**. Commands run without a shell, only inside shared folders, and each one
+   files**. Commands start in a shared folder without a shell (they can still reach anything your
+   account can, so keep approval on), file transfers stay inside shared folders, and each command
    asks for approval (Allow / Allow for this session / Deny) unless you choose
    "Always allow". Interactive terminals are not available on the device.
 

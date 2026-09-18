@@ -53,6 +53,8 @@ export interface LanPeerConnectionInfo {
   /** The peer dialled in and lets this Studio operate it (desktop Device Agent). */
   controllable?: boolean
   capabilities?: LanPeerCapability[]
+  /** Workspace folder on a linked desktop device. */
+  workspace?: string
 }
 
 export interface DevicePairingLink {
