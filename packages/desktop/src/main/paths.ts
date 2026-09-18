@@ -523,8 +523,10 @@ export function desktopWindowsTrayIcon(): string {
 }
 
 export function desktopMacTrayIcon(): string {
-  if (isPackaged()) return resolve(process.resourcesPath, 'build', 'trayMac.png')
-  return resolve(desktopAppPath(), 'build', 'trayMac.png')
+  // Template image: Electron treats the "Template" suffix as a monochrome
+  // menu bar glyph and tints it for light/dark appearances.
+  if (isPackaged()) return resolve(process.resourcesPath, 'build', 'trayMacTemplate.png')
+  return resolve(desktopAppPath(), 'build', 'trayMacTemplate.png')
 }
 
 export function desktopLinuxTrayIcon(): string {

@@ -137,6 +137,31 @@ export interface DesktopModeBridge {
   close: () => Promise<boolean>
 }
 
+export type DesktopDeviceAgentStatus =
+  | 'disabled' | 'unpaired' | 'pending' | 'rejected' | 'blocked' | 'connecting' | 'connected' | 'offline' | 'error'
+
+export interface DesktopDeviceAgentSnapshot {
+  linked: boolean
+  status: DesktopDeviceAgentStatus
+  serverUrl: string | null
+  deviceId: string
+  computerName: string
+  config: {
+    enabled: boolean
+    capabilities: { exec: boolean; files: boolean; browser: boolean; screen: boolean }
+    allowedFolders: string[]
+    approvalMode: 'ask' | 'always'
+    pairedServerUrl: string | null
+  }
+  lastError: string | null
+}
+
+export interface DesktopDeviceAgentBridge {
+  getState: () => Promise<DesktopDeviceAgentSnapshot>
+  openSettings: () => Promise<boolean>
+  onState?: (callback: (state: DesktopDeviceAgentSnapshot) => void) => () => void
+}
+
 export interface HermesDesktopBridge {
   getToken: () => Promise<string>
   ensureAuth?: () => Promise<boolean>
@@ -160,6 +185,8 @@ export interface HermesDesktopBridge {
   /** Connection mode of the desktop shell; absent on builds before server mode existed (= local). */
   mode?: DesktopConnectionMode
   desktopMode?: DesktopModeBridge
+  /** Device Agent controls (linked-server mode only). */
+  deviceAgent?: DesktopDeviceAgentBridge
 }
 
 export type WindowWithHermesDesktop = Window & typeof globalThis & {
@@ -208,6 +235,14 @@ export function isDesktopServerLinked(): boolean {
 
 export function isDesktopLocalRuntime(): boolean {
   return desktopConnectionMode() === 'local'
+}
+
+/** The desktop shell is linked to this server and can open the Device Access page. */
+export function desktopDeviceAgentBridge(): DesktopDeviceAgentBridge | null {
+  const bridge = desktopBridge()
+  if (bridge?.isDesktop !== true || bridge.mode !== 'server') return null
+  const agent = bridge.deviceAgent
+  return agent && typeof agent.openSettings === 'function' && typeof agent.getState === 'function' ? agent : null
 }
 
 export function canOpenDesktopConnectionSettings(): boolean {

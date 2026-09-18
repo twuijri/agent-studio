@@ -751,6 +751,16 @@ export default {
     reject: '拒绝',
     block: '拉黑',
     unblock: '解除拉黑',
+    thisComputer: {
+      title: '这台电脑（{name}）',
+      hint: '允许此服务器上的 Hermes 在这台电脑上运行命令、交换文件、查看屏幕或使用代理浏览器。一切均需手动启用并经你批准。',
+      link: '关联这台电脑',
+      manage: '设备访问…',
+      connected: '已连接',
+      pending: '等待批准',
+      connecting: '连接中…',
+      notLinked: '未关联',
+    },
     linked: {
       title: '已关联设备',
       subtitle: '从桌面应用连接并允许此服务器上的 Hermes 操作的设备。',

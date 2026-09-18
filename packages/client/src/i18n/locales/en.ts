@@ -751,6 +751,16 @@ export default {
     reject: 'Reject',
     block: 'Block',
     unblock: 'Unblock',
+    thisComputer: {
+      title: 'This computer ({name})',
+      hint: 'Let Hermes on this server run commands, exchange files, see the screen, or use the agent browser on this computer. Everything is opt-in and asks for approval.',
+      link: 'Link this computer',
+      manage: 'Device access…',
+      connected: 'Connected',
+      pending: 'Waiting for approval',
+      connecting: 'Connecting…',
+      notLinked: 'Not linked',
+    },
     linked: {
       title: 'Linked devices',
       subtitle: 'Devices that connected from the desktop app and let Hermes on this server operate them.',

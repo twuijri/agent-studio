@@ -33,6 +33,8 @@ extraResources:
       - "icon.ico"
       - "trayMac.png"
       - "trayMac@2x.png"
+      - "trayMacTemplate.png"
+      - "trayMacTemplate@2x.png"
       - "trayWindows.png"
       - "trayLinux.png"
       - "runtime-release.json"

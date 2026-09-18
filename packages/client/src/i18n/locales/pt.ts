@@ -789,6 +789,16 @@ export default {
     reject: 'Rejeitar',
     block: 'Bloquear',
     unblock: 'Desbloquear',
+    thisComputer: {
+      title: 'Este computador ({name})',
+      hint: 'Permita que o Hermes neste servidor execute comandos, troque arquivos, veja a tela ou use o navegador do agente neste computador. Tudo é opcional e pede sua aprovação.',
+      link: 'Vincular este computador',
+      manage: 'Acesso ao dispositivo…',
+      connected: 'Conectado',
+      pending: 'Aguardando aprovação',
+      connecting: 'Conectando…',
+      notLinked: 'Não vinculado',
+    },
     linked: {
       title: 'Dispositivos vinculados',
       subtitle: 'Dispositivos conectados a partir do aplicativo de desktop que permitem que o Hermes neste servidor os opere.',

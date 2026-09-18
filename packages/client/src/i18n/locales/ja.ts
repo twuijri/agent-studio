@@ -789,6 +789,16 @@ export default {
     reject: '拒否',
     block: 'ブロック',
     unblock: 'ブロック解除',
+    thisComputer: {
+      title: 'このコンピューター（{name}）',
+      hint: 'このサーバー上の Hermes が、このコンピューターでコマンドの実行、ファイルの交換、画面の表示、エージェントブラウザーの使用を行えるようにします。すべてオプトインで、承認を求めます。',
+      link: 'このコンピューターをリンク',
+      manage: 'デバイスアクセス…',
+      connected: '接続済み',
+      pending: '承認待ち',
+      connecting: '接続中…',
+      notLinked: '未リンク',
+    },
     linked: {
       title: 'リンク済みデバイス',
       subtitle: 'デスクトップアプリから接続し、このサーバー上の Hermes による操作を許可しているデバイス。',
