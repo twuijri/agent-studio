@@ -711,6 +711,9 @@ export default {
     loadFailed: '讀取這台電腦上的應用程式失敗',
     needsConfig: '需要僅原助理擁有的設定（{keys}），暫時無法共用。',
     howItWorks: '共用的應用程式會作為允許的設定檔的 MCP 伺服器出現在 Hermes 中；每次連線的首次使用會在這台電腦上請求你的核准。',
+    localMode: '本機：應用程式連接到這台電腦上的代理',
+    sharedLocal: '{name} 現在可供這台電腦上的代理使用',
+    howItWorksLocal: '共享的應用程式會以所有設定檔的 MCP 伺服器形式出現在這台電腦的 Hermes 和 Ekko 中；代理使用時以你的使用者帳戶執行。',
     sources: {
       claude_desktop: 'Claude Desktop',
       claude_extension: 'Claude Desktop 擴充功能',

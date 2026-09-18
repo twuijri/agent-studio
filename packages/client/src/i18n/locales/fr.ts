@@ -756,6 +756,9 @@ export default {
     loadFailed: 'Impossible de lire les applications de cet ordinateur',
     needsConfig: 'Nécessite des réglages que seul l’assistant d’origine possède ({keys}) ; partage impossible pour l’instant.',
     howItWorks: 'Les applications partagées apparaissent à Hermes comme des serveurs MCP des profils autorisés ; la première utilisation à chaque connexion demande votre accord sur cet ordinateur.',
+    localMode: 'Local : les apps sont connectées aux agents de cet ordinateur',
+    sharedLocal: '{name} est désormais disponible pour les agents de cet ordinateur',
+    howItWorksLocal: 'Les apps partagées apparaissent à Hermes et Ekko sur cet ordinateur comme serveurs MCP de tous les profils ; elles s’exécutent avec votre compte utilisateur quand un agent les utilise.',
     sources: {
       claude_desktop: 'Claude Desktop',
       claude_extension: 'Extension Claude Desktop',
