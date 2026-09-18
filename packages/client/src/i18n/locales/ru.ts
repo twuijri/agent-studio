@@ -2291,6 +2291,11 @@ export default {
       linkOpenTargetHint: 'Выберите, где открывать ссылки из сообщений и предпросмотров Markdown.',
       linkOpenTargetHermesStudio: 'Core Hub',
       linkOpenTargetDefaultBrowser: 'Браузер по умолчанию',
+      connectionMode: 'Подключение приложения',
+      connectionModeHint: 'Где это настольное приложение запускает Hermes: на этом компьютере или через ваш сервер Core Hub. Изменение перезапускает приложение.',
+      connectionModeLocal: 'На этом компьютере',
+      connectionModeServer: 'Подключено к {url}',
+      connectionModeChange: 'Изменить...',
     },
     agent: {
       maxTurns: 'Максимум ходов',
