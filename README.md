@@ -79,8 +79,9 @@ volumes:
   hermes-webui-data:
 ```
 
-Put an HTTPS reverse proxy in front of the container and never expose the port directly without
-authentication. To build the image yourself:
+The image is public on GHCR, so `docker compose pull` needs no login. Put an HTTPS reverse proxy in
+front of the container and never expose the port directly without authentication. To build the
+image yourself:
 
 ```bash
 docker compose -f compose.personal.yml build
