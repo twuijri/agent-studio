@@ -212,3 +212,58 @@ describe('Ekko config sync for device apps', () => {
     expect(injectDeviceMcpServersIntoEkko(profile => (profile === 'work' ? [{ name: 'device-mac-app', config: bridge }] : []), setup).changed).toBe(false)
   })
 })
+
+describe('local desktop mode: apps shared on this computer', () => {
+  let home = ''
+  beforeEach(() => {
+    home = tempDir()
+    vi.doMock('../../packages/server/src/modules/studio/public/config', () => ({ config: { appHome: home, corsOrigins: '', port: 6060 } }))
+  })
+
+  it('persists the launch definition of shared apps and drops disabled or command-less ones', async () => {
+    const store = await import('../../packages/server/src/modules/studio/services/devices/local-apps-store')
+    store.resetLocalAppsCache()
+    expect(store.setLocalApps('My Mac', [
+      { id: 'a', name: 'DaVinci', source: 'claude-extension', command: '/app/mcp', args: ['--stdio'], env: { K: 'v', N: 1 }, cwd: '/tmp/x' },
+      { id: 'b', name: 'Off', source: 'codex', command: '/x', enabled: false },
+      { id: 'c', name: 'NoCommand', source: 'cursor' },
+    ])).toBe(true)
+    expect(JSON.parse(readFileSync(join(home, 'local-apps.json'), 'utf8')).apps).toEqual([{ id: 'a', name: 'DaVinci', source: 'claude-extension', command: '/app/mcp', args: ['--stdio'], env: { K: 'v' }, cwd: '/tmp/x' }])
+    expect(store.setLocalApps('My Mac', [{ id: 'a', name: 'DaVinci', source: 'claude-extension', command: '/app/mcp', args: ['--stdio'], env: { K: 'v' }, cwd: '/tmp/x' }])).toBe(false)
+    store.resetLocalAppsCache()
+    expect(store.getLocalApps()?.computerName).toBe('My Mac')
+    expect(store.setLocalApps('My Mac', [])).toBe(true)
+    expect(store.getLocalApps()).toBeNull()
+  })
+
+  it('injects local apps directly (no bridge) into every Hermes profile, even when the bridge script is missing', async () => {
+    const configs: Record<string, any> = { default: { mcp_servers: { mine: { command: 'keep-me' } } }, work: {} }
+    vi.doMock('../../packages/server/src/modules/studio/public/profile-config', () => ({
+      updateConfigYamlForProfile: async (profile: string, updater: (cfg: any) => any) => {
+        const outcome = updater(structuredClone(configs[profile] || {}))
+        if (outcome.write !== false) configs[profile] = outcome.data
+        return outcome.result
+      },
+    }))
+    const store = await import('../../packages/server/src/modules/studio/services/devices/local-apps-store')
+    const injection = await import('../../packages/server/src/modules/studio/services/devices/device-mcp-injection')
+    injection.configureDeviceMcpSync({ listProfiles: () => ['default', 'work'] })
+    store.resetLocalAppsCache()
+    store.setLocalApps('My Mac', [{ id: 'claude-extension:abc', name: 'DaVinci Resolve', source: 'claude-extension', command: '/Applications/DaVinci.app/mcp', args: ['--stdio'], env: { RESOLVE_SCRIPT_API: '/x' }, cwd: '/tmp/davinci' }])
+
+    const targets = await Promise.all(['default', 'work'].map(profile => injection.injectDeviceMcpServersIntoProfile(profile, null)))
+    expect(targets.map(target => target.status)).toEqual(['updated', 'updated'])
+    for (const profile of ['default', 'work']) {
+      const entry = configs[profile].mcp_servers['local-davinci-resolve']
+      expect(entry).toMatchObject({ command: '/Applications/DaVinci.app/mcp', args: ['--stdio'], cwd: '/tmp/davinci', enabled: true })
+      expect(entry.env).toMatchObject({ RESOLVE_SCRIPT_API: '/x', CORE_HUB_DEVICE_APP: '1', HERMES_WEB_UI_MANAGED_MCP: '1', CORE_HUB_DEVICE_APP_LABEL: 'My Mac › DaVinci Resolve' })
+    }
+    expect(configs.default.mcp_servers.mine).toEqual({ command: 'keep-me' })
+
+    // Unsharing removes the managed entry again.
+    store.setLocalApps('My Mac', [])
+    const after = await injection.injectDeviceMcpServersIntoProfile('default', null)
+    expect(after.status).toBe('updated')
+    expect(configs.default.mcp_servers).toEqual({ mine: { command: 'keep-me' } })
+  })
+})

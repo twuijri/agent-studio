@@ -90,6 +90,10 @@ Two more capabilities can be shared from the same page:
   the program's MCP server locally and pipes it over the device channel; the server turns
   it into a managed MCP server of the allowed Hermes/Ekko profiles automatically. The
   first use per connection asks for approval on this computer.
+  In local mode (no linked server) the same page works too: shared apps are
+  handed to the local Core Hub server (`PUT /api/desktop/local-apps`, loopback +
+  desktop token) and become managed MCP servers of every local profile, run
+  directly with the app's own command.
 
 On the server, **Devices → Linked devices** lists connected devices and lets you
 restrict each one to specific Hermes profiles (empty = every profile).

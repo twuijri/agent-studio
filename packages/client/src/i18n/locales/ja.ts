@@ -756,6 +756,9 @@ export default {
     loadFailed: 'このコンピューターのアプリを読み取れませんでした',
     needsConfig: '元のアシスタントにしかない設定（{keys}）が必要なため、まだ共有できません。',
     howItWorks: '共有アプリは許可されたプロファイルの MCP サーバーとして Hermes に表示されます。各接続で最初に使うときにこのコンピューターで承認を求めます。',
+    localMode: 'ローカル: アプリはこのコンピューターのエージェントに接続されます',
+    sharedLocal: '{name} がこのコンピューターのエージェントで利用できるようになりました',
+    howItWorksLocal: '共有したアプリは、このコンピューターの Hermes と Ekko にすべてのプロファイルの MCP サーバーとして表示され、エージェントが使うときにあなたのユーザーアカウントで実行されます。',
     sources: {
       claude_desktop: 'Claude Desktop',
       claude_extension: 'Claude Desktop 拡張機能',

@@ -41,7 +41,8 @@ import {
 import { getLanPeerSocketManager, getLanPeerSocketPath } from './lan-peer'
 import { getDeviceBrowserGateway } from '../modules/studio/services/network/device-browser-gateway'
 import { getDeviceAppSessionServer, DEVICE_APP_SESSION_PATH } from '../modules/studio/services/devices/device-app-sessions'
-import { configureDeviceMcpSync, desiredDeviceMcpServers, deviceMcpServerConfig, registerDeviceMcpSyncHook, resolveDeviceMcpBridgeScript, startDeviceMcpSync } from '../modules/studio/services/devices/device-mcp-injection'
+import { configureDeviceMcpSync, desiredDeviceMcpServers, deviceMcpServerConfig, registerDeviceMcpSyncHook, resolveDeviceMcpBridgeScript, scheduleDeviceMcpSync, startDeviceMcpSync } from '../modules/studio/services/devices/device-mcp-injection'
+import { getLocalApps, setLocalApps } from '../modules/studio/services/devices/local-apps-store'
 import { listProfileNamesFromDisk } from '../modules/hermes/services/profiles/profile'
 import { injectDeviceMcpServersIntoEkko } from '../modules/ekko/services/mcp'
 import { startGlobalAgentServer } from '../modules/studio/public/global-agent'
@@ -173,6 +174,8 @@ function getLoopbackBaseUrl(httpServer: any): string {
   return `http://127.0.0.1:${port}`
 }
 
+export const DESKTOP_LOCAL_APPS_PATH = '/api/desktop/local-apps'
+
 function isDesktopRuntime(): boolean {
   return String(process.env.HERMES_DESKTOP || '').trim().toLowerCase() === 'true'
 }
@@ -229,6 +232,49 @@ function registerDesktopShutdownRoute(app: Koa): void {
     setTimeout(() => {
       void desktopShutdownHandler?.('desktop-api')
     }, 50).unref?.()
+  })
+}
+
+function desktopLoopbackGuard(ctx: Context): boolean {
+  if (!isDesktopRuntime()) {
+    ctx.status = 404
+    ctx.body = { error: 'not_found' }
+    return false
+  }
+  if (!isLoopbackAddress(ctx.req.socket.remoteAddress)) {
+    ctx.status = 403
+    ctx.body = { error: 'forbidden' }
+    return false
+  }
+  const expectedToken = String(process.env.AUTH_TOKEN || '').trim()
+  if (!expectedToken || bearerToken(ctx) !== expectedToken) {
+    ctx.status = 401
+    ctx.body = { error: 'unauthorized' }
+    return false
+  }
+  return true
+}
+
+// Local desktop mode: the shell reports the apps the user shared on this
+// computer; they become managed MCP servers of every profile (same machine,
+// no device bridge). Loopback + desktop token only, like the shutdown route.
+function registerDesktopLocalAppsRoute(app: Koa): void {
+  app.use(async (ctx, next) => {
+    if (ctx.path !== DESKTOP_LOCAL_APPS_PATH || (ctx.method !== 'PUT' && ctx.method !== 'GET')) {
+      await next()
+      return
+    }
+    if (!desktopLoopbackGuard(ctx)) return
+    if (ctx.method === 'GET') {
+      ctx.body = { ok: true, record: getLocalApps() }
+      return
+    }
+    const body = (ctx.request as any).body
+    const payload = body && typeof body === 'object' ? body as Record<string, unknown> : {}
+    const computerName = typeof payload.computerName === 'string' ? payload.computerName.trim().slice(0, 120) : ''
+    const changed = setLocalApps(computerName, payload.apps)
+    if (changed) scheduleDeviceMcpSync(0)
+    ctx.body = { ok: true, changed, apps: getLocalApps()?.apps.map(item => item.id) ?? [] }
   })
 }
 
@@ -520,6 +566,7 @@ export async function bootstrap() {
 
   registerReadinessRoute(app)
   registerDesktopShutdownRoute(app)
+  registerDesktopLocalAppsRoute(app)
 
   // Register all routes (handles auth internally)
   registerRoutes(app, [requireUserJwt, resolveUserProfile])
@@ -595,11 +642,12 @@ export async function bootstrap() {
   configureDeviceMcpSync({ listProfiles: listProfileNamesFromDisk })
   registerDeviceMcpSyncHook(() => {
     const script = resolveDeviceMcpBridgeScript()
-    if (!script) return
-    injectDeviceMcpServersIntoEkko(profile => desiredDeviceMcpServers(profile).map(definition => ({
-      name: definition.name,
-      config: deviceMcpServerConfig(profile, definition, script) as any,
-    })))
+    injectDeviceMcpServersIntoEkko(profile => desiredDeviceMcpServers(profile)
+      .filter(definition => definition.local || script)
+      .map(definition => ({
+        name: definition.name,
+        config: deviceMcpServerConfig(profile, definition, script) as any,
+      })))
   })
   startDeviceMcpSync()
   additionalShutdownSteps.push({

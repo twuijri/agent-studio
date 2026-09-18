@@ -2,12 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { NButton, NSpin, NSwitch, NTag, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { desktopDeviceAgentBridge, type DesktopDeviceAgentSnapshot, type DesktopDiscoveredApp, type DesktopSharedApp } from '@/utils/desktop-bridge'
+import { desktopConnectionMode, desktopDeviceAgentBridge, type DesktopDeviceAgentSnapshot, type DesktopDiscoveredApp, type DesktopSharedApp } from '@/utils/desktop-bridge'
 
 // Apps on this computer that expose an MCP server (registered with Claude
 // Desktop, Claude Code, Codex, Cursor, Windsurf, or installed as a Claude
-// extension). Sharing one lets Hermes on the linked server use it through
-// the Device Agent; the server wires it into the allowed profiles itself.
+// extension). Linked to a server: sharing one lets Hermes there use it through
+// the Device Agent. Local mode: the shell hands the app to the local Core Hub,
+// which wires it into every profile on this computer. Either way the app never
+// edits agent configs itself.
 
 const { t } = useI18n()
 const message = useMessage()
@@ -21,7 +23,8 @@ let stopUpdates: (() => void) | null = null
 
 const sharedIds = computed(() => new Set((agent.value?.config.sharedApps || []).filter(app => app.enabled).map(app => app.id)))
 const available = computed(() => bridge !== null)
-const linked = computed(() => !!agent.value?.linked)
+const localMode = computed(() => desktopConnectionMode() === 'local')
+const linked = computed(() => localMode.value || !!agent.value?.linked)
 const connected = computed(() => agent.value?.status === 'connected')
 
 function sourceLabel(source: string): string {
@@ -53,7 +56,7 @@ async function toggle(app: DesktopDiscoveredApp, enabled: boolean) {
       ? [...current, { id: app.id, name: app.name, source: app.source, command: app.command || '', args: app.args, env: app.env, cwd: app.cwd, enabled: true }]
       : current
     agent.value = await bridge.setApps(next)
-    message.success(enabled ? t('appConnections.shared', { name: app.name }) : t('appConnections.unshared', { name: app.name }))
+    message.success(enabled ? t(localMode.value ? 'appConnections.sharedLocal' : 'appConnections.shared', { name: app.name }) : t('appConnections.unshared', { name: app.name }))
   } catch (err: any) {
     message.error(err?.message || t('appConnections.saveFailed'))
   } finally {
@@ -76,7 +79,10 @@ onBeforeUnmount(() => { stopUpdates?.() })
         <p>{{ t('appConnections.subtitle') }}</p>
       </div>
       <div class="header-actions">
-        <NTag v-if="available" size="small" :type="connected ? 'success' : 'warning'" round>
+        <NTag v-if="available && localMode" size="small" type="info" round data-testid="app-connections-local">
+          {{ t('appConnections.localMode') }}
+        </NTag>
+        <NTag v-else-if="available" size="small" :type="connected ? 'success' : 'warning'" round>
           {{ connected ? t('appConnections.deviceConnected') : t('appConnections.deviceNotConnected') }}
         </NTag>
         <NButton size="small" :loading="loading" :disabled="!available" @click="refresh">{{ t('appConnections.rescan') }}</NButton>
@@ -116,7 +122,7 @@ onBeforeUnmount(() => { stopUpdates?.() })
           <div class="app-origin">{{ app.origin }}</div>
         </article>
       </div>
-      <p v-if="linked" class="hint footer-hint">{{ t('appConnections.howItWorks') }}</p>
+      <p v-if="linked" class="hint footer-hint">{{ localMode ? t('appConnections.howItWorksLocal') : t('appConnections.howItWorks') }}</p>
     </NSpin>
   </div>
 </template>
