@@ -13,6 +13,9 @@ buildDependenciesFromSource: false
 nodeGypRebuild: false
 npmRebuild: false
 afterPack: "./scripts/verify-packaged-webui.mjs"
+# Unsigned personal-fork builds get a valid ad-hoc signature so macOS offers
+# "Open Anyway" instead of calling the app damaged (no-op with a Developer ID).
+afterSign: "./scripts/adhoc-sign-macos.mjs"
 
 files:
   - "dist/**/*"

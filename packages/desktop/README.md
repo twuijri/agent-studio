@@ -2,6 +2,18 @@
 
 Electron desktop distribution for Ekko Studio.
 
+### Opening the unsigned macOS build
+
+Core Hub builds are not signed with an Apple Developer ID yet, so macOS shows
+"Apple could not verify “Core Hub” is free of malware" the first time. Click
+**Done**, open **System Settings → Privacy & Security**, scroll to the bottom
+and click **Open Anyway**, then open the app again. This is the same flow as any
+other unsigned app from GitHub. The release build ad-hoc signs the bundle
+(`scripts/adhoc-sign-macos.mjs`) so macOS never reports it as "damaged"; if you
+still see that message on an older download, run
+`xattr -dr com.apple.quarantine "/Applications/Core Hub.app"`. Adding the
+`MAC_CSC_LINK` / `APPLE_*` secrets to the repository produces notarized builds
+that open without any prompt.
 ## New-version notice (no auto-updater)
 
 The auto-updater stays disabled in this fork. Instead, packaged builds check the
