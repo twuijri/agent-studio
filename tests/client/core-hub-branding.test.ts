@@ -40,7 +40,9 @@ describe('Core Hub branding without a data or deployment migration', () => {
     expect(workflow.name).toBe('Personal Core Hub image')
     expect(text).toContain('process.env.GITHUB_REPOSITORY')
     expect(text).toContain("['Build', 'Playwright', 'Personal fork license']")
-    expect(text).toContain('(await repo.json()).private !== true')
+    // The source repository is public by owner decision (2026-09-18); only the image package must stay private.
+    expect(text).not.toContain('(await repo.json()).private !== true')
+    expect(text).toContain("(await pkg.json()).visibility !== 'private'")
     expect(text).toContain("(await response.json()).visibility !== 'private'")
     expect(text).toContain('ghcr.io/twuijri/core-hub:latest')
     expect(text).not.toContain('ghcr.io/twuijri/agent-studio:')

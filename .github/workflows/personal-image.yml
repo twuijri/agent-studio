@@ -71,14 +71,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Refuse a public repository or an existing public image package
+      - name: Refuse an existing public image package
+        # The source repository became public by owner decision (2026-09-18);
+        # the deployment image stays private, so only the package visibility is enforced.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           node --input-type=module <<'NODE'
           const headers = {Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json'};
-          const repo = await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}`, {headers});
-          if (!repo.ok || (await repo.json()).private !== true) throw new Error('The personal source repository must remain private.');
           const pkg = await fetch('https://api.github.com/users/twuijri/packages/container/core-hub', {headers});
           if (pkg.status === 404) { console.log('No accessible existing package; new GHCR packages start private.'); }
           else if (!pkg.ok || (await pkg.json()).visibility !== 'private') { throw new Error('Cannot verify private package visibility. Refusing publication.'); }
