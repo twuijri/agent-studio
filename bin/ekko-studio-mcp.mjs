@@ -418,7 +418,7 @@ const moduleHints = {
     keywords: ['codex', 'claude', 'coding agent', 'install', 'run'],
   },
   Config: {
-    purpose: 'Read and update Hermes Web UI configuration.',
+    purpose: 'Read and update Core Hub configuration.',
     keywords: ['config', 'settings', 'preferences'],
   },
   Devices: {
@@ -575,7 +575,7 @@ function compactOpenApiDocument(openapi, args = {}) {
 const authArgumentProperties = {
   token: {
     type: 'string',
-    description: 'Optional Hermes Web UI bearer token. Usually omit this and pass profile so the MCP server can read the temporary profile token.',
+    description: 'Optional Core Hub bearer token. Usually omit this and pass profile so the MCP server can read the temporary profile token.',
   },
   profile: {
     type: 'string',
@@ -1599,7 +1599,7 @@ const tools = [
   {
     name: 'ekko_studio_lan_devices_list',
     toolset: 'devices',
-    description: 'List known LAN and remote devices from Hermes Web UI, including pairing and online status.',
+    description: 'List known LAN and remote devices from Core Hub, including pairing and online status.',
     inputSchema: inputSchema(),
   },
   {
@@ -1842,15 +1842,20 @@ function categoryToolByName(name) {
   return activeToolsetTools().find(tool => tool.name === resolved) || null
 }
 
+// The product is Core Hub. Tool and server identifiers keep the historical
+// `ekko_studio` prefix for compatibility; never let the model infer the product
+// name from them when talking to the user.
+const PRODUCT_NAME_NOTE = 'This platform is Core Hub (call it "Core Hub" when talking to the user; the ekko_studio_ tool prefix is a compatibility identifier, not the product name).'
+
 function serverInstructions() {
   if (ACTIVE_TOOLSET === 'plan') return SHARED_TASK_PLAN_ENABLED
-    ? 'Use ekko_studio_update_plan directly to maintain the current Studio task card. Use only the context_id supplied with the latest input; expired contexts cannot update another turn.'
+    ? `${PRODUCT_NAME_NOTE} Use ekko_studio_update_plan directly to maintain the current Core Hub task card. Use only the context_id supplied with the latest input; expired contexts cannot update another turn.`
     : ''
   if (ACTIVE_TOOLSET === 'api') {
-    return 'Core Hub API operations. Use ekko_studio_api_openapi_get without filters for the compact module index, call it again with tag/path/method filters for endpoint details, then call ekko_studio_api_request with the documented relative path and JSON fields.'
+    return `${PRODUCT_NAME_NOTE} Core Hub API operations. Use ekko_studio_api_openapi_get without filters for the compact module index, call it again with tag/path/method filters for endpoint details, then call ekko_studio_api_request with the documented relative path and JSON fields.`
   }
   const category = CATEGORY_TOOLSETS[ACTIVE_TOOLSET]
-  return category ? `${category.description} Coverage: ${category.coverage}` : ''
+  return category ? `${PRODUCT_NAME_NOTE} ${category.description} Coverage: ${category.coverage}` : ''
 }
 
 function visibleTools() {
