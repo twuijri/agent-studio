@@ -107,7 +107,11 @@ export class LanPeerToolsService {
 
   private requireClientConnection(connectionId: string) {
     const connection = this.requireConnection(connectionId)
-    if (connection.info().role !== 'client') {
+    const info = connection.info()
+    // Remote tools run against peers this Studio dialled ('client' role) or
+    // against peers that dialled in and declared themselves controllable
+    // (the desktop Device Agent). Passive inbound peers stay off limits.
+    if (info.role !== 'client' && !info.controllable) {
       throw Object.assign(new Error('Peer connection is not authorized for remote tools'), { status: 403 })
     }
     return connection

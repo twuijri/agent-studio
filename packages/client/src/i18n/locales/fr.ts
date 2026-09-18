@@ -789,6 +789,21 @@ export default {
     reject: 'Rejeter',
     block: 'Bloquer',
     unblock: 'Débloquer',
+    linked: {
+      title: 'Appareils reliés',
+      subtitle: 'Appareils connectés depuis l’application de bureau qui laissent Hermes sur ce serveur les piloter.',
+      controllable: 'Contrôlable',
+      connectedAt: 'Connecté {time}',
+      capabilities: {
+        exec: 'Exécuter des commandes',
+        files: 'Fichiers',
+        terminal: 'Terminal',
+      },
+      noCapabilities: 'Aucune capacité activée sur l’appareil',
+      disconnect: 'Déconnecter',
+      disconnectFailed: 'Échec de la déconnexion de l’appareil',
+      requestMeta: '{ip} (application de bureau)',
+    },
     inboundStatus: {
       none: 'Demande autorisée',
       pending: 'En attente',

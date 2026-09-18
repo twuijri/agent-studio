@@ -41,6 +41,8 @@ export interface LanDiscoveryState {
   requests: LanDeviceInfo[]
 }
 
+export type LanPeerCapability = 'exec' | 'files' | 'terminal'
+
 export interface LanPeerConnectionInfo {
   id: string
   role: 'server' | 'client'
@@ -48,6 +50,9 @@ export interface LanPeerConnectionInfo {
   computer_name: string
   url: string
   connected_at: number
+  /** The peer dialled in and lets this Studio operate it (desktop Device Agent). */
+  controllable?: boolean
+  capabilities?: LanPeerCapability[]
 }
 
 export interface DevicePairingLink {
