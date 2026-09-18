@@ -31,7 +31,7 @@ devices, voice, and files — and adds the pieces needed to run it as **one serv
   own. Hermes, its memory, models, skills, and profiles all live on the server; nothing is installed
   locally. The classic local mode is unchanged and stays the default for existing installs.
 - **Device Agent.** From the linked desktop app, the server-side Hermes can operate your machine
-  through Studio's existing device tools: run commands and exchange files inside folders you share,
+  through Studio's existing device tools: run commands (started in folders you share, each one approved by you) and exchange files inside those folders,
   take screenshots and use the mouse and keyboard, and drive the app's agent browser. The device only
   connects outbound, every capability is opt-in, commands and screen access ask for approval, a
   visible banner with a Stop button shows while the screen is controlled, and every action is logged.
