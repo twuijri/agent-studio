@@ -7,8 +7,10 @@ import {
   approveDevice,
   blockDevice,
   deleteDeviceRequestHistory,
+  disconnectLanPeerDevice,
   fetchDevicePairingLink,
   fetchLanDevices,
+  fetchLanPeerConnections,
   rejectDevice,
   requestDevicePairing,
   requestDevicePairingByUrl,
@@ -19,6 +21,7 @@ import {
   type LanDeviceInfo,
   type LanDiscoveryState,
   type LanEndpointKind,
+  type LanPeerConnectionInfo,
 } from '@/api/studio/devices'
 
 const { t } = useI18n()
@@ -40,6 +43,9 @@ const copyingPairingLink = ref(false)
 const showPairingCodeModal = ref(false)
 const pairingCodeInput = ref('')
 const pendingPairingDevice = ref<LanDeviceInfo | null>(null)
+// Devices that dialled in and let this Studio operate them (desktop Device Agent).
+const linkedConnections = ref<LanPeerConnectionInfo[]>([])
+const disconnectingConnectionId = ref('')
 const state = ref<LanDiscoveryState>({
   scanning: false,
   last_scanned_at: null,
@@ -148,6 +154,33 @@ function formatVersion(value: string): string {
   return value || t('devices.unknown')
 }
 
+function capabilityLabel(capability: string): string {
+  return capability === 'exec' || capability === 'files' || capability === 'terminal'
+    ? t(`devices.linked.capabilities.${capability}`)
+    : capability
+}
+
+async function loadLinkedConnections() {
+  try {
+    const { connections } = await fetchLanPeerConnections()
+    linkedConnections.value = connections.filter(connection => connection.controllable)
+  } catch {
+    linkedConnections.value = []
+  }
+}
+
+async function disconnectLinked(connection: LanPeerConnectionInfo) {
+  disconnectingConnectionId.value = connection.id
+  try {
+    const { connections } = await disconnectLanPeerDevice(connection.id)
+    linkedConnections.value = connections.filter(item => item.controllable)
+  } catch (err: any) {
+    message.error(err?.message || t('devices.linked.disconnectFailed'))
+  } finally {
+    disconnectingConnectionId.value = ''
+  }
+}
+
 function safeDeviceUrl(value: string): string {
   try {
     const url = new URL(value)
@@ -161,6 +194,7 @@ async function loadDevices() {
   loading.value = true
   try {
     state.value = await fetchLanDevices()
+    void loadLinkedConnections()
   } catch (err: any) {
     message.error(err?.message || t('devices.loadFailed'))
   } finally {
@@ -319,6 +353,32 @@ onMounted(() => {
 
     <NSpin :show="loading" class="devices-spin">
       <div class="devices-content">
+        <section v-if="linkedConnections.length > 0" class="linked-devices" data-testid="linked-devices">
+          <h3 class="linked-title">{{ t('devices.linked.title') }}</h3>
+          <p class="linked-subtitle">{{ t('devices.linked.subtitle') }}</p>
+          <div class="device-grid">
+            <article v-for="connection in linkedConnections" :key="connection.id" class="device-card linked-card">
+              <div class="device-card-header">
+                <div class="device-title-block">
+                  <div class="device-name">{{ connection.computer_name || connection.device_id }}</div>
+                  <div class="device-meta">{{ t('devices.linked.connectedAt', { time: formatTime(connection.connected_at) }) }}</div>
+                </div>
+                <NTag size="small" type="success" round>{{ t('devices.linked.controllable') }}</NTag>
+              </div>
+              <div class="device-status-row linked-capabilities">
+                <NTag v-for="capability in connection.capabilities || []" :key="capability" size="small" round>
+                  {{ capabilityLabel(capability) }}
+                </NTag>
+                <span v-if="!connection.capabilities?.length" class="linked-none">{{ t('devices.linked.noCapabilities') }}</span>
+              </div>
+              <div class="device-actions">
+                <NButton size="tiny" quaternary type="error" :loading="disconnectingConnectionId === connection.id" @click="disconnectLinked(connection)">
+                  {{ t('devices.linked.disconnect') }}
+                </NButton>
+              </div>
+            </article>
+          </div>
+        </section>
         <div v-if="devices.length === 0 && !loading" class="empty-state">
           <div class="empty-title">{{ t('devices.empty') }}</div>
           <NButton size="small" :loading="scanning || state.scanning" @click="refreshDevices">
@@ -410,7 +470,7 @@ onMounted(() => {
           <article v-for="requestDevice in state.requests" :key="requestDevice.id" class="request-item">
             <div>
               <div class="request-name">{{ requestDevice.computer_name || requestDevice.ip }}</div>
-              <div class="request-meta">{{ requestDevice.ip }}:{{ requestDevice.http_port }}</div>
+              <div class="request-meta">{{ requestDevice.http_port ? `${requestDevice.ip}:${requestDevice.http_port}` : t('devices.linked.requestMeta', { ip: requestDevice.ip }) }}</div>
               <div class="request-status-row">
                 <NTag size="small" :type="requestProcessTagType(requestDevice)" round>
                   {{ requestProcessLabel(requestDevice) }}
@@ -724,4 +784,30 @@ onMounted(() => {
     flex-basis: 100%;
   }
 }
+.linked-devices {
+  margin-bottom: 20px;
+}
+
+.linked-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.linked-subtitle {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+}
+
+.linked-capabilities {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.linked-none {
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+}
+
 </style>

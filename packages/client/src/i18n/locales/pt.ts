@@ -789,6 +789,21 @@ export default {
     reject: 'Rejeitar',
     block: 'Bloquear',
     unblock: 'Desbloquear',
+    linked: {
+      title: 'Dispositivos vinculados',
+      subtitle: 'Dispositivos conectados a partir do aplicativo de desktop que permitem que o Hermes neste servidor os opere.',
+      controllable: 'Controlável',
+      connectedAt: 'Conectado {time}',
+      capabilities: {
+        exec: 'Executar comandos',
+        files: 'Arquivos',
+        terminal: 'Terminal',
+      },
+      noCapabilities: 'Nenhuma capacidade habilitada no dispositivo',
+      disconnect: 'Desconectar',
+      disconnectFailed: 'Falha ao desconectar o dispositivo',
+      requestMeta: '{ip} (aplicativo de desktop)',
+    },
     inboundStatus: {
       none: 'Pode solicitar',
       pending: 'Pendente',

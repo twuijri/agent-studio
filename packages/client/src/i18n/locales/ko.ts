@@ -789,6 +789,21 @@ export default {
     reject: '거절',
     block: '차단',
     unblock: '차단 해제',
+    linked: {
+      title: '연결된 기기',
+      subtitle: '데스크톱 앱에서 연결되어 이 서버의 Hermes가 조작할 수 있도록 허용한 기기입니다.',
+      controllable: '제어 가능',
+      connectedAt: '{time}에 연결됨',
+      capabilities: {
+        exec: '명령 실행',
+        files: '파일',
+        terminal: '터미널',
+      },
+      noCapabilities: '기기에서 활성화된 기능이 없습니다',
+      disconnect: '연결 해제',
+      disconnectFailed: '기기 연결 해제 실패',
+      requestMeta: '{ip} (데스크톱 앱)',
+    },
     inboundStatus: {
       none: '요청 허용',
       pending: '대기 중',

@@ -144,6 +144,24 @@ type RemoteTerminal = {
   exitCode: number | null
 }
 
+// Capabilities a connecting peer may declare when it allows this Studio to
+// operate it ("controllable"): the desktop app's Device Agent uses this so a
+// server-side Hermes can run commands and exchange files with the user's
+// machine even though the connection was opened from the device's side.
+export const LAN_PEER_CAPABILITIES = ['exec', 'files', 'terminal'] as const
+export type LanPeerCapability = typeof LAN_PEER_CAPABILITIES[number]
+
+export function parseLanPeerCapabilities(raw: string | null | undefined): LanPeerCapability[] {
+  if (!raw) return []
+  const wanted = new Set(raw.split(',').map(value => value.trim().toLowerCase()).filter(Boolean))
+  return LAN_PEER_CAPABILITIES.filter(capability => wanted.has(capability))
+}
+
+export function parseLanPeerControllable(raw: string | null | undefined): boolean {
+  const value = (raw || '').trim().toLowerCase()
+  return value === '1' || value === 'true' || value === 'yes'
+}
+
 export type LanPeerConnectionInfo = {
   id: string
   role: PeerRole
@@ -151,6 +169,9 @@ export type LanPeerConnectionInfo = {
   computer_name: string
   url: string
   connected_at: number
+  /** The remote peer opened the connection and allows this Studio to operate it. */
+  controllable: boolean
+  capabilities: LanPeerCapability[]
   local_terminal_sessions: number
   remote_terminal_sessions: number
   reconnect_attempts?: number
@@ -276,6 +297,7 @@ class LanPeerConnection {
     readonly deviceId: string,
     private readonly computerName: string,
     private readonly url: string,
+    private readonly remoteControl: { controllable: boolean; capabilities: LanPeerCapability[] } = { controllable: false, capabilities: [] },
   ) {
     this.ws.on('pong', () => {
       this.alive = true
@@ -303,6 +325,8 @@ class LanPeerConnection {
       computer_name: this.computerName,
       url: this.url,
       connected_at: this.connectedAt,
+      controllable: this.remoteControl.controllable,
+      capabilities: [...this.remoteControl.capabilities],
       local_terminal_sessions: this.terminalSessions.size,
       remote_terminal_sessions: this.remoteTerminals.size,
       reconnect_attempts: this.role === 'client' ? this.manager.getReconnectAttempts(this.deviceId) : undefined,
@@ -964,6 +988,12 @@ export class LanPeerSocketManager {
           return
         }
 
+        // A peer may declare itself controllable at handshake time. Only an
+        // inbound-approved device reaches this point, so the declaration is
+        // honoured as-is; peers that do not declare it keep the old semantics
+        // (the connecting side controls this Studio, never the reverse).
+        const controllable = parseLanPeerControllable(url.searchParams.get('controllable'))
+        const capabilities = controllable ? parseLanPeerCapabilities(url.searchParams.get('capabilities')) : []
         this.wss.handleUpgrade(req, socket, head, ws => {
           const connection = new LanPeerConnection(
             this,
@@ -972,7 +1002,11 @@ export class LanPeerSocketManager {
             auth.device.id,
             auth.device.computerName,
             auth.device.url,
+            { controllable, capabilities },
           )
+          if (controllable) {
+            logger.info({ deviceId: auth.device.id, capabilities }, '[lan-peer] controllable device connected')
+          }
           this.connections.set(connection.id, connection)
           this.wss.emit('connection', ws, req)
         })

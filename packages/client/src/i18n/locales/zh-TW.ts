@@ -744,6 +744,21 @@ export default {
     reject: '拒絕',
     block: '拉黑',
     unblock: '解除拉黑',
+    linked: {
+      title: '已連結裝置',
+      subtitle: '從桌面應用程式連線並允許此伺服器上的 Hermes 操作的裝置。',
+      controllable: '可控制',
+      connectedAt: '連線於 {time}',
+      capabilities: {
+        exec: '執行命令',
+        files: '檔案',
+        terminal: '終端機',
+      },
+      noCapabilities: '裝置未啟用任何能力',
+      disconnect: '中斷連線',
+      disconnectFailed: '中斷裝置連線失敗',
+      requestMeta: '{ip}（桌面應用程式）',
+    },
     inboundStatus: {
       none: '允許申請',
       pending: '待處理',

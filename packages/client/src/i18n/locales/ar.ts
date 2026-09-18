@@ -744,6 +744,21 @@ export default {
     reject: 'رفض',
     block: 'حجب',
     unblock: 'إلغاء الحجب',
+    linked: {
+      title: 'الأجهزة المرتبطة',
+      subtitle: 'أجهزة اتصلت من تطبيق سطح المكتب وتسمح لـ Hermes على هذا السيرفر بالعمل عليها.',
+      controllable: 'قابل للتحكم',
+      connectedAt: 'متصل منذ {time}',
+      capabilities: {
+        exec: 'تنفيذ الأوامر',
+        files: 'الملفات',
+        terminal: 'الطرفية',
+      },
+      noCapabilities: 'لا قدرات مفعّلة على الجهاز',
+      disconnect: 'قطع الاتصال',
+      disconnectFailed: 'تعذر قطع اتصال الجهاز',
+      requestMeta: '{ip} (تطبيق سطح المكتب)',
+    },
     inboundStatus: {
       none: 'مسموح بالطلب',
       pending: 'قيد الانتظار',

@@ -673,6 +673,21 @@ export default {
     reject: 'Отклонить',
     block: 'Заблокировать',
     unblock: 'Разблокировать',
+    linked: {
+      title: 'Связанные устройства',
+      subtitle: 'Устройства, подключившиеся из настольного приложения и разрешающие Hermes на этом сервере управлять ими.',
+      controllable: 'Управляемое',
+      connectedAt: 'Подключено {time}',
+      capabilities: {
+        exec: 'Выполнение команд',
+        files: 'Файлы',
+        terminal: 'Терминал',
+      },
+      noCapabilities: 'На устройстве не включены возможности',
+      disconnect: 'Отключить',
+      disconnectFailed: 'Не удалось отключить устройство',
+      requestMeta: '{ip} (настольное приложение)',
+    },
     inboundStatus: {
       none: 'Запрос разрешен',
       pending: 'Ожидает',

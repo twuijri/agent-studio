@@ -751,6 +751,21 @@ export default {
     reject: 'Reject',
     block: 'Block',
     unblock: 'Unblock',
+    linked: {
+      title: 'Linked devices',
+      subtitle: 'Devices that connected from the desktop app and let Hermes on this server operate them.',
+      controllable: 'Controllable',
+      connectedAt: 'Connected {time}',
+      capabilities: {
+        exec: 'Run commands',
+        files: 'Files',
+        terminal: 'Terminal',
+      },
+      noCapabilities: 'No capabilities enabled on the device',
+      disconnect: 'Disconnect',
+      disconnectFailed: 'Failed to disconnect the device',
+      requestMeta: '{ip} (desktop app)',
+    },
     inboundStatus: {
       none: 'Allowed to request',
       pending: 'Pending',

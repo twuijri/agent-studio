@@ -789,6 +789,21 @@ export default {
     reject: '拒否',
     block: 'ブロック',
     unblock: 'ブロック解除',
+    linked: {
+      title: 'リンク済みデバイス',
+      subtitle: 'デスクトップアプリから接続し、このサーバー上の Hermes による操作を許可しているデバイス。',
+      controllable: '制御可能',
+      connectedAt: '{time} に接続',
+      capabilities: {
+        exec: 'コマンド実行',
+        files: 'ファイル',
+        terminal: 'ターミナル',
+      },
+      noCapabilities: 'デバイスで有効な機能はありません',
+      disconnect: '切断',
+      disconnectFailed: 'デバイスの切断に失敗しました',
+      requestMeta: '{ip}（デスクトップアプリ）',
+    },
     inboundStatus: {
       none: '申請可能',
       pending: '保留中',
