@@ -2535,6 +2535,11 @@ export default {
       linkOpenTargetHint: 'Choose where links from messages and Markdown previews open.',
       linkOpenTargetHermesStudio: 'Core Hub',
       linkOpenTargetDefaultBrowser: 'Default browser',
+      connectionMode: 'App connection',
+      connectionModeHint: 'Where this desktop app runs Hermes: on this computer, or linked to your Core Hub server. Changing it restarts the app.',
+      connectionModeLocal: 'On this computer',
+      connectionModeServer: 'Linked to {url}',
+      connectionModeChange: 'Change...',
     },
     agent: {
       maxTurns: 'Max Turns',

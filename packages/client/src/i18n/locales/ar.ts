@@ -2529,6 +2529,11 @@ export default {
       linkOpenTargetHint: 'اختر مكان فتح الروابط من الرسائل ومعاينات Markdown.',
       linkOpenTargetHermesStudio: 'كور هب',
       linkOpenTargetDefaultBrowser: 'المتصفح الافتراضي',
+      connectionMode: 'اتصال التطبيق',
+      connectionModeHint: 'مكان تشغيل Hermes لهذا التطبيق: على هذا الجهاز، أو مرتبطاً بسيرفر كور هب الخاص بك. تغييره يعيد تشغيل التطبيق.',
+      connectionModeLocal: 'على هذا الجهاز',
+      connectionModeServer: 'مرتبط بـ {url}',
+      connectionModeChange: 'تغيير...',
     },
     agent: {
       maxTurns: 'الحد الأقصى للدورات',
