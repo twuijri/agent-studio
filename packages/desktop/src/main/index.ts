@@ -520,6 +520,7 @@ function createTray() {
       ? desktopWindowsTrayIcon()
       : desktopLinuxTrayIcon()
   const sourceIcon = nativeImage.createFromPath(source)
+  if (process.platform === 'darwin') sourceIcon.setTemplateImage(true)
   const icon = process.platform === 'darwin'
     ? sourceIcon
     : sourceIcon.resize({

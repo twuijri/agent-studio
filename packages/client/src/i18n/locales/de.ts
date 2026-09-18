@@ -789,6 +789,16 @@ export default {
     reject: 'Ablehnen',
     block: 'Blockieren',
     unblock: 'Blockierung aufheben',
+    thisComputer: {
+      title: 'Dieser Computer ({name})',
+      hint: 'Erlaube Hermes auf diesem Server, auf diesem Computer Befehle auszuführen, Dateien auszutauschen, den Bildschirm zu sehen oder den Agent-Browser zu nutzen. Alles ist optional und fragt um Erlaubnis.',
+      link: 'Diesen Computer verknüpfen',
+      manage: 'Gerätezugriff…',
+      connected: 'Verbunden',
+      pending: 'Warte auf Freigabe',
+      connecting: 'Verbinde…',
+      notLinked: 'Nicht verknüpft',
+    },
     linked: {
       title: 'Verknüpfte Geräte',
       subtitle: 'Geräte, die sich aus der Desktop-App verbunden haben und Hermes auf diesem Server die Steuerung erlauben.',

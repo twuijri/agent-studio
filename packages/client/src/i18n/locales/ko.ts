@@ -789,6 +789,16 @@ export default {
     reject: '거절',
     block: '차단',
     unblock: '차단 해제',
+    thisComputer: {
+      title: '이 컴퓨터({name})',
+      hint: '이 서버의 Hermes가 이 컴퓨터에서 명령 실행, 파일 교환, 화면 보기, 에이전트 브라우저 사용을 할 수 있게 합니다. 모두 선택 사항이며 승인을 요청합니다.',
+      link: '이 컴퓨터 연결',
+      manage: '기기 접근…',
+      connected: '연결됨',
+      pending: '승인 대기 중',
+      connecting: '연결 중…',
+      notLinked: '연결되지 않음',
+    },
     linked: {
       title: '연결된 기기',
       subtitle: '데스크톱 앱에서 연결되어 이 서버의 Hermes가 조작할 수 있도록 허용한 기기입니다.',
