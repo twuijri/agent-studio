@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { NButton, NDrawer, NDrawerContent, NInput, NModal, NPopconfirm, NSpin, NTag, useMessage } from 'naive-ui'
+import { NButton, NDrawer, NDrawerContent, NInput, NModal, NPopconfirm, NSelect, NSpin, NTag, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { copyToClipboard } from '@/utils/clipboard'
 import {
@@ -8,9 +8,11 @@ import {
   blockDevice,
   deleteDeviceRequestHistory,
   disconnectLanPeerDevice,
+  fetchDeviceBindings,
   fetchDevicePairingLink,
   fetchLanDevices,
   fetchLanPeerConnections,
+  updateDeviceBinding,
   rejectDevice,
   requestDevicePairing,
   requestDevicePairingByUrl,
@@ -21,8 +23,10 @@ import {
   type LanDeviceInfo,
   type LanDiscoveryState,
   type LanEndpointKind,
+  type DeviceProfileBindings,
   type LanPeerConnectionInfo,
 } from '@/api/studio/devices'
+import { fetchProfiles } from '@/api/hermes/profiles'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -46,6 +50,10 @@ const pendingPairingDevice = ref<LanDeviceInfo | null>(null)
 // Devices that dialled in and let this Studio operate them (desktop Device Agent).
 const linkedConnections = ref<LanPeerConnectionInfo[]>([])
 const disconnectingConnectionId = ref('')
+// Which Hermes profiles may use each linked device (empty = every profile).
+const deviceBindings = ref<DeviceProfileBindings>({})
+const profileOptions = ref<Array<{ label: string; value: string }>>([])
+const savingBindingDeviceId = ref('')
 const state = ref<LanDiscoveryState>({
   scanning: false,
   last_scanned_at: null,
@@ -155,15 +163,38 @@ function formatVersion(value: string): string {
 }
 
 function capabilityLabel(capability: string): string {
-  return capability === 'exec' || capability === 'files' || capability === 'terminal'
+  return ['exec', 'files', 'terminal', 'browser', 'screen'].includes(capability)
     ? t(`devices.linked.capabilities.${capability}`)
     : capability
+}
+
+async function loadBindings() {
+  try {
+    const [{ bindings }, profiles] = await Promise.all([fetchDeviceBindings(), fetchProfiles()])
+    deviceBindings.value = bindings
+    profileOptions.value = profiles.map(profile => ({ label: profile.name, value: profile.name }))
+  } catch {
+    deviceBindings.value = {}
+  }
+}
+
+async function saveBinding(connection: LanPeerConnectionInfo, profiles: string[]) {
+  savingBindingDeviceId.value = connection.device_id
+  try {
+    const result = await updateDeviceBinding(connection.device_id, profiles)
+    deviceBindings.value = result.bindings
+  } catch (err: any) {
+    message.error(err?.message || t('devices.linked.bindingFailed'))
+  } finally {
+    savingBindingDeviceId.value = ''
+  }
 }
 
 async function loadLinkedConnections() {
   try {
     const { connections } = await fetchLanPeerConnections()
     linkedConnections.value = connections.filter(connection => connection.controllable)
+    if (linkedConnections.value.length > 0) void loadBindings()
   } catch {
     linkedConnections.value = []
   }
@@ -370,6 +401,21 @@ onMounted(() => {
                   {{ capabilityLabel(capability) }}
                 </NTag>
                 <span v-if="!connection.capabilities?.length" class="linked-none">{{ t('devices.linked.noCapabilities') }}</span>
+              </div>
+              <div class="linked-binding">
+                <span class="linked-binding-label">{{ t('devices.linked.profiles') }}</span>
+                <NSelect
+                  size="small"
+                  multiple
+                  clearable
+                  :value="deviceBindings[connection.device_id] || []"
+                  :options="profileOptions"
+                  :placeholder="t('devices.linked.allProfiles')"
+                  :loading="savingBindingDeviceId === connection.device_id"
+                  :data-testid="`linked-binding-${connection.device_id}`"
+                  @update:value="value => saveBinding(connection, value || [])"
+                />
+                <span class="linked-none">{{ t('devices.linked.profilesHint') }}</span>
               </div>
               <div class="device-actions">
                 <NButton size="tiny" quaternary type="error" :loading="disconnectingConnectionId === connection.id" @click="disconnectLinked(connection)">
@@ -808,6 +854,18 @@ onMounted(() => {
 .linked-none {
   font-size: 12px;
   color: var(--text-secondary, #888);
+}
+
+.linked-binding {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.linked-binding-label {
+  font-size: 12px;
+  font-weight: 600;
 }
 
 </style>
