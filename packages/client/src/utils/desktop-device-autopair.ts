@@ -3,7 +3,10 @@ import { desktopDeviceAgentBridge } from '@/utils/desktop-bridge'
 
 // When the desktop app is linked to this server and the user is signed in, the
 // device asks to be paired automatically; the owner only has to approve it on
-// the server (Devices → Requests). Attempted once per app session.
+// the server (Devices → Requests). Attempted once per app session. The Device
+// Agent learns that it is unpaired asynchronously (link-status check on start,
+// or after the owner deleted the device record), so the sidebar keeps watching
+// its state instead of checking only once at mount.
 
 export const DESKTOP_AUTOPAIR_ATTEMPTED_KEY = 'core_hub_device_autopair_attempted'
 
@@ -29,4 +32,38 @@ export async function maybeAutoPairDesktopDevice(options: { storage?: Storage } 
   } catch {
     return 'failed'
   }
+}
+
+/**
+ * Runs the automatic pairing attempt now and again whenever the Device Agent
+ * reports a new state, until one request has been sent this session.
+ * Returns a function that stops watching.
+ */
+export function watchDesktopDeviceAutoPair(options: { storage?: Storage } = {}): () => void {
+  const bridge = desktopDeviceAgentBridge()
+  if (!bridge?.pair) return () => {}
+  let stopped = false
+  let unsubscribe: (() => void) | null = null
+  let inFlight: Promise<unknown> | null = null
+  const attempt = () => {
+    if (stopped || inFlight) return
+    inFlight = maybeAutoPairDesktopDevice(options)
+      .then(result => { if (result === 'sent') stop() })
+      .catch(() => undefined)
+      .finally(() => { inFlight = null })
+  }
+  const stop = () => {
+    stopped = true
+    unsubscribe?.()
+    unsubscribe = null
+  }
+  if (typeof bridge.onState === 'function') {
+    try {
+      unsubscribe = bridge.onState(state => {
+        if (state?.linked && state.status === 'unpaired') attempt()
+      })
+    } catch { unsubscribe = null }
+  }
+  attempt()
+  return stop
 }

@@ -392,7 +392,7 @@ export default {
     gateways: '閘道',
     terminal: '終端機',
     browser: '瀏覽器',
-    appConnections: '應用程式連線',
+    appConnections: '本機應用程式',
     singleChat: '單聊',
     globalAgent: '全局',
     groupChat: '群聊',
@@ -696,7 +696,7 @@ export default {
   },
 
   appConnections: {
-    title: '應用程式連線',
+    title: '這台電腦上的應用程式',
     subtitle: '這台電腦上提供 MCP 伺服器的應用程式。共用後，伺服器上的 Hermes 可透過這台電腦使用它。',
     rescan: '重新掃描',
     desktopOnly: '請從連結到此伺服器的 Core Hub 桌面應用程式開啟此頁面。',
@@ -711,6 +711,9 @@ export default {
     loadFailed: '讀取這台電腦上的應用程式失敗',
     needsConfig: '需要僅原助理擁有的設定（{keys}），暫時無法共用。',
     howItWorks: '共用的應用程式會作為允許的設定檔的 MCP 伺服器出現在 Hermes 中；每次連線的首次使用會在這台電腦上請求你的核准。',
+    localMode: '本機：應用程式連接到這台電腦上的代理',
+    sharedLocal: '{name} 現在可供這台電腦上的代理使用',
+    howItWorksLocal: '共享的應用程式會以所有設定檔的 MCP 伺服器形式出現在這台電腦的 Hermes 和 Ekko 中；代理使用時以你的使用者帳戶執行。',
     sources: {
       claude_desktop: 'Claude Desktop',
       claude_extension: 'Claude Desktop 擴充功能',

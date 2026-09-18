@@ -19,7 +19,9 @@ import {
 } from 'electron'
 import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
+import { hostname } from 'node:os'
 import { join } from 'node:path'
+import { syncLocalSharedApps } from './local-app-sync'
 import {
   getToken,
   setWebUiRestartRequestHandler,
@@ -427,6 +429,7 @@ async function handleResetDefaultLogin() {
     serverUrl = url
     if (mainWindow && !mainWindow.isDestroyed()) await mainWindow.loadURL(url)
     await loadPetWindowRoute()
+    void pushLocalSharedApps()
     await clearWebLoginSession()
     await showDesktopMessageBox({
       type: 'info',
@@ -1068,6 +1071,7 @@ async function bootstrap(source?: RuntimeDownloadSource) {
     updateTrayMenu()
     if (mainWindow) await mainWindow.loadURL(mainRouteUrl() || url)
     await loadPetWindowRoute()
+    void pushLocalSharedApps()
   } catch (err) {
     console.error('Failed to start Web UI server:', err)
     serverUrl = null
@@ -1388,6 +1392,18 @@ function desktopModeFilePath(): string {
 
 function isServerLinkedMode(): boolean {
   return desktopMode.mode === 'server' && !!desktopMode.serverUrl
+}
+
+// Local mode: the apps shared on the App connections page go to the Core Hub
+// server running on this machine, which wires them into every profile.
+async function pushLocalSharedApps(): Promise<void> {
+  if (isServerLinkedMode() || !serverUrl) return
+  try {
+    const result = await syncLocalSharedApps({ port: PORT, token: getToken(), computerName: hostname() }, readDeviceAgentConfig(deviceAgentFile(DEVICE_AGENT_CONFIG_FILE_NAME)).sharedApps)
+    if (result.changed) console.log(`[local-apps] synced ${result.apps.length} shared app(s) into the local server`)
+  } catch (err) {
+    console.warn('[local-apps] failed to sync shared apps with the local server:', err)
+  }
 }
 
 function desktopModeSnapshot() {
@@ -2112,6 +2128,7 @@ ipcMain.handle('hermes-desktop:device-agent-discover-apps', event => {
 ipcMain.handle('hermes-desktop:device-agent-set-apps', async (event, input?: unknown) => {
   requireMainWindowSender(event, 'Changing shared apps')
   const state = await ensureDeviceAgent().setSharedApps(parseSharedMcpApps(input))
+  await pushLocalSharedApps()
   return deviceAgentSnapshot(state)
 })
 ipcMain.handle('hermes-desktop:device-agent-stop-screen', event => {

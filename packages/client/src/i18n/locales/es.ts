@@ -434,7 +434,7 @@ export default {
     socialMessages: 'Enviar mensajes',
     terminal: 'Terminal',
     browser: 'Navegador',
-    appConnections: 'Conexiones de aplicaciones',
+    appConnections: 'Apps del equipo',
     singleChat: 'Chat',
     globalAgent: 'Global Agent',
     files: 'Archivos',
@@ -741,7 +741,7 @@ export default {
   },
 
   appConnections: {
-    title: 'Conexiones de aplicaciones',
+    title: 'Apps de este equipo',
     subtitle: 'Aplicaciones de este equipo que exponen un servidor MCP. Comparte una y Hermes en tu servidor podrá usarla a través de este equipo.',
     rescan: 'Volver a buscar',
     desktopOnly: 'Abre esta página desde la aplicación de escritorio Core Hub vinculada a este servidor.',
@@ -756,6 +756,9 @@ export default {
     loadFailed: 'No se pudieron leer las aplicaciones de este equipo',
     needsConfig: 'Necesita ajustes que solo tiene el asistente original ({keys}); aún no se puede compartir.',
     howItWorks: 'Las aplicaciones compartidas aparecen en Hermes como servidores MCP de los perfiles permitidos; el primer uso en cada conexión pide tu aprobación en este equipo.',
+    localMode: 'Local: las apps se conectan a los agentes de este equipo',
+    sharedLocal: '{name} ya está disponible para los agentes de este equipo',
+    howItWorksLocal: 'Las apps compartidas aparecen para Hermes y Ekko en este equipo como servidores MCP de todos los perfiles; se ejecutan con tu cuenta de usuario cuando un agente las usa.',
     sources: {
       claude_desktop: 'Claude Desktop',
       claude_extension: 'Extensión de Claude Desktop',

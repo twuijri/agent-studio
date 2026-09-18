@@ -434,7 +434,7 @@ export default {
     socialMessages: '메시지 보내기',
     terminal: '터미널',
     browser: '브라우저',
-    appConnections: '앱 연결',
+    appConnections: '이 컴퓨터의 앱',
     singleChat: '채팅',
     globalAgent: 'Global Agent',
     files: '파일',
@@ -741,7 +741,7 @@ export default {
   },
 
   appConnections: {
-    title: '앱 연결',
+    title: '이 컴퓨터의 앱',
     subtitle: '이 컴퓨터에서 MCP 서버를 제공하는 앱입니다. 공유하면 서버의 Hermes가 이 컴퓨터를 통해 사용할 수 있습니다.',
     rescan: '다시 검색',
     desktopOnly: '이 서버에 연결된 Core Hub 데스크톱 앱에서 이 페이지를 여세요.',
@@ -756,6 +756,9 @@ export default {
     loadFailed: '이 컴퓨터의 앱을 읽지 못했습니다',
     needsConfig: '원래 어시스턴트만 가진 설정({keys})이 필요하여 아직 공유할 수 없습니다.',
     howItWorks: '공유된 앱은 허용된 프로필의 MCP 서버로 Hermes에 표시됩니다. 각 연결에서 처음 사용할 때 이 컴퓨터에서 승인을 요청합니다.',
+    localMode: '로컬: 앱이 이 컴퓨터의 에이전트에 연결됩니다',
+    sharedLocal: '{name}을(를) 이제 이 컴퓨터의 에이전트가 사용할 수 있습니다',
+    howItWorksLocal: '공유한 앱은 이 컴퓨터의 Hermes와 Ekko에 모든 프로필의 MCP 서버로 표시되며, 에이전트가 사용할 때 사용자 계정으로 실행됩니다.',
     sources: {
       claude_desktop: 'Claude Desktop',
       claude_extension: 'Claude Desktop 확장',

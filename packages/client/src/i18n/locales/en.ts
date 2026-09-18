@@ -392,7 +392,7 @@ export default {
     gateways: 'Gateways',
     terminal: 'Terminal',
     browser: 'Browser',
-    appConnections: 'App connections',
+    appConnections: 'Computer apps',
     singleChat: 'Chat',
     globalAgent: 'Global Agent',
     groupChat: 'Group Chat',
@@ -703,7 +703,7 @@ export default {
   },
 
   appConnections: {
-    title: 'App connections',
+    title: 'Apps on this computer',
     subtitle: 'Apps on this computer that expose an MCP server. Share one and Hermes on your server can use it through this computer.',
     rescan: 'Rescan',
     desktopOnly: 'Open this page from the Core Hub desktop app linked to this server.',
@@ -718,6 +718,9 @@ export default {
     loadFailed: 'Failed to read apps on this computer',
     needsConfig: 'Needs settings only the original assistant has ({keys}); cannot be shared yet.',
     howItWorks: 'Shared apps appear to Hermes as MCP servers of the allowed profiles; the first use in each connection asks for your approval on this computer.',
+    localMode: 'Local: apps are connected to the agents on this computer',
+    sharedLocal: '{name} is now available to the agents on this computer',
+    howItWorksLocal: 'Shared apps appear to Hermes and Ekko on this computer as MCP servers of every profile; they run with your user account when an agent uses them.',
     sources: {
       claude_desktop: 'Claude Desktop',
       claude_extension: 'Claude Desktop extension',
