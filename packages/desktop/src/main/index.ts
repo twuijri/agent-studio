@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  desktopCapturer,
   dialog,
   ipcMain,
   Menu,
@@ -40,6 +41,8 @@ import {
   type ResolvedDesktopMode,
 } from './desktop-mode'
 import { DeviceAgent, type DeviceAgentState, type ExecApprovalDecision } from './device-agent/agent'
+import type { DeviceAgentProxyRequest, DeviceAgentProxyResponse, DeviceAgentScreenCapture } from './device-agent/protocol'
+import { parseScreenAction, runScreenAction } from './device-agent/screen-input'
 import {
   DEVICE_AGENT_AUDIT_FILE_NAME,
   DEVICE_AGENT_CONFIG_FILE_NAME,
@@ -103,6 +106,7 @@ let desktopMode: ResolvedDesktopMode = LOCAL_DESKTOP_MODE
 // Device Agent: lets the linked Studio server operate this machine (phase 2 of
 // docs/DESKTOP-SERVER-MODE.md). Only created in the linked-server mode.
 let deviceAgent: DeviceAgent | null = null
+let screenControlOverlay: BrowserWindow | null = null
 const DEVICE_AGENT_STATE_CHANNEL = 'hermes-desktop:device-agent-state'
 let tray: Tray | null = null
 let appShutdownPromise: Promise<void> | null = null
@@ -195,6 +199,7 @@ async function prepareAppShutdown(): Promise<void> {
       browserBroker = null
       browserManager = null
       deviceAgent?.stop()
+      updateScreenControlOverlay(false)
       await stopWebUiServer().catch(() => undefined)
     })()
   }
@@ -1620,6 +1625,147 @@ async function askExecApproval(request: { command: string; args: string[]; cwd: 
   return 'deny'
 }
 
+async function askScreenApproval(): Promise<boolean> {
+  showMainWindow()
+  const result = await showDesktopMessageBox({
+    type: 'warning',
+    buttons: [t('agent.allowSession'), t('agent.deny')],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+    title: t('agent.screenApproveTitle'),
+    message: t('agent.screenApproveMessage'),
+    detail: t('agent.screenApproveDetail'),
+  })
+  return result.response === 0
+}
+
+async function proxyToDesktopBrowserBroker(request: DeviceAgentProxyRequest): Promise<DeviceAgentProxyResponse> {
+  const descriptor = browserBroker?.currentDescriptor()
+  if (!descriptor) throw new Error('The desktop agent browser is not running')
+  const base = new URL(descriptor.endpoint)
+  base.pathname = request.path
+  base.search = ''
+  const headers: Record<string, string> = { ...request.headers }
+  // The server gateway authenticates with its own descriptor token; the local
+  // broker expects this app's token for session creation.
+  if (request.path === '/v1/session') headers.authorization = `Bearer ${descriptor.token}`
+  delete headers.host
+  delete headers['content-length']
+  const response = await fetch(base, {
+    method: request.method || 'POST',
+    headers,
+    body: request.body.length ? new Uint8Array(request.body) : undefined,
+    signal: AbortSignal.timeout(50_000),
+  })
+  const body = Buffer.from(await response.arrayBuffer())
+  const responseHeaders: Record<string, string> = {}
+  response.headers.forEach((value, name) => { responseHeaders[name] = value })
+  return { status: response.status, headers: responseHeaders, body }
+}
+
+async function captureDeviceScreen(options: { displayId?: string; maxWidth?: number }): Promise<DeviceAgentScreenCapture> {
+  const displays = screen.getAllDisplays()
+  const primary = screen.getPrimaryDisplay()
+  const target = (options.displayId && displays.find(display => String(display.id) === options.displayId)) || primary
+  const maxWidth = options.maxWidth && options.maxWidth > 0 ? Math.min(4096, Math.floor(options.maxWidth)) : 1600
+  const scale = Math.min(1, maxWidth / target.size.width)
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: Math.round(target.size.width * scale), height: Math.round(target.size.height * scale) },
+  })
+  const source = sources.find(item => item.display_id === String(target.id)) || sources[0]
+  if (!source) throw new Error('No screen is available to capture (check Screen Recording permission)')
+  const image = source.thumbnail
+  const size = image.getSize()
+  if (size.width === 0 || size.height === 0) throw new Error('Screen capture is empty (Screen Recording permission may be missing)')
+  return {
+    media_type: 'image/png',
+    data: image.toPNG().toString('base64'),
+    width: size.width,
+    height: size.height,
+    display_id: String(target.id),
+    displays: displays.map(display => ({
+      id: String(display.id),
+      width: display.size.width,
+      height: display.size.height,
+      scale: display.scaleFactor,
+      primary: display.id === primary.id,
+    })),
+  }
+}
+
+async function performDeviceScreenAction(raw: Record<string, unknown>): Promise<void> {
+  const action = parseScreenAction(raw)
+  if (!action) throw new Error('Invalid screen action')
+  if ('x' in action && 'y' in action) {
+    // Coordinates arrive in screenshot pixels; map them to the display when the shot was scaled.
+    const width = typeof raw.image_width === 'number' ? raw.image_width : 0
+    const display = screen.getPrimaryDisplay()
+    if (width > 0 && width !== display.size.width) {
+      const factor = display.size.width / width
+      action.x = Math.round(action.x * factor)
+      action.y = Math.round(action.y * factor)
+    }
+  }
+  await runScreenAction(action)
+}
+
+function screenControlOverlayHtml(): string {
+  const dir = isRtlDesktopLocale() ? 'rtl' : 'ltr'
+  return 'data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><html dir="${dir}"><head><meta charset="utf-8"><style>
+  html,body{margin:0;background:transparent;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;-webkit-app-region:drag;overflow:hidden}
+  .bar{display:flex;align-items:center;gap:12px;padding:8px 14px;background:#b91c1c;color:#fff;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 18px rgba(0,0,0,.35)}
+  .dot{width:10px;height:10px;border-radius:50%;background:#fff;animation:blink 1s ease-in-out infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+  button{-webkit-app-region:no-drag;border:1px solid rgba(255,255,255,.6);background:rgba(255,255,255,.15);color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
+  button:hover{background:rgba(255,255,255,.3)}
+</style></head><body><div class="bar"><span class="dot"></span><span>${escapeHtml(t('agent.overlayLabel'))}</span>
+<button id="stop">${escapeHtml(t('agent.overlayStop'))}</button></div>
+<script>document.getElementById('stop').addEventListener('click', () => { window.hermesDesktop?.deviceAgent?.stopScreen?.() })</script></body></html>`)
+}
+
+function updateScreenControlOverlay(active: boolean): void {
+  if (!active) {
+    if (screenControlOverlay && !screenControlOverlay.isDestroyed()) screenControlOverlay.close()
+    screenControlOverlay = null
+    return
+  }
+  if (screenControlOverlay && !screenControlOverlay.isDestroyed()) return
+  const display = screen.getPrimaryDisplay()
+  const width = 360
+  const height = 44
+  const overlay = new BrowserWindow({
+    width,
+    height,
+    x: Math.round(display.workArea.x + (display.workArea.width - width) / 2),
+    y: display.workArea.y + 8,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    focusable: false,
+    show: false,
+    webPreferences: {
+      preload: join(__dirname, '..', 'preload', 'index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  overlay.setAlwaysOnTop(true, 'screen-saver')
+  overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  overlay.on('closed', () => { if (screenControlOverlay === overlay) screenControlOverlay = null })
+  overlay.once('ready-to-show', () => overlay.showInactive())
+  void overlay.loadURL(screenControlOverlayHtml())
+  screenControlOverlay = overlay
+}
+
 function ensureDeviceAgent(): DeviceAgent {
   if (deviceAgent) return deviceAgent
   const agent = new DeviceAgent({
@@ -1628,12 +1774,16 @@ function ensureDeviceAgent(): DeviceAgent {
     saveConfig: config => writeDeviceAgentConfig(deviceAgentFile(DEVICE_AGENT_CONFIG_FILE_NAME), config),
     serverUrl: () => (isServerLinkedMode() ? desktopMode.serverUrl : null),
     approveExec: askExecApproval,
+    approveScreen: askScreenApproval,
+    browserProxy: proxyToDesktopBrowserBroker,
+    screen: { capture: captureDeviceScreen, action: performDeviceScreenAction },
     audit: entry => appendDeviceAgentAudit(deviceAgentFile(DEVICE_AGENT_AUDIT_FILE_NAME), entry),
     appVersion: app.getVersion(),
     log: message => console.log(message),
   })
   agent.on('state', (state: DeviceAgentState) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(DEVICE_AGENT_STATE_CHANNEL, deviceAgentSnapshot(state))
+    updateScreenControlOverlay(state.screenSessionApproved && state.status === 'connected')
   })
   deviceAgent = agent
   return agent
@@ -1675,6 +1825,8 @@ function deviceAgentHtml(): string {
     enabled: t('agent.enabled'),
     capExec: t('agent.capExec'),
     capFiles: t('agent.capFiles'),
+    capBrowser: t('agent.capBrowser'),
+    capScreen: t('agent.capScreen'),
     approval: t('agent.approval'),
     approvalAsk: t('agent.approvalAsk'),
     approvalAlways: t('agent.approvalAlways'),
@@ -1747,6 +1899,8 @@ function deviceAgentHtml(): string {
 <div class="card">
   <label class="row"><input type="checkbox" id="cap-exec"><span>${escapeHtml(strings.capExec)}</span></label>
   <label class="row"><input type="checkbox" id="cap-files"><span>${escapeHtml(strings.capFiles)}</span></label>
+  <label class="row"><input type="checkbox" id="cap-browser"><span>${escapeHtml(strings.capBrowser)}</span></label>
+  <label class="row"><input type="checkbox" id="cap-screen"><span>${escapeHtml(strings.capScreen)}</span></label>
   <label class="row"><span>${escapeHtml(strings.approval)}</span>
     <select id="approval"><option value="ask">${escapeHtml(strings.approvalAsk)}</option><option value="always">${escapeHtml(strings.approvalAlways)}</option></select>
   </label>
@@ -1785,6 +1939,8 @@ function deviceAgentHtml(): string {
     el('pending-card').hidden = state.status !== 'pending'
     el('cap-exec').checked = !!state.config.capabilities.exec
     el('cap-files').checked = !!state.config.capabilities.files
+    el('cap-browser').checked = !!state.config.capabilities.browser
+    el('cap-screen').checked = !!state.config.capabilities.screen
     el('approval').value = state.config.approvalMode
     el('unlink').hidden = !state.config.pairedServerUrl
     const folders = el('folders')
@@ -1816,6 +1972,8 @@ function deviceAgentHtml(): string {
   el('enabled').addEventListener('change', e => save({ enabled: e.target.checked }))
   el('cap-exec').addEventListener('change', e => save({ capabilities: { exec: e.target.checked } }))
   el('cap-files').addEventListener('change', e => save({ capabilities: { files: e.target.checked } }))
+  el('cap-browser').addEventListener('change', e => save({ capabilities: { browser: e.target.checked } }))
+  el('cap-screen').addEventListener('change', e => save({ capabilities: { screen: e.target.checked } }))
   el('approval').addEventListener('change', e => save({ approvalMode: e.target.value }))
   el('add-folder').addEventListener('click', () => api.addFolder().then(state => state && render(state)))
   el('send-pairing').addEventListener('click', async function () {
@@ -1850,6 +2008,8 @@ function sanitizeDeviceAgentConfigPatch(input: unknown): Partial<Pick<DeviceAgen
     patch.capabilities = {
       exec: typeof caps.exec === 'boolean' ? caps.exec : current.exec,
       files: typeof caps.files === 'boolean' ? caps.files : current.files,
+      browser: typeof caps.browser === 'boolean' ? caps.browser : current.browser,
+      screen: typeof caps.screen === 'boolean' ? caps.screen : current.screen,
     }
   }
   if (Array.isArray(record.allowedFolders)) {
@@ -1886,6 +2046,12 @@ ipcMain.handle('hermes-desktop:device-agent-set-config', async (event, input?: u
   requireMainWindowSender(event, 'Changing device access settings')
   const state = await ensureDeviceAgent().setConfig(sanitizeDeviceAgentConfigPatch(input))
   return deviceAgentSnapshot(state)
+})
+ipcMain.handle('hermes-desktop:device-agent-stop-screen', event => {
+  const fromOverlay = !!screenControlOverlay && !screenControlOverlay.isDestroyed() && event.sender === screenControlOverlay.webContents
+  if (!fromOverlay && !isTrustedDesktopWindowSender(event.sender)) throw new Error('Screen sharing can only be stopped from a Hermes desktop window')
+  ensureDeviceAgent().revokeScreenSession()
+  return true
 })
 ipcMain.handle('hermes-desktop:device-agent-add-folder', async event => {
   requireMainWindowSender(event, 'Sharing a folder')

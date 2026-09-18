@@ -39,6 +39,7 @@ import {
   stopLanDiscoveryResponder,
 } from './lan-discovery'
 import { getLanPeerSocketManager, getLanPeerSocketPath } from './lan-peer'
+import { getDeviceBrowserGateway } from '../modules/studio/services/network/device-browser-gateway'
 import { startGlobalAgentServer } from '../modules/studio/public/global-agent'
 import { startLocalAppRelayServer } from '../modules/studio/services/app-relay/server'
 import {
@@ -572,6 +573,15 @@ export async function bootstrap() {
     name: 'LAN peer WebSocket and child runtimes',
     close: () => lanPeerSocketManager.shutdown(),
     forceClose: () => lanPeerSocketManager.forceClose(),
+  })
+  // Lets the bundled browser MCP toolset drive the browser of a linked desktop
+  // device (docs/DESKTOP-SERVER-MODE.md, phase 3). Failure is non-fatal.
+  const deviceBrowserGateway = getDeviceBrowserGateway()
+  await deviceBrowserGateway.start().catch(error => console.warn('[bootstrap] device browser gateway unavailable:', error?.message || error))
+  additionalShutdownSteps.push({
+    name: 'Device browser gateway',
+    close: () => deviceBrowserGateway.stop(),
+    forceClose: () => { void deviceBrowserGateway.stop() },
   })
   console.log('[bootstrap] terminal + kanban + LAN peer websocket setup')
 

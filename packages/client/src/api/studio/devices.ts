@@ -41,7 +41,7 @@ export interface LanDiscoveryState {
   requests: LanDeviceInfo[]
 }
 
-export type LanPeerCapability = 'exec' | 'files' | 'terminal'
+export type LanPeerCapability = 'exec' | 'files' | 'terminal' | 'browser' | 'screen'
 
 export interface LanPeerConnectionInfo {
   id: string
@@ -104,6 +104,19 @@ export async function unblockDevice(id: string): Promise<LanDiscoveryState> {
 
 export async function deleteDeviceRequestHistory(id: string): Promise<LanDiscoveryState> {
   return request<LanDiscoveryState>(`/api/devices/${encodeURIComponent(id)}/request-history`, { method: 'DELETE' })
+}
+
+export type DeviceProfileBindings = Record<string, string[]>
+
+export async function fetchDeviceBindings(): Promise<{ bindings: DeviceProfileBindings }> {
+  return request<{ bindings: DeviceProfileBindings }>('/api/devices/bindings')
+}
+
+export async function updateDeviceBinding(deviceId: string, profiles: string[]): Promise<{ device_id: string; profiles: string[]; bindings: DeviceProfileBindings }> {
+  return request(`/api/devices/${encodeURIComponent(deviceId)}/bindings`, {
+    method: 'PUT',
+    body: JSON.stringify({ profiles }),
+  })
 }
 
 export async function fetchLanPeerConnections(): Promise<{ connections: LanPeerConnectionInfo[] }> {

@@ -635,13 +635,20 @@ function browserDescriptor() {
   return { endpoint, token, instanceId: String(descriptor.instanceId || '') }
 }
 
+// A Studio server can stand in for the Desktop Browser Broker and tunnel to a
+// linked device's browser; the profile lets it pick the device bound to it.
+function browserProfileHeader() {
+  const profile = String(process.env.HERMES_WEB_UI_PROFILE || '').trim()
+  return profile ? { 'X-Hermes-Profile': profile } : {}
+}
+
 async function browserSession(descriptor) {
   if (cachedBrowserSession?.instanceId === descriptor.instanceId) return cachedBrowserSession
   const sessionUrl = new URL(descriptor.endpoint)
   sessionUrl.pathname = '/v1/session'
   const response = await fetch(sessionUrl, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${descriptor.token}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${descriptor.token}`, 'Content-Type': 'application/json', ...browserProfileHeader() },
     body: JSON.stringify({ client: BROWSER_CLIENT_ID, client_pid: process.pid }),
     signal: AbortSignal.timeout(10_000),
   })
@@ -661,6 +668,7 @@ async function browserRequest(method, params = {}) {
       Authorization: `Bearer ${session.token}`,
       'Content-Type': 'application/json',
       'X-Hermes-Browser-Client': session.clientId,
+      ...browserProfileHeader(),
     },
     body: JSON.stringify({ method, params, operation_id: operationId }),
     signal: AbortSignal.timeout(45_000),
@@ -1710,6 +1718,32 @@ const tools = [
         timeout_ms: { type: 'number' },
       }, ['connection_id', 'local_path', 'remote_path']),
   },
+  {
+    name: 'ekko_studio_lan_screen_capture',
+    toolset: 'devices',
+    description: 'Take a screenshot of a linked desktop device (a peer connection with the "screen" capability). Returns the image plus display metadata; coordinates for screen actions are in the returned image pixels.',
+    inputSchema: inputSchema({
+        connection_id: { type: 'string' },
+        display_id: { type: 'string' },
+        max_width: { type: 'number' },
+      }, ['connection_id']),
+  },
+  {
+    name: 'ekko_studio_lan_screen_action',
+    toolset: 'devices',
+    description: 'Perform a mouse or keyboard action on a linked desktop device: click, double_click, right_click, move, scroll (x, y, dx, dy), type (text) or key (key, modifiers). Take a screenshot first and after to verify.',
+    inputSchema: inputSchema({
+        connection_id: { type: 'string' },
+        action: { type: 'string', enum: ['click', 'double_click', 'right_click', 'move', 'scroll', 'type', 'key'] },
+        x: { type: 'number' },
+        y: { type: 'number' },
+        dx: { type: 'number' },
+        dy: { type: 'number' },
+        text: { type: 'string' },
+        key: { type: 'string' },
+        modifiers: { type: 'array', items: { type: 'string' } },
+      }, ['connection_id', 'action']),
+  },
 ]
 
 const TOOL_ALIASES = new Map([
@@ -1730,6 +1764,8 @@ const TOOL_ALIASES = new Map([
   ['hermes_lan_command_exec', 'ekko_studio_lan_command_exec'],
   ['hermes_lan_file_download', 'ekko_studio_lan_file_download'],
   ['hermes_lan_file_upload', 'ekko_studio_lan_file_upload'],
+  ['hermes_lan_screen_capture', 'ekko_studio_lan_screen_capture'],
+  ['hermes_lan_screen_action', 'ekko_studio_lan_screen_action'],
 ])
 
 const CATEGORY_TOOLSETS = {
@@ -1740,7 +1776,7 @@ const CATEGORY_TOOLSETS = {
   },
   devices: {
     name: 'ekko_studio_devices_toolset',
-    coverage: 'LAN and remote device discovery and status; paired peer connect/disconnect; interactive terminal create/list/input/read/resize/close; structured remote command execution; file upload and download.',
+    coverage: 'LAN and remote device discovery and status; paired peer connect/disconnect; interactive terminal create/list/input/read/resize/close; structured remote command execution; file upload and download; screenshots and mouse/keyboard actions on linked desktop devices.',
     description: 'Discover and invoke Core Hub LAN/remote-device operations without loading every device tool schema into the model context. Covers device list/scan, paired peer connections, interactive terminal lifecycle and I/O, structured command execution using command plus argument arrays, and remote file upload/download. Use action=list for the compact operation catalog, action=describe for one full input schema, then action=call with that exact tool name and arguments.',
   },
   use: {
@@ -2170,6 +2206,24 @@ async function callTool(name, args = {}) {
       return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/upload`, withAuthArgs(args, {
         method: 'POST',
         body: { local_path: args.local_path, remote_path: args.remote_path, timeout_ms: args.timeout_ms },
+      })))
+    case 'ekko_studio_lan_screen_capture': {
+      const capture = await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/screen`, withAuthArgs(args, {
+        query: pickDefined(args, ['display_id', 'max_width']),
+      }))
+      if (!capture?.data) throw new Error('The device returned an empty screenshot')
+      const { data, ...metadata } = capture
+      return {
+        content: [
+          { type: 'text', text: JSON.stringify(metadata, null, 2) },
+          { type: 'image', data, mimeType: String(capture.media_type || 'image/png') },
+        ],
+      }
+    }
+    case 'ekko_studio_lan_screen_action':
+      return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/screen/action`, withAuthArgs(args, {
+        method: 'POST',
+        body: pickDefined(args, ['action', 'x', 'y', 'dx', 'dy', 'text', 'key', 'modifiers']),
       })))
     default:
       return errorText(`Unknown tool: ${name}`)
