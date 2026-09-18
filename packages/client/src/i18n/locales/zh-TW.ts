@@ -770,6 +770,7 @@ export default {
       disconnect: '中斷連線',
       disconnectFailed: '中斷裝置連線失敗',
       requestMeta: '{ip}（桌面應用程式）',
+      workspace: '工作資料夾',
       profiles: '允許的設定檔',
       allProfiles: '所有設定檔',
       profilesHint: '留空則允許所有 Hermes 設定檔使用此裝置。',

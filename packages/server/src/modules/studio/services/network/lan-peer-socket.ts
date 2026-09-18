@@ -157,6 +157,13 @@ export function parseLanPeerCapabilities(raw: string | null | undefined): LanPee
   return LAN_PEER_CAPABILITIES.filter(capability => wanted.has(capability))
 }
 
+/** Device workspace path declared at handshake (informational; the device enforces its own limits). */
+export function parseLanPeerWorkspace(raw: string | null | undefined): string | undefined {
+  const value = (raw || '').trim()
+  if (!value || value.length > 1024 || /[\u0000-\u001f]/.test(value)) return undefined
+  return value
+}
+
 export function parseLanPeerControllable(raw: string | null | undefined): boolean {
   const value = (raw || '').trim().toLowerCase()
   return value === '1' || value === 'true' || value === 'yes'
@@ -172,6 +179,8 @@ export type LanPeerConnectionInfo = {
   /** The remote peer opened the connection and allows this Studio to operate it. */
   controllable: boolean
   capabilities: LanPeerCapability[]
+  /** Folder on the controllable device where commands start and files should be kept. */
+  workspace?: string
   local_terminal_sessions: number
   remote_terminal_sessions: number
   reconnect_attempts?: number
@@ -319,7 +328,7 @@ class LanPeerConnection {
     readonly deviceId: string,
     private readonly computerName: string,
     private readonly url: string,
-    private readonly remoteControl: { controllable: boolean; capabilities: LanPeerCapability[] } = { controllable: false, capabilities: [] },
+    private readonly remoteControl: { controllable: boolean; capabilities: LanPeerCapability[]; workspace?: string } = { controllable: false, capabilities: [] },
   ) {
     this.ws.on('pong', () => {
       this.alive = true
@@ -349,6 +358,7 @@ class LanPeerConnection {
       connected_at: this.connectedAt,
       controllable: this.remoteControl.controllable,
       capabilities: [...this.remoteControl.capabilities],
+      ...(this.remoteControl.workspace ? { workspace: this.remoteControl.workspace } : {}),
       local_terminal_sessions: this.terminalSessions.size,
       remote_terminal_sessions: this.remoteTerminals.size,
       reconnect_attempts: this.role === 'client' ? this.manager.getReconnectAttempts(this.deviceId) : undefined,
@@ -1070,6 +1080,7 @@ export class LanPeerSocketManager {
         // (the connecting side controls this Studio, never the reverse).
         const controllable = parseLanPeerControllable(url.searchParams.get('controllable'))
         const capabilities = controllable ? parseLanPeerCapabilities(url.searchParams.get('capabilities')) : []
+        const workspace = controllable ? parseLanPeerWorkspace(url.searchParams.get('workspace')) : undefined
         this.wss.handleUpgrade(req, socket, head, ws => {
           const connection = new LanPeerConnection(
             this,
@@ -1078,7 +1089,7 @@ export class LanPeerSocketManager {
             auth.device.id,
             auth.device.computerName,
             auth.device.url,
-            { controllable, capabilities },
+            { controllable, capabilities, workspace },
           )
           if (controllable) {
             logger.info({ deviceId: auth.device.id, capabilities }, '[lan-peer] controllable device connected')

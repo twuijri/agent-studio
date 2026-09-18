@@ -441,6 +441,10 @@ onMounted(() => {
                 </NTag>
                 <span v-if="!connection.capabilities?.length" class="linked-none">{{ t('devices.linked.noCapabilities') }}</span>
               </div>
+              <div v-if="connection.workspace" class="linked-workspace">
+                <span class="linked-binding-label">{{ t('devices.linked.workspace') }}</span>
+                <code>{{ connection.workspace }}</code>
+              </div>
               <div class="linked-binding">
                 <span class="linked-binding-label">{{ t('devices.linked.profiles') }}</span>
                 <NSelect
@@ -893,6 +897,20 @@ onMounted(() => {
 .linked-none {
   font-size: 12px;
   color: var(--text-secondary, #888);
+}
+
+.linked-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.linked-workspace code {
+  direction: ltr;
+  unicode-bidi: isolate;
+  word-break: break-all;
 }
 
 .linked-binding {

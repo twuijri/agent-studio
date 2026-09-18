@@ -815,6 +815,7 @@ export default {
       disconnect: '연결 해제',
       disconnectFailed: '기기 연결 해제 실패',
       requestMeta: '{ip} (데스크톱 앱)',
+      workspace: '작업 폴더',
       profiles: '허용된 프로필',
       allProfiles: '모든 프로필',
       profilesHint: '비워 두면 모든 Hermes 프로필이 이 기기를 사용할 수 있습니다.',

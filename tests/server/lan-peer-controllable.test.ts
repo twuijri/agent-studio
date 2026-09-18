@@ -18,6 +18,14 @@ describe('controllable peer connections (desktop Device Agent)', () => {
     expect(parseLanPeerCapabilities('')).toEqual([])
   })
 
+  it('accepts a declared workspace folder and rejects control characters or oversized values', async () => {
+    const { parseLanPeerWorkspace } = await import('../../packages/server/src/modules/studio/services/network/lan-peer-socket')
+    expect(parseLanPeerWorkspace(' /Users/me/Core Hub ')).toBe('/Users/me/Core Hub')
+    expect(parseLanPeerWorkspace('')).toBeUndefined()
+    expect(parseLanPeerWorkspace('bad\u0000path')).toBeUndefined()
+    expect(parseLanPeerWorkspace('x'.repeat(1025))).toBeUndefined()
+  })
+
   it('lets remote tools run against an inbound peer that declared itself controllable', async () => {
     const execRemoteCommand = vi.fn(async () => ({ stdout: 'mac', stderr: '', exit_code: 0, timed_out: false }))
     vi.doMock('../../packages/server/src/modules/studio/services/network/lan-peer-socket', () => ({
@@ -52,7 +60,7 @@ describe('controllable peer connections (desktop Device Agent)', () => {
     const source = readFileSync('packages/server/src/modules/studio/services/network/lan-peer-socket.ts', 'utf8')
     const setup = source.slice(source.indexOf('setupServer(httpServers'), source.indexOf('forceClose(): void'))
     expect(setup.indexOf('await this.authenticateUpgrade(url, req)')).toBeLessThan(setup.indexOf('parseLanPeerControllable(url.searchParams.get'))
-    expect(setup).toContain("{ controllable, capabilities }")
+    expect(setup).toContain("{ controllable, capabilities, workspace }")
     const auth = source.slice(source.indexOf('private async authenticateUpgrade'))
     expect(auth).toContain("if (relation?.inbound_status !== 'approved')")
   })

@@ -18,6 +18,7 @@ import {
   type WebContents,
 } from 'electron'
 import { existsSync } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   getToken,
@@ -2034,9 +2035,27 @@ ipcMain.handle('hermes-desktop:device-agent-close-settings', async event => {
   await returnToCurrentUi()
   return true
 })
+// First pairing without any shared folder: give Hermes one workspace folder
+// ("~/Core Hub") so its files land in one place, and enable commands + files
+// (each command still asks for approval). The user can change all of it later.
+export const DEFAULT_DEVICE_WORKSPACE_DIR_NAME = 'Core Hub'
+
+async function ensureDefaultDeviceWorkspace(agent: DeviceAgent): Promise<void> {
+  const config = agent.getState().config
+  if (config.allowedFolders.length > 0) return
+  const workspace = join(app.getPath('home'), DEFAULT_DEVICE_WORKSPACE_DIR_NAME)
+  await mkdir(workspace, { recursive: true }).catch(() => undefined)
+  await agent.setConfig({
+    allowedFolders: [workspace],
+    capabilities: { ...config.capabilities, exec: true, files: true },
+  })
+}
+
 ipcMain.handle('hermes-desktop:device-agent-pair', async (event, input?: unknown) => {
   requireMainWindowSender(event, 'Pairing this device')
-  const state = await ensureDeviceAgent().pair(typeof input === 'string' ? input : '')
+  const agent = ensureDeviceAgent()
+  await ensureDefaultDeviceWorkspace(agent)
+  const state = await agent.pair(typeof input === 'string' ? input : '')
   return deviceAgentSnapshot(state)
 })
 ipcMain.handle('hermes-desktop:device-agent-unpair', event => {

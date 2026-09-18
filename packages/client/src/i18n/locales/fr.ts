@@ -815,6 +815,7 @@ export default {
       disconnect: 'Déconnecter',
       disconnectFailed: 'Échec de la déconnexion de l’appareil',
       requestMeta: '{ip} (application de bureau)',
+      workspace: 'Dossier de travail',
       profiles: 'Profils autorisés',
       allProfiles: 'Tous les profils',
       profilesHint: 'Laissez vide pour que tous les profils Hermes puissent utiliser cet appareil.',

@@ -699,6 +699,7 @@ export default {
       disconnect: 'Отключить',
       disconnectFailed: 'Не удалось отключить устройство',
       requestMeta: '{ip} (настольное приложение)',
+      workspace: 'Рабочая папка',
       profiles: 'Разрешённые профили',
       allProfiles: 'Все профили',
       profilesHint: 'Оставьте пустым, чтобы это устройство могли использовать все профили Hermes.',
