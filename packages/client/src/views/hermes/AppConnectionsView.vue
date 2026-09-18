@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { NButton, NSpin, NSwitch, NTag, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { desktopConnectionMode, desktopDeviceAgentBridge, type DesktopDeviceAgentSnapshot, type DesktopDiscoveredApp, type DesktopSharedApp } from '@/utils/desktop-bridge'
+import { desktopAppConnectionsBridge, desktopConnectionMode, type DesktopDeviceAgentSnapshot, type DesktopDiscoveredApp, type DesktopSharedApp } from '@/utils/desktop-bridge'
 
 // Apps on this computer that expose an MCP server (registered with Claude
 // Desktop, Claude Code, Codex, Cursor, Windsurf, or installed as a Claude
@@ -13,7 +13,7 @@ import { desktopConnectionMode, desktopDeviceAgentBridge, type DesktopDeviceAgen
 
 const { t } = useI18n()
 const message = useMessage()
-const bridge = desktopDeviceAgentBridge()
+const bridge = desktopAppConnectionsBridge()
 
 const loading = ref(false)
 const saving = ref('')

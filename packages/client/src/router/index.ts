@@ -1,6 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { hasApiKey, isStoredSuperAdmin } from '@/api/client'
-import { desktopDeviceAgentBridge, hasDesktopBrowserBridge } from '@/utils/desktop-bridge'
+import { desktopAppConnectionsBridge, hasDesktopBrowserBridge } from '@/utils/desktop-bridge'
 import { resolveLoginRedirect } from '@/utils/login-redirect'
 
 const router = createRouter({
@@ -291,8 +291,8 @@ if (hasDesktopBrowserBridge()) {
   })
 }
 
-// Linked desktop shell: apps on this computer that Hermes on the server may use.
-if (desktopDeviceAgentBridge()) {
+// Desktop shell (linked or local): apps on this computer the agents may use.
+if (desktopAppConnectionsBridge()) {
   router.addRoute({
     path: '/hermes/app-connections',
     name: 'hermes.appConnections',
