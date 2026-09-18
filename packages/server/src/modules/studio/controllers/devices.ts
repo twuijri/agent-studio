@@ -22,6 +22,7 @@ import {
 import { getLanPeerSocketManager } from '../services/network/lan-peer-socket'
 import { getLanPeerToolsService } from '../services/network/lan-peer-tools'
 import { getDevicePairingCode, verifyDevicePairingCode } from '../services/devices/pairing-code'
+import { deleteDeviceBinding, isDeviceAllowedForProfile, listDeviceBindings, setDeviceBinding } from '../services/devices/device-bindings'
 import { createDeviceSignature, deviceIdFromPublicKey, getPublicSystemInfo, verifyDeviceSignature } from '../public/system-info'
 import { describeLanJsonPostError, getLanJson, postLanJson } from '../services/network/lan-http-client'
 import { checkPairing, recordPairingFailure } from '../services/auth/login-limiter'
@@ -574,12 +575,78 @@ export async function deleteDeviceRequestHistory(ctx: any) {
     return
   }
   getLanPeerSocketManager().disconnectDevice(ctx.params.id)
+  deleteDeviceBinding(ctx.params.id)
   ctx.body = await devicesPayload()
 }
 
+function requestProfileName(ctx: any): string {
+  return String(ctx.state?.profile?.name || '').trim()
+}
+
+/** A profile only sees controllable devices bound to it (or unbound ones); dialled-out peers are unaffected. */
+function connectionVisibleToProfile(connection: { controllable?: boolean; device_id: string }, profile: string): boolean {
+  if (!connection.controllable) return true
+  return isDeviceAllowedForProfile(connection.device_id, profile)
+}
+
+function assertConnectionAllowed(ctx: any, connectionId: string): boolean {
+  const connection = getLanPeerSocketManager().getConnection(connectionId)
+  if (!connection) return true // let the tools service produce its 404
+  if (connectionVisibleToProfile(connection.info(), requestProfileName(ctx))) return true
+  ctx.status = 403
+  ctx.body = { error: 'This device is not available to the current profile' }
+  return false
+}
+
 export async function listPeerConnections(ctx: any) {
+  const profile = requestProfileName(ctx)
   ctx.body = {
-    connections: getLanPeerSocketManager().listConnections(),
+    connections: getLanPeerSocketManager().listConnections().filter(connection => connectionVisibleToProfile(connection, profile)),
+  }
+}
+
+export async function listDeviceBindingsController(ctx: any) {
+  ctx.body = { bindings: listDeviceBindings() }
+}
+
+export async function updateDeviceBindingController(ctx: any) {
+  const body = ctx.request.body as { profiles?: unknown } | undefined
+  try {
+    const profiles = setDeviceBinding(String(ctx.params.id || ''), body?.profiles)
+    ctx.body = { device_id: ctx.params.id, profiles, bindings: listDeviceBindings() }
+  } catch (err: any) {
+    ctx.status = Number(err?.status) || 500
+    ctx.body = { error: err?.message || 'Failed to update device binding' }
+  }
+}
+
+export async function capturePeerScreen(ctx: any) {
+  if (!assertConnectionAllowed(ctx, ctx.params.connectionId)) return
+  const maxWidth = Number(ctx.query?.max_width)
+  try {
+    ctx.body = await getLanPeerToolsService().captureScreen(ctx.params.connectionId, {
+      displayId: typeof ctx.query?.display_id === 'string' ? ctx.query.display_id : undefined,
+      maxWidth: Number.isFinite(maxWidth) && maxWidth > 0 ? Math.floor(maxWidth) : undefined,
+    })
+  } catch (err: any) {
+    ctx.status = Number(err?.status) || 502
+    ctx.body = { error: err?.message || 'Failed to capture the device screen' }
+  }
+}
+
+export async function performPeerScreenAction(ctx: any) {
+  if (!assertConnectionAllowed(ctx, ctx.params.connectionId)) return
+  const body = ctx.request.body
+  if (!body || typeof body !== 'object' || typeof body.action !== 'string') {
+    ctx.status = 400
+    ctx.body = { error: 'Missing screen action' }
+    return
+  }
+  try {
+    ctx.body = await getLanPeerToolsService().screenAction(ctx.params.connectionId, body)
+  } catch (err: any) {
+    ctx.status = Number(err?.status) || 502
+    ctx.body = { error: err?.message || 'Failed to perform the screen action' }
   }
 }
 
@@ -608,6 +675,7 @@ export async function connectPeerDevice(ctx: any) {
 }
 
 export async function disconnectPeerDevice(ctx: any) {
+  if (!assertConnectionAllowed(ctx, ctx.params.connectionId)) return
   if (!getLanPeerSocketManager().disconnect(ctx.params.connectionId)) {
     ctx.status = 404
     ctx.body = { error: 'Peer connection not found' }
@@ -629,6 +697,7 @@ function handlePeerToolError(ctx: any, err: any) {
 }
 
 export async function createPeerTerminal(ctx: any) {
+  if (!assertConnectionAllowed(ctx, ctx.params.connectionId)) return
   const body = ctx.request.body as any
   try {
     const terminal = await getLanPeerToolsService().createTerminal(ctx.params.connectionId, {
@@ -643,6 +712,7 @@ export async function createPeerTerminal(ctx: any) {
 }
 
 export async function listPeerTerminals(ctx: any) {
+  if (!assertConnectionAllowed(ctx, ctx.params.connectionId)) return
   try {
     ctx.body = {
       terminals: getLanPeerToolsService().listTerminals(ctx.params.connectionId),
@@ -653,6 +723,7 @@ export async function listPeerTerminals(ctx: any) {
 }
 
 export async function writePeerTerminal(ctx: any) {
+  if (!assertConnectionAllowed(ctx, ctx.params.connectionId)) return
   const body = ctx.request.body as any
   try {
     ctx.body = getLanPeerToolsService().writeTerminal({
@@ -666,6 +737,7 @@ export async function writePeerTerminal(ctx: any) {
 }
 
 export async function resizePeerTerminal(ctx: any) {
+  if (!assertConnectionAllowed(ctx, ctx.params.connectionId)) return
   const body = ctx.request.body as any
   try {
     ctx.body = getLanPeerToolsService().resizeTerminal({
@@ -680,6 +752,7 @@ export async function resizePeerTerminal(ctx: any) {
 }
 
 export async function readPeerTerminal(ctx: any) {
+  if (!assertConnectionAllowed(ctx, ctx.params.connectionId)) return
   try {
     ctx.body = {
       terminal: getLanPeerToolsService().readTerminal({
@@ -693,6 +766,7 @@ export async function readPeerTerminal(ctx: any) {
 }
 
 export async function closePeerTerminal(ctx: any) {
+  if (!assertConnectionAllowed(ctx, ctx.params.connectionId)) return
   try {
     ctx.body = getLanPeerToolsService().closeTerminal({
       connectionId: ctx.params.connectionId,
@@ -704,6 +778,7 @@ export async function closePeerTerminal(ctx: any) {
 }
 
 export async function execPeerCommand(ctx: any) {
+  if (!assertConnectionAllowed(ctx, ctx.params.connectionId)) return
   const body = ctx.request.body as any
   try {
     const result = await getLanPeerToolsService().exec({
@@ -720,6 +795,7 @@ export async function execPeerCommand(ctx: any) {
 }
 
 export async function downloadPeerFile(ctx: any) {
+  if (!assertConnectionAllowed(ctx, ctx.params.connectionId)) return
   const body = ctx.request.body as any
   try {
     ctx.body = await getLanPeerToolsService().downloadFile({
@@ -734,6 +810,7 @@ export async function downloadPeerFile(ctx: any) {
 }
 
 export async function uploadPeerFile(ctx: any) {
+  if (!assertConnectionAllowed(ctx, ctx.params.connectionId)) return
   const body = ctx.request.body as any
   try {
     ctx.body = await getLanPeerToolsService().uploadFile({

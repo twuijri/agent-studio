@@ -148,7 +148,7 @@ type RemoteTerminal = {
 // operate it ("controllable"): the desktop app's Device Agent uses this so a
 // server-side Hermes can run commands and exchange files with the user's
 // machine even though the connection was opened from the device's side.
-export const LAN_PEER_CAPABILITIES = ['exec', 'files', 'terminal'] as const
+export const LAN_PEER_CAPABILITIES = ['exec', 'files', 'terminal', 'browser', 'screen'] as const
 export type LanPeerCapability = typeof LAN_PEER_CAPABILITIES[number]
 
 export function parseLanPeerCapabilities(raw: string | null | undefined): LanPeerCapability[] {
@@ -216,6 +216,28 @@ export type LanPeerExecResult = {
   stderr: string
   exit_code: number | null
   timed_out: boolean
+}
+
+export type LanPeerProxyRequest = {
+  method: string
+  path: string
+  headers: Record<string, string>
+  body: Buffer
+}
+
+export type LanPeerProxyResponse = {
+  status: number
+  headers: Record<string, string>
+  body: Buffer
+}
+
+export type LanPeerScreenCapture = {
+  media_type: string
+  data: string
+  width: number
+  height: number
+  display_id: string
+  displays: Array<{ id: string; width: number; height: number; scale: number; primary: boolean }>
 }
 
 function now() {
@@ -544,6 +566,47 @@ class LanPeerConnection {
       exit_code: typeof response.exit_code === 'number' ? response.exit_code : null,
       timed_out: Boolean(response.timed_out),
     }
+  }
+
+  /** Tunnel one HTTP request to a service on the controllable device (its browser broker). */
+  async proxyHttp(input: LanPeerProxyRequest, timeoutMs = 60000): Promise<LanPeerProxyResponse> {
+    const response = await this.request({
+      type: 'http.proxy',
+      method: input.method,
+      path: input.path,
+      headers: input.headers,
+      body: input.body.length ? input.body.toString('base64') : '',
+    }, ['http.proxy.result'], ['http.proxy.error', 'error'], timeoutMs)
+    const headers = (response as any).headers
+    return {
+      status: Number((response as any).status) || 502,
+      headers: headers && typeof headers === 'object' ? Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), String(v)])) : {},
+      body: typeof (response as any).body === 'string' ? Buffer.from((response as any).body, 'base64') : Buffer.alloc(0),
+    }
+  }
+
+  /** Screenshot of the controllable device's display. */
+  async captureScreen(options: { displayId?: string; maxWidth?: number } = {}, timeoutMs = 30000): Promise<LanPeerScreenCapture> {
+    const response = await this.request({
+      type: 'screen.capture',
+      display_id: options.displayId,
+      max_width: options.maxWidth,
+    }, ['screen.capture.result'], ['screen.error', 'error'], timeoutMs) as any
+    if (typeof response.data !== 'string' || !response.data) throw new Error('Device returned an empty screenshot')
+    return {
+      media_type: String(response.media_type || 'image/png'),
+      data: response.data,
+      width: Number(response.width) || 0,
+      height: Number(response.height) || 0,
+      display_id: String(response.display_id || ''),
+      displays: Array.isArray(response.displays) ? response.displays : [],
+    }
+  }
+
+  /** Mouse/keyboard action on the controllable device's desktop. */
+  async screenAction(action: Record<string, unknown>, timeoutMs = 30000): Promise<{ ok: true }> {
+    await this.request({ type: 'screen.action', ...action }, ['screen.action.result'], ['screen.error', 'error'], timeoutMs)
+    return { ok: true }
   }
 
   downloadFileToBuffer(path: string, timeoutMs = 60000): Promise<Buffer> {
@@ -960,7 +1023,20 @@ export class LanPeerSocketManager {
   private readonly clientTargets = new Map<string, ClientPeerTarget>()
   private readonly seenNonces = new Map<string, number>()
   private readonly upgradeHandlers = new Map<HttpServer, (req: IncomingMessage, socket: Duplex, head: Buffer) => void>()
+  private readonly listeners = new Set<() => void>()
   private setupDone = false
+
+  /** Notified after a connection is added or removed. */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => { this.listeners.delete(listener) }
+  }
+
+  private notify(): void {
+    for (const listener of this.listeners) {
+      try { listener() } catch (error) { logger.warn(error, '[lan-peer] connection listener failed') }
+    }
+  }
 
   setupServer(httpServers: HttpServer | HttpServer[]) {
     if (this.setupDone) return
@@ -1008,6 +1084,7 @@ export class LanPeerSocketManager {
             logger.info({ deviceId: auth.device.id, capabilities }, '[lan-peer] controllable device connected')
           }
           this.connections.set(connection.id, connection)
+          this.notify()
           this.wss.emit('connection', ws, req)
         })
       }
@@ -1088,6 +1165,7 @@ export class LanPeerSocketManager {
 
     const connection = new LanPeerConnection(this, ws, 'client', device.id, device.computer_name, device.url)
     this.connections.set(connection.id, connection)
+    this.notify()
     return connection
   }
 
@@ -1117,7 +1195,7 @@ export class LanPeerSocketManager {
   }
 
   removeConnection(connectionId: string) {
-    this.connections.delete(connectionId)
+    if (this.connections.delete(connectionId)) this.notify()
   }
 
   getReconnectAttempts(deviceId: string): number {
