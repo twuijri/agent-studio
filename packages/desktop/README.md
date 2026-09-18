@@ -14,6 +14,16 @@ still see that message on an older download, run
 `xattr -dr com.apple.quarantine "/Applications/Core Hub.app"`. Adding the
 `MAC_CSC_LINK` / `APPLE_*` secrets to the repository produces notarized builds
 that open without any prompt.
+## New-version notice (no auto-updater)
+
+The auto-updater stays disabled in this fork. Instead, packaged builds check the
+fork's GitHub releases 30 s after start and every 6 hours; when a newer release
+exists the app shows a system notification once per version and keeps a
+"Download version X…" entry in the tray menu. Nothing is downloaded or
+installed: the entry opens the release page. "Check for updates" in the tray
+runs the same check on demand, and "Notify about new versions" turns the
+automatic check off. State lives in `release-notice.json` under the app data
+directory; `CORE_HUB_RELEASE_API_URL` overrides the source for testing.
 
 ## Install
 
