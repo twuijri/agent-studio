@@ -71,7 +71,7 @@ import {
 
 const props = withDefaults(defineProps<{
   standalone?: boolean;
-  contentMode?: "chat" | "connections" | "agents" | "models";
+  contentMode?: "chat" | "connections" | "agents" | "models" | "apps";
   initialComposerText?: string;
   composerPersistDraft?: boolean;
 }>(), {
@@ -87,6 +87,7 @@ const FilesPanel = defineAsyncComponent(async () => (await import('./FilesPanel.
 const ConnectionsPanel = defineAsyncComponent(async () => (await import('@/components/hermes/connections/ConnectionsPanel.vue')).default);
 const AgentManagerPanel = defineAsyncComponent(async () => (await import('@/views/hermes/AgentManagerView.vue')).default);
 const ModelsPanel = defineAsyncComponent(async () => (await import('@/views/hermes/ModelsView.vue')).default);
+const ComputerAppsPanel = defineAsyncComponent(async () => (await import('@/views/hermes/AppConnectionsView.vue')).default);
 const WorkspaceDiffPreview = defineAsyncComponent(async () => (await import('@/components/hermes/files/WorkspaceDiffPreview.vue')).default);
 const FilePreview = defineAsyncComponent(async () => (await import('@/components/hermes/files/FilePreview.vue')).default);
 const DesktopBrowserPanel = defineAsyncComponent(async () => (await import('./DesktopBrowserPanel.vue')).default);
@@ -2399,7 +2400,7 @@ async function handleSessionModelCustomSubmit() {
     >
       <div v-if="showSessions" class="page-sidebar-top">
         <PageSidebarNav
-          :active="contentMode === 'connections' ? 'connections' : contentMode === 'agents' ? 'agents' : contentMode === 'models' ? 'models' : chatStore.runtimeMode === 'global_agent' ? 'global' : 'chat'"
+          :active="contentMode === 'connections' ? 'connections' : contentMode === 'agents' ? 'agents' : contentMode === 'models' ? 'models' : contentMode === 'apps' ? 'apps' : chatStore.runtimeMode === 'global_agent' ? 'global' : 'chat'"
           :primary-label="t('chat.newChat')"
           @primary="openNewChatModal"
         />
@@ -3260,6 +3261,11 @@ async function handleSessionModelCustomSubmit() {
       />
       <ModelsPanel
         v-else-if="contentMode === 'models'"
+        :sidebar-collapsed="!showSessions"
+        @toggle-sidebar="showSessions = !showSessions"
+      />
+      <ComputerAppsPanel
+        v-else-if="contentMode === 'apps'"
         :sidebar-collapsed="!showSessions"
         @toggle-sidebar="showSessions = !showSessions"
       />

@@ -277,6 +277,18 @@ export function desktopDeviceAgentBridge(): DesktopDeviceAgentBridge | null {
   return agent && typeof agent.openSettings === 'function' && typeof agent.getState === 'function' ? agent : null
 }
 
+/**
+ * App connections (MCP apps on this computer) work in both shell modes: linked
+ * to a server (shared through the Device Agent) and local (handed to the local
+ * Core Hub). Needs a build whose Device Agent bridge can discover and share apps.
+ */
+export function desktopAppConnectionsBridge(): DesktopDeviceAgentBridge | null {
+  const bridge = desktopBridge()
+  if (bridge?.isDesktop !== true) return null
+  const agent = bridge.deviceAgent
+  return agent && typeof agent.getState === 'function' && typeof agent.discoverApps === 'function' && typeof agent.setApps === 'function' ? agent : null
+}
+
 export function canOpenDesktopConnectionSettings(): boolean {
   return typeof desktopBridge()?.desktopMode?.openSettings === 'function'
 }

@@ -392,7 +392,7 @@ export default {
     gateways: 'البوابات',
     terminal: 'الطرفية',
     browser: 'المتصفح',
-    appConnections: 'اتصالات التطبيقات',
+    appConnections: 'برامج الجهاز',
     singleChat: 'محادثة',
     globalAgent: 'الوكيل العام',
     groupChat: 'محادثة جماعية',
@@ -696,7 +696,7 @@ export default {
   },
 
   appConnections: {
-    title: 'اتصالات التطبيقات',
+    title: 'برامج هذا الجهاز',
     subtitle: 'التطبيقات على هذا الجهاز التي توفر خادم MCP. شارك أحدها ليستطيع Hermes على سيرفرك استخدامه عبر هذا الجهاز.',
     rescan: 'إعادة الفحص',
     desktopOnly: 'افتح هذه الصفحة من تطبيق كور هب لسطح المكتب المرتبط بهذا السيرفر.',
@@ -711,6 +711,9 @@ export default {
     loadFailed: 'تعذر قراءة التطبيقات على هذا الجهاز',
     needsConfig: 'يحتاج إعدادات لا يملكها إلا المساعد الأصلي ({keys})؛ لا يمكن مشاركته بعد.',
     howItWorks: 'التطبيقات المشتركة تظهر لـ Hermes كخوادم MCP في البروفايلات المسموح لها؛ أول استخدام في كل اتصال يطلب موافقتك على هذا الجهاز.',
+    localMode: 'محلي: التطبيقات تُربط بالوكلاء على هذا الجهاز',
+    sharedLocal: 'صار {name} متاحاً للوكلاء على هذا الجهاز',
+    howItWorksLocal: 'التطبيقات المشتركة تظهر لـ Hermes وEkko على هذا الجهاز كخوادم MCP في كل البروفايلات، وتعمل بحساب المستخدم عندما يستخدمها وكيل.',
     sources: {
       claude_desktop: 'Claude Desktop',
       claude_extension: 'امتداد Claude Desktop',

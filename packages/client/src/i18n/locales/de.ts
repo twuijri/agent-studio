@@ -434,7 +434,7 @@ export default {
     socialMessages: 'Nachrichten senden',
     terminal: 'Konsole',
     browser: 'Browser',
-    appConnections: 'App-Verbindungen',
+    appConnections: 'Computer-Apps',
     singleChat: 'Chat',
     globalAgent: 'Global Agent',
     files: 'Dateien',
@@ -741,7 +741,7 @@ export default {
   },
 
   appConnections: {
-    title: 'App-Verbindungen',
+    title: 'Apps auf diesem Computer',
     subtitle: 'Apps auf diesem Computer, die einen MCP-Server bereitstellen. Gib eine frei, und Hermes auf deinem Server kann sie über diesen Computer nutzen.',
     rescan: 'Erneut suchen',
     desktopOnly: 'Öffne diese Seite aus der mit diesem Server verbundenen Core Hub-Desktop-App.',
@@ -756,6 +756,9 @@ export default {
     loadFailed: 'Apps auf diesem Computer konnten nicht gelesen werden',
     needsConfig: 'Benötigt Einstellungen, die nur der ursprüngliche Assistent hat ({keys}); noch nicht freigebbar.',
     howItWorks: 'Freigegebene Apps erscheinen für Hermes als MCP-Server der erlaubten Profile; die erste Nutzung je Verbindung fragt auf diesem Computer um Erlaubnis.',
+    localMode: 'Lokal: Apps werden mit den Agenten auf diesem Computer verbunden',
+    sharedLocal: '{name} steht den Agenten auf diesem Computer jetzt zur Verfügung',
+    howItWorksLocal: 'Freigegebene Apps erscheinen Hermes und Ekko auf diesem Computer als MCP-Server aller Profile; sie laufen mit deinem Benutzerkonto, wenn ein Agent sie verwendet.',
     sources: {
       claude_desktop: 'Claude Desktop',
       claude_extension: 'Claude Desktop-Erweiterung',

@@ -6,6 +6,7 @@ import { updateConfigYamlForProfile } from '../../public/profile-config'
 import { getLanPeerSocketManager } from '../network/lan-peer-socket'
 import { isDeviceAllowedForProfile } from './device-bindings'
 import { deleteDeviceApps, listDeviceApps, setDeviceApps } from './device-apps-store'
+import { getLocalApps, type LocalSharedApp } from './local-apps-store'
 
 // Turns the MCP apps shared by linked devices into managed MCP servers in the
 // agents' profile configs (phase 5 of docs/DESKTOP-SERVER-MODE.md). Each entry
@@ -22,6 +23,8 @@ export interface DeviceMcpServerDefinition {
   deviceId: string
   appId: string
   label: string
+  /** Present for apps shared by the desktop app running Core Hub locally: run directly, no bridge. */
+  local?: Pick<LocalSharedApp, 'command' | 'args' | 'env' | 'cwd'>
 }
 
 export interface DeviceMcpInjectionTarget {
@@ -71,10 +74,38 @@ export function desiredDeviceMcpServers(profile: string): DeviceMcpServerDefinit
       })
     }
   }
+  // Apps shared by the local desktop shell run on this machine for every profile.
+  const local = getLocalApps()
+  if (local) {
+    for (const app of local.apps) {
+      definitions.push({
+        name: `local-${slug(app.name)}`,
+        deviceId: 'local',
+        appId: app.id,
+        label: `${local.computerName || 'This computer'} › ${app.name}`,
+        local: { command: app.command, args: app.args, env: app.env, ...(app.cwd ? { cwd: app.cwd } : {}) },
+      })
+    }
+  }
   return definitions
 }
 
-export function deviceMcpServerConfig(profile: string, definition: DeviceMcpServerDefinition, script: string): Record<string, unknown> {
+export function deviceMcpServerConfig(profile: string, definition: DeviceMcpServerDefinition, script: string | null): Record<string, unknown> {
+  if (definition.local) {
+    return {
+      command: definition.local.command,
+      args: [...definition.local.args],
+      env: {
+        ...definition.local.env,
+        CORE_HUB_DEVICE_APP_LABEL: definition.label,
+        [DEVICE_MCP_ENV_KEY]: '1',
+        [MANAGED_ENV_KEY]: '1',
+      },
+      ...(definition.local.cwd ? { cwd: definition.local.cwd } : {}),
+      enabled: true,
+    }
+  }
+  if (!script) throw new Error('device MCP bridge script is required for device apps')
   return {
     command: runtimeNodePath(),
     args: [script, definition.deviceId, definition.appId],
@@ -107,12 +138,13 @@ function sameConfig(existing: Record<string, any>, desired: Record<string, unkno
     && Array.isArray(existing.args) && existing.args.length === desiredArgs.length && existing.args.every((arg: unknown, index: number) => arg === desiredArgs[index])
     && isRecord(existing.env)
     && Object.entries(desiredEnv).every(([key, value]) => existing.env[key] === value)
+    && (existing.cwd ?? undefined) === (desired.cwd ?? undefined)
     && existing.enabled !== false
 }
 
 /** Sync device MCP servers into one Hermes profile's config.yaml. */
 export async function injectDeviceMcpServersIntoProfile(profile: string, script: string | null = bridgeScriptPath()): Promise<DeviceMcpInjectionTarget> {
-  const desired = script ? desiredDeviceMcpServers(profile) : []
+  const desired = desiredDeviceMcpServers(profile).filter(definition => definition.local || script)
   const result = await updateConfigYamlForProfile<DeviceMcpInjectionTarget>(profile, current => {
     const cfg = isRecord(current) ? current : {}
     if (!isRecord(cfg.mcp_servers)) cfg.mcp_servers = {}
@@ -130,7 +162,7 @@ export async function injectDeviceMcpServersIntoProfile(profile: string, script:
       if (existing && !isDeviceMcpServer(existing)) {
         return { data: cfg, write: false, result: { profile, status: 'skipped', servers: [], reason: `existing ${definition.name} MCP server is not managed by Core Hub` } }
       }
-      const config = deviceMcpServerConfig(profile, definition, script as string)
+      const config = deviceMcpServerConfig(profile, definition, script)
       if (isRecord(existing) && existing.enabled === false) continue // the user switched it off; respect that
       if (!existing || !sameConfig(existing, config)) {
         cfg.mcp_servers[definition.name] = config

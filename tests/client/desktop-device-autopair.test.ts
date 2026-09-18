@@ -63,3 +63,38 @@ describe('automatic device pairing from the linked desktop app', () => {
     await expect(maybeAutoPairDesktopDevice({ storage: memoryStorage() })).resolves.toBe('failed')
   })
 })
+
+describe('watching the Device Agent for the automatic pairing attempt', () => {
+  it('sends the request when the agent reports "unpaired" later, and only once', async () => {
+    const { watchDesktopDeviceAutoPair } = await import('@/utils/desktop-device-autopair')
+    let state = { linked: true, status: 'connecting' }
+    const listeners: Array<(state: unknown) => void> = []
+    const pair = vi.fn(async () => ({ status: 'pending' }))
+    ;(window as BridgeWindow).hermesDesktop = {
+      isDesktop: true,
+      mode: 'server',
+      deviceAgent: {
+        getState: async () => state,
+        openSettings: async () => true,
+        pair,
+        onState: (callback: (state: unknown) => void) => { listeners.push(callback); return () => { listeners.splice(listeners.indexOf(callback), 1) } },
+      },
+    }
+    fetchDevicePairingLink.mockResolvedValue({ code: 'abc', link: 'https://studio.example.com/#/hermes/devices?pairing_code=abc' })
+    const storage = memoryStorage()
+
+    const stop = watchDesktopDeviceAutoPair({ storage })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(pair).not.toHaveBeenCalled() // still connecting at mount time
+
+    state = { linked: true, status: 'unpaired' }
+    for (const listener of listeners) listener(state)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(pair).toHaveBeenCalledTimes(1)
+    expect(listeners).toHaveLength(0) // stopped watching after the request went out
+
+    stop()
+    for (const listener of listeners) listener(state)
+    expect(pair).toHaveBeenCalledTimes(1)
+  })
+})
