@@ -19,12 +19,15 @@ function dismissalKey(userId: number): string {
   return `hermes_default_credentials_prompt_dismissed_${userId}`;
 }
 
-function isDesktopShell(): boolean {
-  return (window as typeof window & { hermesDesktop?: { isDesktop?: boolean } }).hermesDesktop?.isDesktop === true;
+function isDesktopLocalShell(): boolean {
+  const bridge = (window as typeof window & { hermesDesktop?: { isDesktop?: boolean; mode?: string } }).hermesDesktop;
+  // Only the bundled local install hides the default-password prompt; a linked
+  // Studio server keeps its own account hygiene.
+  return bridge?.isDesktop === true && bridge.mode !== "server";
 }
 
 async function checkDefaultCredentials() {
-  if (isDesktopShell()) {
+  if (isDesktopLocalShell()) {
     show.value = false;
     return;
   }

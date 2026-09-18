@@ -28,11 +28,13 @@ const selectedKey = computed(() => {
 const isSuperAdmin = computed(() => isStoredSuperAdmin());
 const currentUsername = computed(() => getStoredUsername());
 const isVersionPreview = import.meta.env.VITE_HERMES_PREVIEW === "1";
-const isDesktopShell = computed(
-  () =>
-    (window as typeof window & { hermesDesktop?: { isDesktop?: boolean } })
-      .hermesDesktop?.isDesktop === true,
-);
+const isDesktopShell = computed(() => {
+  const bridge = (window as typeof window & { hermesDesktop?: { isDesktop?: boolean; mode?: string } })
+    .hermesDesktop;
+  // The desktop agent browser is driven by the local Studio; a shell linked to
+  // a server has no local Studio to drive it yet.
+  return bridge?.isDesktop === true && bridge.mode !== "server";
+});
 const showChangelog = ref(false);
 const showDockerUpdateTip = ref(false);
 const isDockerRuntime = computed(() => appStore.isDocker);
