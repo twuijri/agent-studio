@@ -7,7 +7,8 @@ NEVER delete, rename, replace, or strip the root `LICENSE`, third-party licenses
 or EKKOLearnAI attribution. Rebranding does not change ownership or licensing.
 NEVER disable the license guard to make a build or update pass. If upstream changes
 the license, stop that update for human review. The owner decided (2026-09-18) to
-make the repository public under the upstream BSL 1.1; images stay private. Upstream PR instructions below do not
+make the repository public under the upstream BSL 1.1, and (2026-09-19) to make the
+deployment image public on GHCR so users can pull it without a token. Upstream PR instructions below do not
 authorize publishing this fork. All upstream updates must use a review branch;
 never replace this fork with the upstream npm package or desktop auto-updater.
 
