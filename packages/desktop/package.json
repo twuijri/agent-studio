@@ -1,6 +1,6 @@
 {
   "name": "hermes-studio",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Core Hub personal non-commercial fork of Ekko Studio, with bundled local runtimes.",
   "homepage": "https://github.com/twuijri/core-hub",
   "author": {
