@@ -26,7 +26,7 @@ export type PeerMessage = {
   [key: string]: unknown
 }
 
-export type DeviceAgentCapability = 'exec' | 'files'
+export type DeviceAgentCapability = 'exec' | 'files' | 'browser' | 'screen'
 
 export interface DeviceAgentPolicy {
   /** Capabilities the user enabled; anything else is refused. */
@@ -37,11 +37,35 @@ export interface DeviceAgentPolicy {
   approveExec: (request: { command: string; args: string[]; cwd: string }) => Promise<boolean>
   /** Default working directory when the server does not send one (must be allowed). */
   defaultCwd?: string
+  /** Ask the user once per session before the server may see or drive the screen. */
+  approveScreen?: () => Promise<boolean>
+}
+
+export interface DeviceAgentProxyRequest {
+  method: string
+  path: string
+  headers: Record<string, string>
+  body: Buffer
+}
+
+export interface DeviceAgentProxyResponse {
+  status: number
+  headers: Record<string, string>
+  body: Buffer
+}
+
+export interface DeviceAgentScreenCapture {
+  media_type: string
+  data: string
+  width: number
+  height: number
+  display_id: string
+  displays: Array<{ id: string; width: number; height: number; scale: number; primary: boolean }>
 }
 
 export interface DeviceAgentAuditEntry {
   at: number
-  kind: 'exec' | 'file.download' | 'file.upload' | 'terminal' | 'denied'
+  kind: 'exec' | 'file.download' | 'file.upload' | 'terminal' | 'denied' | 'browser' | 'screen.capture' | 'screen.action'
   detail: string
   ok: boolean
 }
@@ -50,6 +74,13 @@ export interface DeviceAgentProtocolOptions {
   send: (payload: Record<string, unknown>) => void
   policy: () => DeviceAgentPolicy
   audit?: (entry: DeviceAgentAuditEntry) => void
+  /** Forward a tunnelled HTTP request to the local browser broker (`browser` capability). */
+  browserProxy?: (request: DeviceAgentProxyRequest) => Promise<DeviceAgentProxyResponse>
+  /** Screen capture and input (`screen` capability). */
+  screen?: {
+    capture: (options: { displayId?: string; maxWidth?: number }) => Promise<DeviceAgentScreenCapture>
+    action: (action: Record<string, unknown>) => Promise<void>
+  }
   execOutputLimit?: number
   execTimeoutMs?: number
   maxExecTimeoutMs?: number
@@ -139,6 +170,15 @@ export class DeviceAgentProtocol {
         return
       case 'file.upload.complete':
         this.completeUpload(msg)
+        return
+      case 'http.proxy':
+        void this.proxyHttp(msg)
+        return
+      case 'screen.capture':
+        void this.captureScreen(msg)
+        return
+      case 'screen.action':
+        void this.screenAction(msg)
         return
       default:
         this.send({ type: 'error', request_id: msg.request_id, message: `Unsupported peer message: ${msg.type}` })
@@ -277,6 +317,98 @@ export class DeviceAgentProtocol {
       fail(err.message)
     })
     child.on('close', code => finish(code))
+  }
+
+  private async proxyHttp(msg: PeerMessage): Promise<void> {
+    const policy = this.options.policy()
+    const fail = (message: string, status = 502) => this.send({ type: 'http.proxy.error', request_id: msg.request_id, status, message })
+    if (!policy.capabilities.includes('browser') || !this.options.browserProxy) {
+      this.audit({ at: Date.now(), kind: 'denied', detail: 'browser disabled', ok: false })
+      fail('The device browser is not shared with the server', 403)
+      return
+    }
+    const path = typeof msg.path === 'string' ? msg.path : ''
+    if (!path.startsWith('/v1')) {
+      fail('Only browser broker requests can be tunnelled', 403)
+      return
+    }
+    const headers = msg.headers && typeof msg.headers === 'object'
+      ? Object.fromEntries(Object.entries(msg.headers as Record<string, unknown>).map(([k, v]) => [k.toLowerCase(), String(v)]))
+      : {}
+    try {
+      const response = await this.options.browserProxy({
+        method: typeof msg.method === 'string' ? msg.method : 'POST',
+        path,
+        headers,
+        body: typeof msg.body === 'string' && msg.body ? Buffer.from(msg.body, 'base64') : Buffer.alloc(0),
+      })
+      if (this.closed) return
+      let detail = path
+      if (path === '/v1') {
+        try { detail = `${path} ${String(JSON.parse(response.body.toString('utf8'))?.method || JSON.parse(Buffer.from(String(msg.body || ''), 'base64').toString('utf8'))?.method || '')}`.trim() } catch { /* keep path */ }
+      }
+      this.audit({ at: Date.now(), kind: 'browser', detail, ok: response.status < 400 })
+      this.send({
+        type: 'http.proxy.result',
+        request_id: msg.request_id,
+        status: response.status,
+        headers: response.headers,
+        body: response.body.length ? response.body.toString('base64') : '',
+      })
+    } catch (err) {
+      this.audit({ at: Date.now(), kind: 'browser', detail: `${path}: ${err instanceof Error ? err.message : String(err)}`, ok: false })
+      fail(err instanceof Error ? err.message : 'Browser request failed')
+    }
+  }
+
+  private async screenPermitted(msg: PeerMessage, policy: DeviceAgentPolicy): Promise<boolean> {
+    const fail = (message: string) => this.send({ type: 'screen.error', request_id: msg.request_id, message })
+    if (!policy.capabilities.includes('screen') || !this.options.screen) {
+      this.audit({ at: Date.now(), kind: 'denied', detail: `screen disabled: ${msg.type}`, ok: false })
+      fail('Screen access is disabled on this device')
+      return false
+    }
+    let approved = true
+    if (policy.approveScreen) {
+      try { approved = await policy.approveScreen() } catch { approved = false }
+    }
+    if (!approved) {
+      this.audit({ at: Date.now(), kind: 'denied', detail: `user denied screen: ${msg.type}`, ok: false })
+      fail('The device owner denied screen access')
+      return false
+    }
+    return !this.closed
+  }
+
+  private async captureScreen(msg: PeerMessage): Promise<void> {
+    const policy = this.options.policy()
+    if (!(await this.screenPermitted(msg, policy))) return
+    try {
+      const capture = await this.options.screen!.capture({
+        displayId: typeof msg.display_id === 'string' ? msg.display_id : undefined,
+        maxWidth: typeof msg.max_width === 'number' ? msg.max_width : undefined,
+      })
+      this.audit({ at: Date.now(), kind: 'screen.capture', detail: `${capture.width}x${capture.height}`, ok: true })
+      this.send({ type: 'screen.capture.result', request_id: msg.request_id, ...capture })
+    } catch (err) {
+      this.audit({ at: Date.now(), kind: 'screen.capture', detail: err instanceof Error ? err.message : String(err), ok: false })
+      this.send({ type: 'screen.error', request_id: msg.request_id, message: err instanceof Error ? err.message : 'Screen capture failed' })
+    }
+  }
+
+  private async screenAction(msg: PeerMessage): Promise<void> {
+    const policy = this.options.policy()
+    if (!(await this.screenPermitted(msg, policy))) return
+    const { type: _type, request_id: _id, ...action } = msg
+    const label = `${String(action.action)}${typeof action.x === 'number' ? ` @${action.x},${action.y}` : ''}${typeof action.key === 'string' ? ` ${action.key}` : ''}`
+    try {
+      await this.options.screen!.action(action)
+      this.audit({ at: Date.now(), kind: 'screen.action', detail: label, ok: true })
+      this.send({ type: 'screen.action.result', request_id: msg.request_id, ok: true })
+    } catch (err) {
+      this.audit({ at: Date.now(), kind: 'screen.action', detail: `${label}: ${err instanceof Error ? err.message : String(err)}`, ok: false })
+      this.send({ type: 'screen.error', request_id: msg.request_id, message: err instanceof Error ? err.message : 'Screen action failed' })
+    }
   }
 
   private allowedFilePath(msg: PeerMessage, policy: DeviceAgentPolicy): string | null {

@@ -74,6 +74,18 @@ machine through the server's existing device tools (`ekko_studio_devices`):
    asks for approval (Allow / Allow for this session / Deny) unless you choose
    "Always allow". Interactive terminals are not available on the device.
 
+Two more capabilities can be shared from the same page:
+
+- **Agent browser**: the server's bundled browser tools drive this app's agent
+  browser through a gateway on the server; nothing else changes on the server.
+- **Screen**: screenshots plus mouse/keyboard actions (AppleScript on macOS,
+  PowerShell on Windows, `xdotool` on Linux). The first use in a connection asks
+  for approval; a red banner with a **Stop** button shows while it is active.
+  macOS asks for Screen Recording and Accessibility permissions the first time.
+
+On the server, **Devices → Linked devices** lists connected devices and lets you
+restrict each one to specific Hermes profiles (empty = every profile).
+
 The device keeps an outbound WebSocket to `/api/devices/peer-socket` declaring
 `controllable=1`; it never listens on a port. Settings live in `device-agent.json`
 and the local activity log in `device-agent-audit.jsonl` under the Electron

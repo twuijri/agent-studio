@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import { arch, hostname, platform, release, type } from 'node:os'
 import { loadOrCreateDeviceIdentity, signDeviceChallenge, type DeviceIdentity } from './identity'
-import { DeviceAgentProtocol, type DeviceAgentAuditEntry, type DeviceAgentCapability, type DeviceAgentPolicy } from './protocol'
+import { DeviceAgentProtocol, type DeviceAgentAuditEntry, type DeviceAgentCapability, type DeviceAgentPolicy, type DeviceAgentProxyRequest, type DeviceAgentProxyResponse, type DeviceAgentScreenCapture } from './protocol'
 import type { DeviceAgentConfig } from './store'
 
 // The desktop Device Agent: pairs this machine with the linked Studio server
@@ -34,6 +34,8 @@ export interface DeviceAgentState {
   connectedAt: number | null
   reconnectAttempt: number
   sessionApprovedAll: boolean
+  /** The user allowed screen access for this connection session. */
+  screenSessionApproved: boolean
 }
 
 export interface DeviceAgentDependencies {
@@ -43,6 +45,13 @@ export interface DeviceAgentDependencies {
   /** Studio server the desktop is linked to (connection mode); null when local. */
   serverUrl: () => string | null
   approveExec: (request: { command: string; args: string[]; cwd: string }) => Promise<ExecApprovalDecision>
+  /** Ask once per session before the server may capture or drive the screen. */
+  approveScreen?: () => Promise<boolean>
+  browserProxy?: (request: DeviceAgentProxyRequest) => Promise<DeviceAgentProxyResponse>
+  screen?: {
+    capture: (options: { displayId?: string; maxWidth?: number }) => Promise<DeviceAgentScreenCapture>
+    action: (action: Record<string, unknown>) => Promise<void>
+  }
   audit: (entry: DeviceAgentAuditEntry) => void
   appVersion: string
   fetchImpl?: typeof fetch
@@ -106,7 +115,15 @@ export class DeviceAgent extends EventEmitter {
       connectedAt: null,
       reconnectAttempt: 0,
       sessionApprovedAll: false,
+      screenSessionApproved: false,
     }
+  }
+
+  /** Withdraw screen access for the rest of this session (the on-screen "stop" control). */
+  revokeScreenSession(): void {
+    if (!this.state.screenSessionApproved) return
+    this.setState({ screenSessionApproved: false })
+    this.deps.audit({ at: Date.now(), kind: 'denied', detail: 'screen session stopped by the user', ok: false })
   }
 
   getState(): DeviceAgentState {
@@ -147,6 +164,8 @@ export class DeviceAgent extends EventEmitter {
     const list: DeviceAgentCapability[] = []
     if (this.state.config.capabilities.exec) list.push('exec')
     if (this.state.config.capabilities.files) list.push('files')
+    if (this.state.config.capabilities.browser && this.deps.browserProxy) list.push('browser')
+    if (this.state.config.capabilities.screen && this.deps.screen) list.push('screen')
     return list
   }
 
@@ -160,6 +179,16 @@ export class DeviceAgent extends EventEmitter {
         const decision = await this.deps.approveExec(request)
         if (decision === 'allow-session') this.setState({ sessionApprovedAll: true })
         return decision !== 'deny'
+      },
+      approveScreen: async () => {
+        if (this.state.screenSessionApproved) return true
+        if (this.state.config.approvalMode === 'always') {
+          this.setState({ screenSessionApproved: true })
+          return true
+        }
+        const approved = this.deps.approveScreen ? await this.deps.approveScreen() : false
+        if (approved) this.setState({ screenSessionApproved: true })
+        return approved
       },
     }
   }
@@ -189,7 +218,7 @@ export class DeviceAgent extends EventEmitter {
     this.stopped = true
     this.clearTimers()
     this.closeSocket()
-    this.setState({ status: this.state.config.enabled ? 'offline' : 'disabled', connectedAt: null, sessionApprovedAll: false })
+    this.setState({ status: this.state.config.enabled ? 'offline' : 'disabled', connectedAt: null, sessionApprovedAll: false, screenSessionApproved: false })
   }
 
   async setConfig(patch: Partial<Pick<DeviceAgentConfig, 'enabled' | 'capabilities' | 'allowedFolders' | 'approvalMode'>>): Promise<DeviceAgentState> {
@@ -364,6 +393,8 @@ export class DeviceAgent extends EventEmitter {
       },
       policy: () => this.policy(),
       audit: entry => this.deps.audit(entry),
+      browserProxy: this.deps.browserProxy,
+      screen: this.deps.screen,
     })
     this.protocol = protocol
 
@@ -387,7 +418,7 @@ export class DeviceAgent extends EventEmitter {
       this.ws = null
       this.protocol = null
       this.log(`disconnected (${event.code})`)
-      this.setState({ status: 'offline', connectedAt: null, sessionApprovedAll: false })
+      this.setState({ status: 'offline', connectedAt: null, sessionApprovedAll: false, screenSessionApproved: false })
       if (!this.stopped) this.scheduleReconnect()
     })
   }
