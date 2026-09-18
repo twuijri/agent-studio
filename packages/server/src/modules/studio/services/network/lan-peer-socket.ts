@@ -148,7 +148,7 @@ type RemoteTerminal = {
 // operate it ("controllable"): the desktop app's Device Agent uses this so a
 // server-side Hermes can run commands and exchange files with the user's
 // machine even though the connection was opened from the device's side.
-export const LAN_PEER_CAPABILITIES = ['exec', 'files', 'terminal', 'browser', 'screen'] as const
+export const LAN_PEER_CAPABILITIES = ['exec', 'files', 'terminal', 'browser', 'screen', 'apps'] as const
 export type LanPeerCapability = typeof LAN_PEER_CAPABILITIES[number]
 
 export function parseLanPeerCapabilities(raw: string | null | undefined): LanPeerCapability[] {
@@ -181,6 +181,8 @@ export type LanPeerConnectionInfo = {
   capabilities: LanPeerCapability[]
   /** Folder on the controllable device where commands start and files should be kept. */
   workspace?: string
+  /** MCP apps the device shares with this Studio (announced by the device). */
+  apps?: LanPeerDeviceApp[]
   local_terminal_sessions: number
   remote_terminal_sessions: number
   reconnect_attempts?: number
@@ -238,6 +240,39 @@ export type LanPeerProxyResponse = {
   status: number
   headers: Record<string, string>
   body: Buffer
+}
+
+export type LanPeerDeviceApp = {
+  id: string
+  name: string
+  source: string
+}
+
+/** A live MCP app session on a controllable device: raw stdio bytes both ways. */
+export interface LanPeerAppSession {
+  id: string
+  appId: string
+  write(data: Buffer): void
+  onData(listener: (data: Buffer) => void): void
+  onStderr(listener: (text: string) => void): void
+  onExit(listener: (info: { code: number | null; message?: string }) => void): void
+  close(): void
+}
+
+export function parseLanPeerDeviceApps(raw: unknown): LanPeerDeviceApp[] {
+  if (!Array.isArray(raw)) return []
+  const apps: LanPeerDeviceApp[] = []
+  const seen = new Set<string>()
+  for (const item of raw.slice(0, 200)) {
+    if (!item || typeof item !== 'object') continue
+    const record = item as Record<string, unknown>
+    const id = typeof record.id === 'string' ? record.id.trim().slice(0, 128) : ''
+    const name = typeof record.name === 'string' ? record.name.trim().slice(0, 200) : ''
+    if (!id || !name || seen.has(id) || /[\u0000-\u001f]/.test(id + name)) continue
+    seen.add(id)
+    apps.push({ id, name, source: typeof record.source === 'string' ? record.source.slice(0, 64) : '' })
+  }
+  return apps
 }
 
 export type LanPeerScreenCapture = {
@@ -317,6 +352,8 @@ class LanPeerConnection {
   private pendingRequests = new Map<string, PendingRequest>()
   private pendingDownloads = new Map<string, PendingDownload>()
   private execChildren = new Set<ReturnType<typeof spawn>>()
+  private readonly appSessions = new Map<string, { appId: string; data: Array<(data: Buffer) => void>; stderr: Array<(text: string) => void>; exit: Array<(info: { code: number | null; message?: string }) => void>; closed: boolean }>()
+  private deviceApps: LanPeerDeviceApp[] = []
   private heartbeatTimer: NodeJS.Timeout | null = null
   private alive = true
   private closed = false
@@ -359,6 +396,7 @@ class LanPeerConnection {
       controllable: this.remoteControl.controllable,
       capabilities: [...this.remoteControl.capabilities],
       ...(this.remoteControl.workspace ? { workspace: this.remoteControl.workspace } : {}),
+      ...(this.remoteControl.controllable ? { apps: this.deviceApps.map(app => ({ ...app })) } : {}),
       local_terminal_sessions: this.terminalSessions.size,
       remote_terminal_sessions: this.remoteTerminals.size,
       reconnect_attempts: this.role === 'client' ? this.manager.getReconnectAttempts(this.deviceId) : undefined,
@@ -398,6 +436,13 @@ class LanPeerConnection {
       pending.reject(new Error('Peer connection closed'))
     }
     this.pendingDownloads.clear()
+
+    for (const session of this.appSessions.values()) {
+      if (session.closed) continue
+      session.closed = true
+      for (const listener of session.exit) { try { listener({ code: null, message: 'Peer connection closed' }) } catch { } }
+    }
+    this.appSessions.clear()
 
     if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
       try { this.ws.close() } catch { }
@@ -619,6 +664,70 @@ class LanPeerConnection {
     return { ok: true }
   }
 
+  private updateDeviceApps(msg: PeerJsonMessage) {
+    if (!this.remoteControl.controllable) return
+    this.deviceApps = parseLanPeerDeviceApps((msg as any).apps)
+    logger.info({ deviceId: this.deviceId, apps: this.deviceApps.map(app => app.name) }, '[lan-peer] device shared apps updated')
+    this.manager.notifyDeviceApps(this)
+  }
+
+  /** Open a stdio MCP session for one of the device's shared apps. */
+  async openAppSession(appId: string, timeoutMs = 30000): Promise<LanPeerAppSession> {
+    if (!this.remoteControl.controllable || !this.remoteControl.capabilities.includes('apps')) {
+      throw Object.assign(new Error('The device does not share apps'), { status: 403 })
+    }
+    if (!this.deviceApps.some(app => app.id === appId)) {
+      throw Object.assign(new Error('The device does not share this app'), { status: 404 })
+    }
+    const sessionId = randomUUID()
+    const record = { appId, data: [] as Array<(data: Buffer) => void>, stderr: [] as Array<(text: string) => void>, exit: [] as Array<(info: { code: number | null; message?: string }) => void>, closed: false }
+    this.appSessions.set(sessionId, record)
+    try {
+      await this.request({ type: 'mcp.open', app_id: appId, session_id: sessionId }, ['mcp.opened'], ['mcp.error', 'error'], timeoutMs)
+    } catch (err) {
+      this.appSessions.delete(sessionId)
+      throw err
+    }
+    return {
+      id: sessionId,
+      appId,
+      write: data => {
+        if (record.closed) return
+        this.sendJson({ type: 'mcp.data', session_id: sessionId, data: data.toString('base64') })
+      },
+      onData: listener => { record.data.push(listener) },
+      onStderr: listener => { record.stderr.push(listener) },
+      onExit: listener => { record.exit.push(listener) },
+      close: () => {
+        if (record.closed) return
+        record.closed = true
+        this.appSessions.delete(sessionId)
+        this.sendJson({ type: 'mcp.close', session_id: sessionId })
+      },
+    }
+  }
+
+  private handleAppSessionMessage(msg: PeerJsonMessage) {
+    const sessionId = typeof (msg as any).session_id === 'string' ? (msg as any).session_id : ''
+    const record = this.appSessions.get(sessionId)
+    if (!record || record.closed) return
+    if (msg.type === 'mcp.data' && typeof msg.data === 'string') {
+      const chunk = Buffer.from(msg.data, 'base64')
+      for (const listener of record.data) { try { listener(chunk) } catch { } }
+      return
+    }
+    if (msg.type === 'mcp.stderr' && typeof msg.data === 'string') {
+      for (const listener of record.stderr) { try { listener(msg.data) } catch { } }
+      return
+    }
+    if (msg.type === 'mcp.exit') {
+      record.closed = true
+      this.appSessions.delete(sessionId)
+      const info = { code: typeof (msg as any).code === 'number' ? (msg as any).code : null, message: typeof msg.message === 'string' ? msg.message : undefined }
+      for (const listener of record.exit) { try { listener(info) } catch { } }
+    }
+  }
+
   downloadFileToBuffer(path: string, timeoutMs = 60000): Promise<Buffer> {
     if (this.ws.readyState !== WebSocket.OPEN) return Promise.reject(new Error('Peer connection is not open'))
     const transferId = randomUUID()
@@ -657,6 +766,14 @@ class LanPeerConnection {
     if (this.handlePendingMessage(msg)) return
 
     switch (msg.type) {
+      case 'device.apps':
+        this.updateDeviceApps(msg)
+        break
+      case 'mcp.data':
+      case 'mcp.stderr':
+      case 'mcp.exit':
+        this.handleAppSessionMessage(msg)
+        break
       case 'terminal.data':
         this.bufferRemoteTerminalData(msg)
         break
@@ -1040,6 +1157,25 @@ export class LanPeerSocketManager {
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
+  }
+
+  private readonly appListeners = new Set<(connection: LanPeerConnection) => void>()
+
+  /** Notified when a controllable device announces its shared apps. */
+  subscribeDeviceApps(listener: (connection: LanPeerConnection) => void): () => void {
+    this.appListeners.add(listener)
+    return () => { this.appListeners.delete(listener) }
+  }
+
+  notifyDeviceApps(connection: LanPeerConnection): void {
+    for (const listener of this.appListeners) {
+      try { listener(connection) } catch (error) { logger.warn(error, '[lan-peer] device app listener failed') }
+    }
+  }
+
+  /** The live controllable connection of a device, if any. */
+  findControllableConnection(deviceId: string): LanPeerConnection | null {
+    return [...this.connections.values()].find(connection => connection.deviceId === deviceId && connection.info().controllable) || null
   }
 
   private notify(): void {

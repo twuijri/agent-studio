@@ -50,7 +50,6 @@ jobs:
             artifact_files: |
               packages/desktop/release/*.exe
               packages/desktop/release/*.exe.blockmap
-              packages/desktop/release/latest*.yml
           - label: Linux x64
             runner: ubuntu-22.04
             target_os: linux
@@ -59,7 +58,6 @@ jobs:
             artifact_files: |
               packages/desktop/release/*.AppImage
               packages/desktop/release/*.deb
-              packages/desktop/release/latest*.yml
           - label: Linux arm64
             runner: ubuntu-22.04-arm
             target_os: linux
@@ -67,7 +65,6 @@ jobs:
             electron_target: "--linux AppImage --arm64"
             artifact_files: |
               packages/desktop/release/*.AppImage
-              packages/desktop/release/latest*.yml
 
     steps:
       - name: Checkout repository
@@ -130,13 +127,16 @@ jobs:
         if: always() && matrix.target_os == 'darwin'
         run: node packages/desktop/scripts/configure-macos-signing.mjs --cleanup
 
+      # The auto-updater is disabled in this fork, so electron-builder writes no
+      # latest*.yml manifests; the manifest steps stay for upstream parity but
+      # never fail the build.
       - name: Upload macOS update manifest artifact
         if: matrix.target_os == 'darwin'
         uses: actions/upload-artifact@v4
         with:
           name: latest-mac-${{ matrix.target_arch }}
           path: packages/desktop/release/latest-mac.yml
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 1
 
       - name: Upload artifacts to release
@@ -149,6 +149,8 @@ jobs:
   mac-update-manifest:
     name: Merge macOS updater manifest
     needs: desktop
+    # No updater manifests without a publish provider (fork decision: updater off).
+    if: false
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
@@ -180,7 +182,7 @@ jobs:
 
   mark-latest:
     name: Mark desktop release as latest
-    needs: mac-update-manifest
+    needs: desktop
     runs-on: ubuntu-22.04
     steps:
       - name: Mark release as latest

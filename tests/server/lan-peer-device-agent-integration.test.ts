@@ -66,7 +66,7 @@ describe('desktop Device Agent against the real peer socket manager', () => {
     let config: DeviceAgentConfig = {
       ...defaultDeviceAgentConfig(),
       enabled: true,
-      capabilities: { exec: true, files: true, browser: false, screen: false },
+      capabilities: { exec: true, files: true, browser: false, screen: false, apps: false },
       allowedFolders: [shared],
       approvalMode: 'always',
       pairedServerUrl: serverUrl,
@@ -131,7 +131,7 @@ describe('desktop Device Agent against the real peer socket manager', () => {
     const serverUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}`
 
     const dir = tempDir()
-    let config: DeviceAgentConfig = { ...defaultDeviceAgentConfig(), enabled: true, capabilities: { exec: true, files: false, browser: false, screen: false }, allowedFolders: [dir], pairedServerUrl: serverUrl, pairedAt: 1 }
+    let config: DeviceAgentConfig = { ...defaultDeviceAgentConfig(), enabled: true, capabilities: { exec: true, files: false, browser: false, screen: false, apps: false }, allowedFolders: [dir], pairedServerUrl: serverUrl, pairedAt: 1 }
     agent = new DeviceAgent({
       identityFile: join(dir, 'device-identity.json'),
       loadConfig: () => config,

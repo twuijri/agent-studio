@@ -35,6 +35,10 @@ devices, voice, and files — and adds the pieces needed to run it as **one serv
   take screenshots and use the mouse and keyboard, and drive the app's agent browser. The device only
   connects outbound, every capability is opt-in, commands and screen access ask for approval, a
   visible banner with a Stop button shows while the screen is controlled, and every action is logged.
+- **App connections.** MCP servers already registered on your computer with Claude Desktop,
+  Claude Code, Codex, Cursor, or Windsurf (DaVinci Resolve, Blender, Figma, …) can be shared
+  through the linked app; the server exposes them to the allowed agent profiles as managed MCP
+  servers, so any app with an AI integration works with your Hermes without knowing Core Hub.
 - **Device ↔ profile bindings.** Restrict each linked device to specific Hermes profiles from the
   server's Devices page, so a work profile only ever sees the work laptop.
 - **Kanban board.** A drag-and-drop board built on Hermes' real task states, with an inbox strip,
