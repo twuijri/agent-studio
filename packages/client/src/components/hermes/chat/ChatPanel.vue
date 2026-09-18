@@ -3409,6 +3409,7 @@ async function handleSessionModelCustomSubmit() {
             <MessageList
               ref="messageListRef"
               :approval-portal-to-body="showRealtimeVoice"
+              :new-chat-agent="newChatAgent"
               scroll-scope="chat"
             />
             <ChatInput
@@ -3452,7 +3453,7 @@ async function handleSessionModelCustomSubmit() {
                 />
                 <SubagentStreamPanel
                   v-else-if="selectedSubagent"
-                  :agent="chatSessionAgentAvatar(chatStore.activeSession)"
+                  :agent="chatSessionAgentAvatar(chatStore.activeSession || { agent: newChatAgent })"
                   :stream="selectedSubagentStream"
                   @close="closeToolPanelOverlay"
                 />
