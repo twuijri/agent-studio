@@ -45,8 +45,9 @@ fork. `main` is protected: pull requests only, required checks, up-to-date branc
    ```
 
    Pick the checks for your change type from [docs/harness/validation.md](docs/harness/validation.md).
-5. **Open a pull request to `main`** using the template. State what you verified and how, what
-   you did not test and why, and any migration, compatibility, or RTL impact.
+5. **Open a pull request to `main`** using the template, **written in English** (title and
+   description) so every contributor can follow it. State what you verified and how, what you did
+   not test and why, and any migration, compatibility, or RTL impact.
 6. **Preview on the `test` stack.** The maintainer (or their assistant, which has standing
    authorization) merges accepted pull-request branches into the integration branch `test`,
    builds the `test` image once CI is green there, and tries it on the test server. `test` is
