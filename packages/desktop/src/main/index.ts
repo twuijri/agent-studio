@@ -39,6 +39,17 @@ import {
   writeDesktopModeConfig,
   type ResolvedDesktopMode,
 } from './desktop-mode'
+import { DeviceAgent, type DeviceAgentState, type ExecApprovalDecision } from './device-agent/agent'
+import {
+  DEVICE_AGENT_AUDIT_FILE_NAME,
+  DEVICE_AGENT_CONFIG_FILE_NAME,
+  DEVICE_AGENT_IDENTITY_FILE_NAME,
+  appendDeviceAgentAudit,
+  readDeviceAgentAudit,
+  readDeviceAgentConfig,
+  writeDeviceAgentConfig,
+  type DeviceAgentConfig,
+} from './device-agent/store'
 import { resetDesktopDefaultLogin } from './desktop-login-reset'
 import { installHermesStudioCliShim, installHermesStudioMcpShim } from './cli-shim'
 import { parseHermesCliArgs, runBundledHermesCli } from './hermes-cli'
@@ -89,6 +100,10 @@ let serverUrl: string | null = null
 // Connection mode (local runtime vs. linked Studio server). Resolved once
 // Electron is ready, before any window loads; see desktop-mode.ts.
 let desktopMode: ResolvedDesktopMode = LOCAL_DESKTOP_MODE
+// Device Agent: lets the linked Studio server operate this machine (phase 2 of
+// docs/DESKTOP-SERVER-MODE.md). Only created in the linked-server mode.
+let deviceAgent: DeviceAgent | null = null
+const DEVICE_AGENT_STATE_CHANNEL = 'hermes-desktop:device-agent-state'
 let tray: Tray | null = null
 let appShutdownPromise: Promise<void> | null = null
 let isBootstrapping = false
@@ -179,6 +194,7 @@ async function prepareAppShutdown(): Promise<void> {
       await browserManager?.destroy().catch(() => undefined)
       browserBroker = null
       browserManager = null
+      deviceAgent?.stop()
       await stopWebUiServer().catch(() => undefined)
     })()
   }
@@ -456,6 +472,14 @@ function updateTrayMenu() {
         })
       },
     },
+    ...(isServerLinkedMode() ? [{
+      label: t('tray.deviceAccess'),
+      click: () => {
+        openDeviceAgentPage().catch(err => {
+          console.error('[tray] failed to open the device access page:', err)
+        })
+      },
+    }] : []),
     ...(isServerLinkedMode() ? [] : [{
       label: isResettingLogin ? t('loginReset.resetting') : t('tray.resetLogin'),
       enabled: !isResettingLogin && (!isBootstrapping || !!serverUrl),
@@ -1355,6 +1379,7 @@ async function bootstrapServerLinkedMode(): Promise<void> {
     updateTrayMenu()
     if (mainWindow && !mainWindow.isDestroyed()) await mainWindow.loadURL(mainRouteUrl() || url)
     await loadPetWindowRoute()
+    void ensureDeviceAgent().start().catch(err => console.error('[device-agent] failed to start:', err))
   } catch (err) {
     // did-fail-load already swapped in the failure page for a main-frame
     // error; the superseded loadURL then rejects with ERR_ABORTED.
@@ -1455,12 +1480,14 @@ ${snapshot.locked ? `<div class="locked">${escapeHtml(strings.lockedByEnv)}</div
   </div>
 </div>
 <div class="actions">
+  ${isServerLinkedMode() ? `<button id="device-access" type="button" style="margin-inline-end:auto">${escapeHtml(t('tray.deviceAccess'))}</button>` : ''}
   <button id="cancel" type="button">${escapeHtml(strings.cancel)}</button>
   <button id="apply" type="button" class="primary">${escapeHtml(strings.apply)}</button>
 </div>
 <script>
   const STRINGS = ${JSON.stringify(strings)}
   const SNAPSHOT = ${JSON.stringify(snapshot)}
+  document.getElementById('device-access')?.addEventListener('click', () => { window.hermesDesktop?.deviceAgent?.openSettings?.() })
   const api = window.hermesDesktop && window.hermesDesktop.desktopMode
   const form = document.getElementById('server-form')
   const urlInput = document.getElementById('server-url')
@@ -1564,6 +1591,310 @@ ipcMain.handle('hermes-desktop:set-desktop-mode', async (event, input?: unknown)
     await mainWindow.loadURL(splashHtml(t('mode.restarting'))).catch(() => undefined)
   }
   return scheduleAppRestart(300)
+})
+
+// ---------------------------------------------------------------------------
+// Device Agent: the linked server operates this machine (commands + files).
+// ---------------------------------------------------------------------------
+
+function deviceAgentFile(name: string): string {
+  return join(app.getPath('userData'), name)
+}
+
+async function askExecApproval(request: { command: string; args: string[]; cwd: string }): Promise<ExecApprovalDecision> {
+  const commandLine = [request.command, ...request.args].join(' ')
+  showMainWindow()
+  const options: MessageBoxOptions = {
+    type: 'question',
+    buttons: [t('agent.allow'), t('agent.allowSession'), t('agent.deny')],
+    defaultId: 2,
+    cancelId: 2,
+    noLink: true,
+    title: t('agent.approveTitle'),
+    message: t('agent.approveMessage'),
+    detail: t('agent.approveDetail', { command: commandLine.slice(0, 2000), cwd: request.cwd }),
+  }
+  const result = await showDesktopMessageBox(options)
+  if (result.response === 0) return 'allow'
+  if (result.response === 1) return 'allow-session'
+  return 'deny'
+}
+
+function ensureDeviceAgent(): DeviceAgent {
+  if (deviceAgent) return deviceAgent
+  const agent = new DeviceAgent({
+    identityFile: deviceAgentFile(DEVICE_AGENT_IDENTITY_FILE_NAME),
+    loadConfig: () => readDeviceAgentConfig(deviceAgentFile(DEVICE_AGENT_CONFIG_FILE_NAME)),
+    saveConfig: config => writeDeviceAgentConfig(deviceAgentFile(DEVICE_AGENT_CONFIG_FILE_NAME), config),
+    serverUrl: () => (isServerLinkedMode() ? desktopMode.serverUrl : null),
+    approveExec: askExecApproval,
+    audit: entry => appendDeviceAgentAudit(deviceAgentFile(DEVICE_AGENT_AUDIT_FILE_NAME), entry),
+    appVersion: app.getVersion(),
+    log: message => console.log(message),
+  })
+  agent.on('state', (state: DeviceAgentState) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(DEVICE_AGENT_STATE_CHANNEL, deviceAgentSnapshot(state))
+  })
+  deviceAgent = agent
+  return agent
+}
+
+function deviceAgentSnapshot(state: DeviceAgentState = ensureDeviceAgent().getState()) {
+  return {
+    linked: isServerLinkedMode(),
+    ...state,
+    audit: readDeviceAgentAudit(deviceAgentFile(DEVICE_AGENT_AUDIT_FILE_NAME), 20),
+  }
+}
+
+function deviceAgentHtml(): string {
+  const logoUrl = runtimeSourceLogoDataUri()
+  const pageBackground = process.platform === 'win32' ? 'transparent' : '#191919'
+  const dir = isRtlDesktopLocale() ? 'rtl' : 'ltr'
+  const strings = {
+    title: t('agent.title'),
+    intro: t('agent.intro'),
+    notLinked: t('agent.notLinked'),
+    statusLabel: t('agent.statusLabel'),
+    status: {
+      disabled: t('agent.status.disabled'),
+      unpaired: t('agent.status.unpaired'),
+      pending: t('agent.status.pending'),
+      rejected: t('agent.status.rejected'),
+      blocked: t('agent.status.blocked'),
+      connecting: t('agent.status.connecting'),
+      connected: t('agent.status.connected'),
+      offline: t('agent.status.offline'),
+      error: t('agent.status.error'),
+    },
+    pairingLabel: t('agent.pairingLabel'),
+    pairingHint: t('agent.pairingHint'),
+    pairingPlaceholder: t('agent.pairingPlaceholder'),
+    sendPairing: t('agent.sendPairing'),
+    pendingHint: t('agent.pendingHint'),
+    enabled: t('agent.enabled'),
+    capExec: t('agent.capExec'),
+    capFiles: t('agent.capFiles'),
+    approval: t('agent.approval'),
+    approvalAsk: t('agent.approvalAsk'),
+    approvalAlways: t('agent.approvalAlways'),
+    folders: t('agent.folders'),
+    foldersHint: t('agent.foldersHint'),
+    addFolder: t('agent.addFolder'),
+    remove: t('agent.remove'),
+    noFolders: t('agent.noFolders'),
+    audit: t('agent.audit'),
+    noAudit: t('agent.noAudit'),
+    unlink: t('agent.unlink'),
+    back: t('agent.back'),
+  }
+  const html = `<!doctype html><html dir="${dir}"><head><meta charset="utf-8"><title>Core Hub</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;min-height:100%;background:${pageBackground};color:#f1f1f1;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;}
+  body{-webkit-app-region:drag;}
+  .surface{width:100%;min-height:100vh;display:flex;justify-content:center;padding:32px;background:#191919;overflow:auto}
+  .wrap{width:min(720px,100%);display:flex;flex-direction:column;gap:16px;-webkit-app-region:no-drag}
+  .brand{display:flex;align-items:center;gap:10px;justify-content:center}
+  .mark{width:34px;height:34px;border-radius:8px;object-fit:contain}
+  h1{font-weight:560;margin:0;font-size:22px;line-height:1.25;text-align:center}
+  p{margin:0;font-size:14px;line-height:1.6;color:#b9b9b9}
+  .card{border:1px solid #333;border-radius:10px;padding:16px;background:#202020;display:flex;flex-direction:column;gap:10px}
+  .card h2{margin:0;font-size:15px;font-weight:650}
+  .status{display:flex;gap:10px;align-items:center;font-size:14px}
+  .pill{padding:3px 10px;border-radius:999px;background:#333;font-size:12px}
+  .pill.ok{background:#1f4d2b;color:#9be29b}.pill.warn{background:#4d3d1f;color:#ffc27a}.pill.err{background:#4d1f1f;color:#ffaaaa}
+  .err{font-size:12px;color:#ffaaaa;white-space:pre-wrap}
+  .hint{font-size:12px;color:#8f8f8f}
+  input[type=text]{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #4c4c4c;background:#151515;color:#f1f1f1;font-size:14px;direction:ltr;text-align:left}
+  label.row{display:flex;gap:10px;align-items:center;font-size:14px;cursor:pointer}
+  select{padding:8px 10px;border-radius:8px;border:1px solid #4c4c4c;background:#151515;color:#f1f1f1;font-size:13px}
+  ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+  li{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:13px;background:#171717;border-radius:8px;padding:8px 10px}
+  li code{direction:ltr;unicode-bidi:isolate;word-break:break-all;font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .audit li{font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;direction:ltr;text-align:left;justify-content:flex-start;gap:12px}
+  .audit .bad{color:#ffaaaa}.audit .good{color:#9be29b}
+  button{padding:8px 14px;border:1px solid #4c4c4c;border-radius:8px;background:#242424;color:#f2f2f2;cursor:pointer;font-size:13px}
+  button:hover{background:#2d2d2d;border-color:#747474}
+  button:disabled{opacity:.5;cursor:default}
+  button.primary{background:#e8e8e8;color:#111;border-color:#e8e8e8;font-weight:600}
+  button.danger{color:#ffaaaa;border-color:#6b3939}
+  .actions{display:flex;gap:10px;justify-content:space-between}
+  [hidden]{display:none !important}
+</style></head><body><main class="surface"><div class="wrap">
+<div class="brand">${logoUrl ? `<img class="mark" src="${logoUrl}" alt="Core Hub">` : ''}<h1>${escapeHtml(strings.title)}</h1></div>
+<p>${escapeHtml(strings.intro)}</p>
+<div class="card" id="not-linked" hidden><p>${escapeHtml(strings.notLinked)}</p></div>
+<div class="card" id="status-card">
+  <div class="status"><span>${escapeHtml(strings.statusLabel)}</span><span class="pill" id="status-pill"></span><span class="hint" id="server-url"></span></div>
+  <div class="err" id="last-error"></div>
+  <label class="row"><input type="checkbox" id="enabled"><span>${escapeHtml(strings.enabled)}</span></label>
+</div>
+<div class="card" id="pair-card" hidden>
+  <h2>${escapeHtml(strings.pairingLabel)}</h2>
+  <p class="hint">${escapeHtml(strings.pairingHint)}</p>
+  <input type="text" id="pairing" autocomplete="off" spellcheck="false" placeholder="${escapeHtml(strings.pairingPlaceholder)}">
+  <div><button id="send-pairing" class="primary" type="button">${escapeHtml(strings.sendPairing)}</button></div>
+</div>
+<div class="card" id="pending-card" hidden><p>${escapeHtml(strings.pendingHint)}</p></div>
+<div class="card">
+  <h2>${escapeHtml(strings.folders)}</h2>
+  <p class="hint">${escapeHtml(strings.foldersHint)}</p>
+  <ul id="folders"></ul>
+  <div><button id="add-folder" type="button">${escapeHtml(strings.addFolder)}</button></div>
+</div>
+<div class="card">
+  <label class="row"><input type="checkbox" id="cap-exec"><span>${escapeHtml(strings.capExec)}</span></label>
+  <label class="row"><input type="checkbox" id="cap-files"><span>${escapeHtml(strings.capFiles)}</span></label>
+  <label class="row"><span>${escapeHtml(strings.approval)}</span>
+    <select id="approval"><option value="ask">${escapeHtml(strings.approvalAsk)}</option><option value="always">${escapeHtml(strings.approvalAlways)}</option></select>
+  </label>
+</div>
+<div class="card audit">
+  <h2>${escapeHtml(strings.audit)}</h2>
+  <ul id="audit"></ul>
+</div>
+<div class="actions">
+  <button id="unlink" type="button" class="danger">${escapeHtml(strings.unlink)}</button>
+  <button id="back" type="button">${escapeHtml(strings.back)}</button>
+</div>
+<script>
+  const STRINGS = ${JSON.stringify(strings)}
+  const api = window.hermesDesktop && window.hermesDesktop.deviceAgent
+  const el = id => document.getElementById(id)
+  const esc = value => String(value == null ? '' : value)
+  let current = null
+  function pillClass(status) {
+    if (status === 'connected') return 'pill ok'
+    if (status === 'pending' || status === 'connecting' || status === 'offline') return 'pill warn'
+    if (status === 'rejected' || status === 'blocked' || status === 'error') return 'pill err'
+    return 'pill'
+  }
+  function render(state) {
+    current = state
+    el('not-linked').hidden = state.linked
+    el('status-card').hidden = !state.linked
+    el('status-pill').textContent = STRINGS.status[state.status] || state.status
+    el('status-pill').className = pillClass(state.status)
+    el('server-url').textContent = state.serverUrl || ''
+    el('last-error').textContent = state.lastError || ''
+    el('enabled').checked = !!state.config.enabled
+    const paired = !!state.config.pairedServerUrl && state.status !== 'unpaired' && state.status !== 'rejected' && state.status !== 'blocked'
+    el('pair-card').hidden = !state.linked || paired
+    el('pending-card').hidden = state.status !== 'pending'
+    el('cap-exec').checked = !!state.config.capabilities.exec
+    el('cap-files').checked = !!state.config.capabilities.files
+    el('approval').value = state.config.approvalMode
+    el('unlink').hidden = !state.config.pairedServerUrl
+    const folders = el('folders')
+    folders.innerHTML = ''
+    if (!state.config.allowedFolders.length) {
+      const li = document.createElement('li'); li.className = 'hint'; li.textContent = STRINGS.noFolders; folders.appendChild(li)
+    }
+    for (const folder of state.config.allowedFolders) {
+      const li = document.createElement('li')
+      const code = document.createElement('code'); code.textContent = folder
+      const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = STRINGS.remove
+      btn.addEventListener('click', () => api.setConfig({ allowedFolders: state.config.allowedFolders.filter(item => item !== folder) }).then(render))
+      li.appendChild(code); li.appendChild(btn); folders.appendChild(li)
+    }
+    const audit = el('audit')
+    audit.innerHTML = ''
+    if (!state.audit || !state.audit.length) {
+      const li = document.createElement('li'); li.className = 'hint'; li.textContent = STRINGS.noAudit; audit.appendChild(li)
+    }
+    for (const entry of state.audit || []) {
+      const li = document.createElement('li')
+      const time = document.createElement('span'); time.textContent = new Date(entry.at).toLocaleTimeString()
+      const kind = document.createElement('span'); kind.className = entry.ok ? 'good' : 'bad'; kind.textContent = entry.kind
+      const detail = document.createElement('span'); detail.textContent = esc(entry.detail)
+      li.appendChild(time); li.appendChild(kind); li.appendChild(detail); audit.appendChild(li)
+    }
+  }
+  function save(patch) { api.setConfig(patch).then(render).catch(err => { el('last-error').textContent = String(err && err.message || err) }) }
+  el('enabled').addEventListener('change', e => save({ enabled: e.target.checked }))
+  el('cap-exec').addEventListener('change', e => save({ capabilities: { exec: e.target.checked } }))
+  el('cap-files').addEventListener('change', e => save({ capabilities: { files: e.target.checked } }))
+  el('approval').addEventListener('change', e => save({ approvalMode: e.target.value }))
+  el('add-folder').addEventListener('click', () => api.addFolder().then(state => state && render(state)))
+  el('send-pairing').addEventListener('click', async function () {
+    this.disabled = true
+    el('last-error').textContent = ''
+    try { render(await api.pair(el('pairing').value)) }
+    catch (err) { el('last-error').textContent = String(err && err.message || err) }
+    finally { this.disabled = false }
+  })
+  el('unlink').addEventListener('click', () => api.unpair().then(render))
+  el('back').addEventListener('click', () => api.close())
+  api.onState(render)
+  api.getState().then(render)
+</script>
+</div></main></body></html>`
+  return 'data:text/html;charset=utf-8,' + encodeURIComponent(html)
+}
+
+async function openDeviceAgentPage(): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed()) await createWindow()
+  showMainWindow()
+  await mainWindow?.loadURL(deviceAgentHtml())
+}
+
+function sanitizeDeviceAgentConfigPatch(input: unknown): Partial<Pick<DeviceAgentConfig, 'enabled' | 'capabilities' | 'allowedFolders' | 'approvalMode'>> {
+  const record = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
+  const patch: Partial<Pick<DeviceAgentConfig, 'enabled' | 'capabilities' | 'allowedFolders' | 'approvalMode'>> = {}
+  if (typeof record.enabled === 'boolean') patch.enabled = record.enabled
+  if (record.capabilities && typeof record.capabilities === 'object') {
+    const caps = record.capabilities as Record<string, unknown>
+    const current = ensureDeviceAgent().getState().config.capabilities
+    patch.capabilities = {
+      exec: typeof caps.exec === 'boolean' ? caps.exec : current.exec,
+      files: typeof caps.files === 'boolean' ? caps.files : current.files,
+    }
+  }
+  if (Array.isArray(record.allowedFolders)) {
+    patch.allowedFolders = record.allowedFolders.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+  }
+  if (record.approvalMode === 'ask' || record.approvalMode === 'always') patch.approvalMode = record.approvalMode
+  return patch
+}
+
+ipcMain.handle('hermes-desktop:device-agent-get-state', event => {
+  if (!isTrustedDesktopWindowSender(event.sender)) throw new Error('Device agent state can only be read from a Hermes desktop window')
+  return deviceAgentSnapshot()
+})
+ipcMain.handle('hermes-desktop:device-agent-open-settings', async event => {
+  if (!isTrustedDesktopWindowSender(event.sender)) throw new Error('Device access settings can only be opened from a Hermes desktop window')
+  await openDeviceAgentPage()
+  return true
+})
+ipcMain.handle('hermes-desktop:device-agent-close-settings', async event => {
+  requireMainWindowSender(event, 'Closing device access settings')
+  await returnToCurrentUi()
+  return true
+})
+ipcMain.handle('hermes-desktop:device-agent-pair', async (event, input?: unknown) => {
+  requireMainWindowSender(event, 'Pairing this device')
+  const state = await ensureDeviceAgent().pair(typeof input === 'string' ? input : '')
+  return deviceAgentSnapshot(state)
+})
+ipcMain.handle('hermes-desktop:device-agent-unpair', event => {
+  requireMainWindowSender(event, 'Unpairing this device')
+  return deviceAgentSnapshot(ensureDeviceAgent().unpair())
+})
+ipcMain.handle('hermes-desktop:device-agent-set-config', async (event, input?: unknown) => {
+  requireMainWindowSender(event, 'Changing device access settings')
+  const state = await ensureDeviceAgent().setConfig(sanitizeDeviceAgentConfigPatch(input))
+  return deviceAgentSnapshot(state)
+})
+ipcMain.handle('hermes-desktop:device-agent-add-folder', async event => {
+  requireMainWindowSender(event, 'Sharing a folder')
+  if (!mainWindow || mainWindow.isDestroyed()) return null
+  const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory', 'createDirectory'] })
+  if (result.canceled || result.filePaths.length === 0) return null
+  const agent = ensureDeviceAgent()
+  const folders = [...new Set([...agent.getState().config.allowedFolders, ...result.filePaths])]
+  return deviceAgentSnapshot(await agent.setConfig({ allowedFolders: folders }))
 })
 
 function runDesktopApp() {

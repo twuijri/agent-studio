@@ -46,6 +46,20 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     selectRuntimeDirectory: (defaultPath?: string): Promise<string | null> => ipcRenderer.invoke('hermes-desktop:select-runtime-directory', defaultPath),
   }),
   mode: desktopModeSnapshot.mode,
+  deviceAgent: {
+    getState: (): Promise<unknown> => ipcRenderer.invoke('hermes-desktop:device-agent-get-state'),
+    pair: (codeOrLink: string): Promise<unknown> => ipcRenderer.invoke('hermes-desktop:device-agent-pair', codeOrLink),
+    unpair: (): Promise<unknown> => ipcRenderer.invoke('hermes-desktop:device-agent-unpair'),
+    setConfig: (patch: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('hermes-desktop:device-agent-set-config', patch),
+    addFolder: (): Promise<unknown> => ipcRenderer.invoke('hermes-desktop:device-agent-add-folder'),
+    openSettings: (): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:device-agent-open-settings'),
+    close: (): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:device-agent-close-settings'),
+    onState: (callback: (state: unknown) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: unknown) => callback(state)
+      ipcRenderer.on('hermes-desktop:device-agent-state', listener)
+      return () => ipcRenderer.removeListener('hermes-desktop:device-agent-state', listener)
+    },
+  },
   desktopMode: {
     get: (): Promise<DesktopModeSnapshot> => ipcRenderer.invoke('hermes-desktop:get-desktop-mode'),
     probe: (url: string): Promise<{ ok: boolean; url: string; status?: number; error?: string }> => ipcRenderer.invoke('hermes-desktop:probe-studio-server', url),

@@ -92,6 +92,7 @@ async function fetchRemoteLinkStatus(device: LanDeviceInfo): Promise<DeviceOutbo
 async function syncOutboundStatuses(devices: LanDeviceInfo[]): Promise<Map<string, DeviceOutboundStatus>> {
   const statuses = new Map<string, DeviceOutboundStatus>()
   await Promise.all(devices.map(async device => {
+    if (!device.url) return
     const status = await fetchRemoteLinkStatus(device)
     if (!status) return
     statuses.set(device.id, status)
@@ -128,7 +129,8 @@ function mergeKnownDevices(discoveredDevices: LanDeviceInfo[], relations: Device
   for (const relation of relations) {
     if (devicesById.has(relation.id)) continue
     if (relation.inbound_status === 'none' && relation.outbound_status === 'none') continue
-    if (!relation.device_public_key || !relation.url || !relation.http_port) continue
+    if (!relation.device_public_key) continue
+    if (!isCallbackLessDevice(relation) && (!relation.url || !relation.http_port)) continue
     devicesById.set(relation.id, relationToDevice(relation))
   }
   return [...devicesById.values()]
@@ -141,11 +143,14 @@ async function devicesPayload() {
   const knownDevices = mergeKnownDevices(cache.devices, knownRelations)
   const remoteStatuses = await syncOutboundStatuses(knownDevices)
   const relations = new Map(listDeviceRelations().map(device => [device.id, device]))
+  const controllableDeviceIds = new Set(
+    getLanPeerSocketManager().listConnections().filter(connection => connection.controllable).map(connection => connection.device_id),
+  )
   const devices = knownDevices.map(device => {
     const relation = relations.get(device.id)
     const outboundStatus = remoteStatuses.get(device.id) || relation?.outbound_status || 'none'
-    const online = discoveredDeviceIds.has(device.id) || remoteStatuses.has(device.id)
-    if (online && outboundStatus === 'approved') {
+    const online = discoveredDeviceIds.has(device.id) || remoteStatuses.has(device.id) || controllableDeviceIds.has(device.id)
+    if (online && outboundStatus === 'approved' && device.url) {
       void getLanPeerSocketManager().connectToDevice(device).catch(err => {
         console.warn('[lan-peer] failed to connect paired device:', err?.message || err)
       })
@@ -391,15 +396,26 @@ function hostForUrl(host: string): string {
   return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
 }
 
+// A device that only connects outbound (the desktop Device Agent) has no HTTP
+// endpoint of its own; it is stored with port 0 and an empty URL and is
+// reached solely through the peer socket it opens after approval.
+function isCallbackLessDevice(device: Pick<LanDeviceInfo, 'http_port' | 'url'>): boolean {
+  return !device.url && !device.http_port
+}
+
 function bodyToDevice(ctx: any, body: any): LanDeviceInfo | null {
   const deviceId = typeof body?.device_id === 'string' ? body.device_id.trim() : ''
   const publicKey = typeof body?.device_public_key === 'string' ? body.device_public_key : ''
-  const httpPort = Number(body?.http_port)
-  if (!deviceId || !publicKey || !Number.isInteger(httpPort) || httpPort <= 0 || httpPort > 65535) return null
+  const controllable = body?.controllable === true
+  const httpPort = controllable && (body?.http_port === undefined || body?.http_port === null || body?.http_port === 0)
+    ? 0
+    : Number(body?.http_port)
+  if (!deviceId || !publicKey || !Number.isInteger(httpPort) || httpPort < 0 || httpPort > 65535) return null
+  if (httpPort === 0 && !controllable) return null
   const ip = normalizeIp(ctx)
   const endpointKind = body.endpoint_kind === 'web' || body.endpoint_kind === 'desktop' || body.endpoint_kind === 'custom'
     ? body.endpoint_kind
-    : getLanEndpointKind(httpPort)
+    : httpPort === 0 ? 'desktop' : getLanEndpointKind(httpPort)
 
   return {
     id: deviceId,
@@ -408,7 +424,7 @@ function bodyToDevice(ctx: any, body: any): LanDeviceInfo | null {
     ip,
     http_port: httpPort,
     endpoint_kind: endpointKind,
-    url: `http://${hostForUrl(ip)}:${httpPort}`,
+    url: httpPort === 0 ? '' : `http://${hostForUrl(ip)}:${httpPort}`,
     computer_name: String(body?.computer_name || ''),
     os: {
       type: String(body?.os?.type || ''),

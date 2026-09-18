@@ -751,6 +751,21 @@ export default {
     reject: '拒绝',
     block: '拉黑',
     unblock: '解除拉黑',
+    linked: {
+      title: '已关联设备',
+      subtitle: '从桌面应用连接并允许此服务器上的 Hermes 操作的设备。',
+      controllable: '可控制',
+      connectedAt: '连接于 {time}',
+      capabilities: {
+        exec: '运行命令',
+        files: '文件',
+        terminal: '终端',
+      },
+      noCapabilities: '设备未启用任何能力',
+      disconnect: '断开连接',
+      disconnectFailed: '断开设备失败',
+      requestMeta: '{ip}（桌面应用）',
+    },
     inboundStatus: {
       none: '允许申请',
       pending: '待处理',

@@ -789,6 +789,21 @@ export default {
     reject: 'Ablehnen',
     block: 'Blockieren',
     unblock: 'Blockierung aufheben',
+    linked: {
+      title: 'Verknüpfte Geräte',
+      subtitle: 'Geräte, die sich aus der Desktop-App verbunden haben und Hermes auf diesem Server die Steuerung erlauben.',
+      controllable: 'Steuerbar',
+      connectedAt: 'Verbunden {time}',
+      capabilities: {
+        exec: 'Befehle ausführen',
+        files: 'Dateien',
+        terminal: 'Terminal',
+      },
+      noCapabilities: 'Keine Fähigkeiten auf dem Gerät aktiviert',
+      disconnect: 'Trennen',
+      disconnectFailed: 'Gerät konnte nicht getrennt werden',
+      requestMeta: '{ip} (Desktop-App)',
+    },
     inboundStatus: {
       none: 'Anfrage erlaubt',
       pending: 'Ausstehend',

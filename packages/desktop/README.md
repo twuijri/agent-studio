@@ -61,6 +61,24 @@ directory and restarting the app. Automation can pin the mode with
 `HERMES_DESKTOP_MODE=local|server` and `HERMES_DESKTOP_SERVER_URL=https://…`;
 when set, the page is read-only.
 
+## Device access (linked mode)
+
+In the linked-server mode the app can let Hermes on your server operate this
+machine through the server's existing device tools (`ekko_studio_devices`):
+
+1. Tray → **Device access…** (also reachable from the connection mode page).
+2. On the server open **Devices → Copy pairing link**, paste it into the page and
+   send the pairing request; approve it on the server under **Devices → Requests**.
+3. Share at least one folder and enable **Run commands** and/or **Read and write
+   files**. Commands run without a shell, only inside shared folders, and each one
+   asks for approval (Allow / Allow for this session / Deny) unless you choose
+   "Always allow". Interactive terminals are not available on the device.
+
+The device keeps an outbound WebSocket to `/api/devices/peer-socket` declaring
+`controllable=1`; it never listens on a port. Settings live in `device-agent.json`
+and the local activity log in `device-agent-audit.jsonl` under the Electron
+userData directory; the device identity is `device-identity.json` there.
+
 ## Desktop and tray icons
 
 Regenerate the rounded Windows desktop icon and macOS, Windows, and Linux tray
