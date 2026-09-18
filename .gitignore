@@ -61,3 +61,4 @@ packages/client/src/**/*.js
 .ua/tmp/
 .ua/logs/
 .ua/cache/
+.ua/.trash-*/
