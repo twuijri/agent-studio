@@ -296,7 +296,7 @@ if (desktopAppConnectionsBridge()) {
   router.addRoute({
     path: '/hermes/app-connections',
     name: 'hermes.appConnections',
-    component: () => import('@/views/hermes/AppConnectionsView.vue'),
+    component: () => import('@/views/hermes/ChatView.vue'),
   })
 }
 

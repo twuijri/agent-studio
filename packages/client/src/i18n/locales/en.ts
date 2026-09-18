@@ -392,7 +392,7 @@ export default {
     gateways: 'Gateways',
     terminal: 'Terminal',
     browser: 'Browser',
-    appConnections: 'App connections',
+    appConnections: 'Computer apps',
     singleChat: 'Chat',
     globalAgent: 'Global Agent',
     groupChat: 'Group Chat',
@@ -703,7 +703,7 @@ export default {
   },
 
   appConnections: {
-    title: 'App connections',
+    title: 'Apps on this computer',
     subtitle: 'Apps on this computer that expose an MCP server. Share one and Hermes on your server can use it through this computer.',
     rescan: 'Rescan',
     desktopOnly: 'Open this page from the Core Hub desktop app linked to this server.',

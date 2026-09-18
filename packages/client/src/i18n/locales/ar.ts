@@ -392,7 +392,7 @@ export default {
     gateways: 'البوابات',
     terminal: 'الطرفية',
     browser: 'المتصفح',
-    appConnections: 'اتصالات التطبيقات',
+    appConnections: 'برامج الجهاز',
     singleChat: 'محادثة',
     globalAgent: 'الوكيل العام',
     groupChat: 'محادثة جماعية',
@@ -696,7 +696,7 @@ export default {
   },
 
   appConnections: {
-    title: 'اتصالات التطبيقات',
+    title: 'برامج هذا الجهاز',
     subtitle: 'التطبيقات على هذا الجهاز التي توفر خادم MCP. شارك أحدها ليستطيع Hermes على سيرفرك استخدامه عبر هذا الجهاز.',
     rescan: 'إعادة الفحص',
     desktopOnly: 'افتح هذه الصفحة من تطبيق كور هب لسطح المكتب المرتبط بهذا السيرفر.',
