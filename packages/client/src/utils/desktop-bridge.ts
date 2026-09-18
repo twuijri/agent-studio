@@ -159,6 +159,8 @@ export interface DesktopDeviceAgentSnapshot {
 export interface DesktopDeviceAgentBridge {
   getState: () => Promise<DesktopDeviceAgentSnapshot>
   openSettings: () => Promise<boolean>
+  /** Send the pairing request with a pairing link or code copied from the server. */
+  pair?: (codeOrLink: string) => Promise<DesktopDeviceAgentSnapshot>
   onState?: (callback: (state: DesktopDeviceAgentSnapshot) => void) => () => void
 }
 

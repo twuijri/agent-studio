@@ -815,6 +815,7 @@ export default {
       disconnect: 'Trennen',
       disconnectFailed: 'Gerät konnte nicht getrennt werden',
       requestMeta: '{ip} (Desktop-App)',
+      workspace: 'Arbeitsordner',
       profiles: 'Erlaubte Profile',
       allProfiles: 'Alle Profile',
       profilesHint: 'Leer lassen, damit jedes Hermes-Profil dieses Gerät nutzen darf.',

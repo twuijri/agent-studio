@@ -777,6 +777,7 @@ export default {
       disconnect: 'Disconnect',
       disconnectFailed: 'Failed to disconnect the device',
       requestMeta: '{ip} (desktop app)',
+      workspace: 'Workspace folder',
       profiles: 'Allowed profiles',
       allProfiles: 'Every profile',
       profilesHint: 'Leave empty to let every Hermes profile use this device.',

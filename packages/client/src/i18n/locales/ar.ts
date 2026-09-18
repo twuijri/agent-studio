@@ -770,6 +770,7 @@ export default {
       disconnect: 'قطع الاتصال',
       disconnectFailed: 'تعذر قطع اتصال الجهاز',
       requestMeta: '{ip} (تطبيق سطح المكتب)',
+      workspace: 'مجلد العمل',
       profiles: 'البروفايلات المسموح لها',
       allProfiles: 'كل البروفايلات',
       profilesHint: 'اتركه فارغاً ليستخدم هذا الجهاز كل بروفايلات Hermes.',

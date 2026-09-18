@@ -777,6 +777,7 @@ export default {
       disconnect: '断开连接',
       disconnectFailed: '断开设备失败',
       requestMeta: '{ip}（桌面应用）',
+      workspace: '工作文件夹',
       profiles: '允许的配置文件',
       allProfiles: '所有配置文件',
       profilesHint: '留空则允许所有 Hermes 配置文件使用此设备。',

@@ -815,6 +815,7 @@ export default {
       disconnect: '切断',
       disconnectFailed: 'デバイスの切断に失敗しました',
       requestMeta: '{ip}（デスクトップアプリ）',
+      workspace: '作業フォルダー',
       profiles: '許可するプロファイル',
       allProfiles: 'すべてのプロファイル',
       profilesHint: '空のままにすると、すべての Hermes プロファイルがこのデバイスを使用できます。',

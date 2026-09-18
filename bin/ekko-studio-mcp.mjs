@@ -1617,7 +1617,7 @@ const tools = [
   {
     name: 'ekko_studio_lan_peer_connections',
     toolset: 'devices',
-    description: 'List active LAN peer socket connections.',
+    description: 'List active LAN peer socket connections. Linked desktop devices appear with controllable=true, their capabilities, and a workspace folder: run commands there and keep any files you create inside it unless the user asks otherwise.',
     inputSchema: inputSchema(),
   },
   {
@@ -1687,7 +1687,7 @@ const tools = [
   {
     name: 'ekko_studio_lan_command_exec',
     toolset: 'devices',
-    description: 'Run a command on a connected LAN peer using command plus args, without shell string execution.',
+    description: 'Run a command on a connected LAN peer using command plus args, without shell string execution. On a linked desktop device the command starts in the device workspace (see the connection list); create files there rather than elsewhere on the device.',
     inputSchema: inputSchema({
         connection_id: { type: 'string' },
         command: { type: 'string' },
