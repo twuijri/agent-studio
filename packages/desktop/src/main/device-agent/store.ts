@@ -9,7 +9,7 @@ export type DeviceAgentApprovalMode = 'ask' | 'always'
 
 export interface DeviceAgentConfig {
   enabled: boolean
-  capabilities: { exec: boolean; files: boolean }
+  capabilities: { exec: boolean; files: boolean; browser: boolean; screen: boolean }
   allowedFolders: string[]
   approvalMode: DeviceAgentApprovalMode
   /** Studio server this device identity was paired with (normalized origin + path). */
@@ -27,7 +27,7 @@ const AUDIT_KEEP_LINES = 2000
 export function defaultDeviceAgentConfig(): DeviceAgentConfig {
   return {
     enabled: false,
-    capabilities: { exec: false, files: false },
+    capabilities: { exec: false, files: false, browser: false, screen: false },
     allowedFolders: [],
     approvalMode: 'ask',
     pairedServerUrl: null,
@@ -45,7 +45,7 @@ export function parseDeviceAgentConfig(raw: unknown): DeviceAgentConfig {
     : []
   return {
     enabled: record.enabled === true,
-    capabilities: { exec: capabilities.exec === true, files: capabilities.files === true },
+    capabilities: { exec: capabilities.exec === true, files: capabilities.files === true, browser: capabilities.browser === true, screen: capabilities.screen === true },
     allowedFolders: [...new Set(folders)],
     approvalMode: record.approvalMode === 'always' ? 'always' : 'ask',
     pairedServerUrl: typeof record.pairedServerUrl === 'string' && record.pairedServerUrl.trim() ? record.pairedServerUrl.trim() : null,

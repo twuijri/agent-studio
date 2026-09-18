@@ -1,4 +1,4 @@
-import { getLanPeerSocketManager, validateLanPeerPath, type LanPeerExecResult, type LanPeerTerminalInfo, type LanPeerTerminalList, type LanPeerTerminalReadResult } from './lan-peer-socket'
+import { getLanPeerSocketManager, validateLanPeerPath, type LanPeerExecResult, type LanPeerProxyRequest, type LanPeerProxyResponse, type LanPeerScreenCapture, type LanPeerTerminalInfo, type LanPeerTerminalList, type LanPeerTerminalReadResult } from './lan-peer-socket'
 import { readFile, writeFile } from 'fs/promises'
 
 export type PeerToolUploadInput = {
@@ -97,6 +97,27 @@ export class LanPeerToolsService {
       local_path: localPath,
       remote_path: input.remotePath,
     }
+  }
+
+  captureScreen(connectionId: string, options: { displayId?: string; maxWidth?: number } = {}): Promise<LanPeerScreenCapture> {
+    return this.requireCapability(connectionId, 'screen').captureScreen(options)
+  }
+
+  screenAction(connectionId: string, action: Record<string, unknown>): Promise<{ ok: true }> {
+    return this.requireCapability(connectionId, 'screen').screenAction(action)
+  }
+
+  proxyHttp(connectionId: string, request: LanPeerProxyRequest): Promise<LanPeerProxyResponse> {
+    return this.requireCapability(connectionId, 'browser').proxyHttp(request)
+  }
+
+  private requireCapability(connectionId: string, capability: 'screen' | 'browser') {
+    const connection = this.requireClientConnection(connectionId)
+    const info = connection.info()
+    if (!info.controllable || !info.capabilities.includes(capability)) {
+      throw Object.assign(new Error(`The device did not enable the "${capability}" capability`), { status: 403 })
+    }
+    return connection
   }
 
   private requireConnection(connectionId: string) {

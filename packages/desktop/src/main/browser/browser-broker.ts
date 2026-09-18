@@ -63,6 +63,11 @@ export class BrowserBroker {
   private server: Server | null = null
   private token = ''
   private descriptor: BrowserBrokerDescriptor | null = null
+
+  /** Endpoint and token of the running broker (for the Device Agent's browser tunnel). */
+  currentDescriptor(): BrowserBrokerDescriptor | null {
+    return this.descriptor
+  }
   private readonly leases = new Map<string, Lease>()
   private readonly leaseTimers = new Map<string, NodeJS.Timeout>()
   private readonly clients = new Map<string, BrokerClient>()
