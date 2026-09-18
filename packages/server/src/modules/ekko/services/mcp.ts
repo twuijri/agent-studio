@@ -256,6 +256,50 @@ export function resolveEkkoMcpServers(
   return Object.keys(merged).length > 0 ? merged : undefined
 }
 
+/**
+ * Sync the MCP apps shared by linked devices into Ekko's config (one stdio
+ * bridge per app and profile). Entries are marked with CORE_HUB_DEVICE_APP so
+ * user-configured servers are never touched.
+ */
+export function injectDeviceMcpServersIntoEkko(
+  desired: (profile: string) => Array<{ name: string; config: EkkoMcpServerConfig }>,
+  setup: EkkoAgentSetup = setupGlobalEkkoAgent(),
+): { profiles: string[]; changed: boolean } {
+  const current = setup.config.read()
+  const next = structuredClone(current)
+  let changed = false
+  const profiles = new Set(['default', ...setup.profiles().map(item => item.profile)])
+  const isDeviceServer = (server: EkkoMcpServerConfig | undefined) => !!server?.env && server.env.CORE_HUB_DEVICE_APP === '1'
+  for (const profile of profiles) {
+    const existingProfile = next.mcp.profiles[profile]
+    const servers = { ...(existingProfile?.servers ?? {}) }
+    const wanted = desired(profile)
+    const wantedNames = new Set(wanted.map(item => item.name))
+    let profileChanged = false
+    for (const [name, server] of Object.entries(servers)) {
+      if (isDeviceServer(server) && !wantedNames.has(name)) {
+        delete servers[name]
+        profileChanged = true
+      }
+    }
+    for (const { name, config: serverConfig } of wanted) {
+      const existing = servers[name]
+      if (existing && !isDeviceServer(existing)) continue // user-defined server with the same name: leave it
+      if (existing?.enabled === false) continue
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(serverConfig)) {
+        servers[name] = serverConfig
+        profileChanged = true
+      }
+    }
+    if (profileChanged) {
+      next.mcp.profiles[profile] = { ...existingProfile, servers }
+      changed = true
+    }
+  }
+  if (changed) setup.config.replace(next)
+  return { profiles: [...profiles], changed }
+}
+
 export function isManagedEkkoMcpServerName(name: string): boolean {
   return MANAGED_SERVER_NAMES.has(name)
 }

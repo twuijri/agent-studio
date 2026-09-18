@@ -53,6 +53,8 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     setConfig: (patch: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('hermes-desktop:device-agent-set-config', patch),
     addFolder: (): Promise<unknown> => ipcRenderer.invoke('hermes-desktop:device-agent-add-folder'),
     stopScreen: (): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:device-agent-stop-screen'),
+    discoverApps: (): Promise<unknown[]> => ipcRenderer.invoke('hermes-desktop:device-agent-discover-apps'),
+    setApps: (apps: unknown[]): Promise<unknown> => ipcRenderer.invoke('hermes-desktop:device-agent-set-apps', apps),
     openSettings: (): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:device-agent-open-settings'),
     close: (): Promise<boolean> => ipcRenderer.invoke('hermes-desktop:device-agent-close-settings'),
     onState: (callback: (state: unknown) => void): (() => void) => {

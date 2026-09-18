@@ -26,7 +26,7 @@ export type PeerMessage = {
   [key: string]: unknown
 }
 
-export type DeviceAgentCapability = 'exec' | 'files' | 'browser' | 'screen'
+export type DeviceAgentCapability = 'exec' | 'files' | 'browser' | 'screen' | 'apps'
 
 export interface DeviceAgentPolicy {
   /** Capabilities the user enabled; anything else is refused. */
@@ -39,6 +39,19 @@ export interface DeviceAgentPolicy {
   defaultCwd?: string
   /** Ask the user once per session before the server may see or drive the screen. */
   approveScreen?: () => Promise<boolean>
+  /** MCP apps shared with the server (`apps` capability). */
+  apps?: SharedAppDefinition[]
+  /** Ask the user before the server first uses an app in this session. */
+  approveApp?: (app: SharedAppDefinition) => Promise<boolean>
+}
+
+export interface SharedAppDefinition {
+  id: string
+  name: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+  cwd?: string
 }
 
 export interface DeviceAgentProxyRequest {
@@ -65,7 +78,7 @@ export interface DeviceAgentScreenCapture {
 
 export interface DeviceAgentAuditEntry {
   at: number
-  kind: 'exec' | 'file.download' | 'file.upload' | 'terminal' | 'denied' | 'browser' | 'screen.capture' | 'screen.action'
+  kind: 'exec' | 'file.download' | 'file.upload' | 'terminal' | 'denied' | 'browser' | 'screen.capture' | 'screen.action' | 'app'
   detail: string
   ok: boolean
 }
@@ -113,6 +126,8 @@ export function resolveAllowedPath(input: string, allowedFolders: string[]): str
 export class DeviceAgentProtocol {
   private readonly uploads = new Map<string, { path: string; stream: WriteStream }>()
   private readonly children = new Set<ChildProcess>()
+  /** Running MCP app processes keyed by the server's session id. */
+  private readonly appSessions = new Map<string, { child: ChildProcess; appId: string }>()
   private closed = false
 
   constructor(private readonly options: DeviceAgentProtocolOptions) {}
@@ -180,6 +195,15 @@ export class DeviceAgentProtocol {
       case 'screen.action':
         void this.screenAction(msg)
         return
+      case 'mcp.open':
+        void this.openApp(msg)
+        return
+      case 'mcp.data':
+        this.writeApp(msg)
+        return
+      case 'mcp.close':
+        this.closeApp(msg)
+        return
       default:
         this.send({ type: 'error', request_id: msg.request_id, message: `Unsupported peer message: ${msg.type}` })
     }
@@ -196,6 +220,98 @@ export class DeviceAgentProtocol {
       try { upload.stream.destroy() } catch { /* ignore */ }
     }
     this.uploads.clear()
+    for (const session of this.appSessions.values()) {
+      try { session.child.kill() } catch { /* ignore */ }
+    }
+    this.appSessions.clear()
+  }
+
+  /** Number of MCP app processes currently running for the server. */
+  get openAppSessions(): number {
+    return this.appSessions.size
+  }
+
+  private async openApp(msg: PeerMessage): Promise<void> {
+    const policy = this.options.policy()
+    const sessionId = typeof msg.session_id === 'string' ? msg.session_id : ''
+    const appId = typeof msg.app_id === 'string' ? msg.app_id : ''
+    const fail = (message: string) => this.send({ type: 'mcp.error', request_id: msg.request_id, session_id: sessionId, message })
+    if (!sessionId || !appId) {
+      fail('Missing app or session id')
+      return
+    }
+    const app = policy.capabilities.includes('apps') ? (policy.apps || []).find(item => item.id === appId) : undefined
+    if (!app) {
+      this.audit({ at: Date.now(), kind: 'denied', detail: `app not shared: ${appId}`, ok: false })
+      fail('This app is not shared with the server')
+      return
+    }
+    if (this.appSessions.has(sessionId)) {
+      fail('Session already open')
+      return
+    }
+    let approved = true
+    if (policy.approveApp) {
+      try { approved = await policy.approveApp(app) } catch { approved = false }
+    }
+    if (!approved) {
+      this.audit({ at: Date.now(), kind: 'denied', detail: `user denied app: ${app.name}`, ok: false })
+      fail('The device owner denied access to this app')
+      return
+    }
+    if (this.closed) return
+    let child: ChildProcess
+    try {
+      child = spawn(app.command, app.args, {
+        cwd: app.cwd && existsSync(app.cwd) ? app.cwd : undefined,
+        env: { ...process.env, ...app.env },
+        shell: false,
+        windowsHide: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+    } catch (err) {
+      this.audit({ at: Date.now(), kind: 'app', detail: `${app.name}: ${err instanceof Error ? err.message : String(err)}`, ok: false })
+      fail(err instanceof Error ? err.message : 'Failed to start the app')
+      return
+    }
+    this.appSessions.set(sessionId, { child, appId })
+    this.audit({ at: Date.now(), kind: 'app', detail: `${app.name} session opened`, ok: true })
+    child.stdout?.on('data', (chunk: Buffer) => {
+      if (!this.appSessions.has(sessionId)) return
+      this.send({ type: 'mcp.data', session_id: sessionId, data: Buffer.from(chunk).toString('base64') })
+    })
+    child.stderr?.on('data', (chunk: Buffer) => {
+      const text = Buffer.from(chunk).toString('utf8').trim()
+      if (text) this.send({ type: 'mcp.stderr', session_id: sessionId, data: text.slice(0, 4000) })
+    })
+    child.on('error', err => {
+      if (!this.appSessions.has(sessionId)) return
+      this.appSessions.delete(sessionId)
+      this.audit({ at: Date.now(), kind: 'app', detail: `${app.name}: ${err.message}`, ok: false })
+      this.send({ type: 'mcp.exit', session_id: sessionId, code: null, message: err.message })
+    })
+    child.on('close', code => {
+      if (!this.appSessions.has(sessionId)) return
+      this.appSessions.delete(sessionId)
+      this.audit({ at: Date.now(), kind: 'app', detail: `${app.name} session closed (exit ${code})`, ok: true })
+      this.send({ type: 'mcp.exit', session_id: sessionId, code })
+    })
+    this.send({ type: 'mcp.opened', request_id: msg.request_id, session_id: sessionId, pid: child.pid })
+  }
+
+  private writeApp(msg: PeerMessage) {
+    const session = typeof msg.session_id === 'string' ? this.appSessions.get(msg.session_id) : undefined
+    if (!session || typeof msg.data !== 'string') return
+    try { session.child.stdin?.write(Buffer.from(msg.data, 'base64')) } catch { /* process gone; exit event follows */ }
+  }
+
+  private closeApp(msg: PeerMessage) {
+    const sessionId = typeof msg.session_id === 'string' ? msg.session_id : ''
+    const session = this.appSessions.get(sessionId)
+    if (!session) return
+    this.appSessions.delete(sessionId)
+    try { session.child.stdin?.end() } catch { /* ignore */ }
+    try { session.child.kill() } catch { /* ignore */ }
   }
 
   private send(payload: Record<string, unknown>) {

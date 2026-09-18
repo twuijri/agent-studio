@@ -23,6 +23,7 @@ import { getLanPeerSocketManager } from '../services/network/lan-peer-socket'
 import { getLanPeerToolsService } from '../services/network/lan-peer-tools'
 import { getDevicePairingCode, verifyDevicePairingCode } from '../services/devices/pairing-code'
 import { deleteDeviceBinding, isDeviceAllowedForProfile, listDeviceBindings, setDeviceBinding } from '../services/devices/device-bindings'
+import { forgetDeviceApps, scheduleDeviceMcpSync } from '../services/devices/device-mcp-injection'
 import { createDeviceSignature, deviceIdFromPublicKey, getPublicSystemInfo, verifyDeviceSignature } from '../public/system-info'
 import { describeLanJsonPostError, getLanJson, postLanJson } from '../services/network/lan-http-client'
 import { checkPairing, recordPairingFailure } from '../services/auth/login-limiter'
@@ -576,6 +577,7 @@ export async function deleteDeviceRequestHistory(ctx: any) {
   }
   getLanPeerSocketManager().disconnectDevice(ctx.params.id)
   deleteDeviceBinding(ctx.params.id)
+  forgetDeviceApps(ctx.params.id)
   ctx.body = await devicesPayload()
 }
 
@@ -613,6 +615,7 @@ export async function updateDeviceBindingController(ctx: any) {
   const body = ctx.request.body as { profiles?: unknown } | undefined
   try {
     const profiles = setDeviceBinding(String(ctx.params.id || ''), body?.profiles)
+    scheduleDeviceMcpSync(0) // bindings decide which profiles get the device's apps
     ctx.body = { device_id: ctx.params.id, profiles, bindings: listDeviceBindings() }
   } catch (err: any) {
     ctx.status = Number(err?.status) || 500

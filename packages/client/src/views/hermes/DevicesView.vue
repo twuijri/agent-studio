@@ -445,6 +445,12 @@ onMounted(() => {
                 <span class="linked-binding-label">{{ t('devices.linked.workspace') }}</span>
                 <code>{{ connection.workspace }}</code>
               </div>
+              <div v-if="connection.apps?.length" class="linked-apps" data-testid="linked-apps">
+                <span class="linked-binding-label">{{ t('devices.linked.apps') }}</span>
+                <div class="linked-capabilities">
+                  <NTag v-for="app in connection.apps" :key="app.id" size="small" round>{{ app.name }}</NTag>
+                </div>
+              </div>
               <div class="linked-binding">
                 <span class="linked-binding-label">{{ t('devices.linked.profiles') }}</span>
                 <NSelect
@@ -911,6 +917,13 @@ onMounted(() => {
   direction: ltr;
   unicode-bidi: isolate;
   word-break: break-all;
+}
+
+.linked-apps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
 }
 
 .linked-binding {

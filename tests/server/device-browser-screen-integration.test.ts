@@ -82,7 +82,7 @@ describe('device browser gateway and screen over the real peer socket', () => {
     let config: DeviceAgentConfig = {
       ...defaultDeviceAgentConfig(),
       enabled: true,
-      capabilities: { exec: false, files: false, browser: true, screen: true },
+      capabilities: { exec: false, files: false, browser: true, screen: true, apps: false },
       allowedFolders: [],
       approvalMode: 'ask',
       pairedServerUrl: serverUrl,

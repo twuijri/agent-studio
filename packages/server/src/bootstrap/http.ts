@@ -40,6 +40,10 @@ import {
 } from './lan-discovery'
 import { getLanPeerSocketManager, getLanPeerSocketPath } from './lan-peer'
 import { getDeviceBrowserGateway } from '../modules/studio/services/network/device-browser-gateway'
+import { getDeviceAppSessionServer, DEVICE_APP_SESSION_PATH } from '../modules/studio/services/devices/device-app-sessions'
+import { configureDeviceMcpSync, desiredDeviceMcpServers, deviceMcpServerConfig, registerDeviceMcpSyncHook, resolveDeviceMcpBridgeScript, startDeviceMcpSync } from '../modules/studio/services/devices/device-mcp-injection'
+import { listProfileNamesFromDisk } from '../modules/hermes/services/profiles/profile'
+import { injectDeviceMcpServersIntoEkko } from '../modules/ekko/services/mcp'
 import { startGlobalAgentServer } from '../modules/studio/public/global-agent'
 import { startLocalAppRelayServer } from '../modules/studio/services/app-relay/server'
 import {
@@ -583,6 +587,26 @@ export async function bootstrap() {
     close: () => deviceBrowserGateway.stop(),
     forceClose: () => { void deviceBrowserGateway.stop() },
   })
+  // Apps shared by linked devices become stdio MCP servers for the agents
+  // (docs/DESKTOP-SERVER-MODE.md, phase 5): a websocket pipe per app session
+  // plus managed entries in the profile configs.
+  const deviceAppSessions = getDeviceAppSessionServer()
+  deviceAppSessions.setupServer(servers)
+  configureDeviceMcpSync({ listProfiles: listProfileNamesFromDisk })
+  registerDeviceMcpSyncHook(() => {
+    const script = resolveDeviceMcpBridgeScript()
+    if (!script) return
+    injectDeviceMcpServersIntoEkko(profile => desiredDeviceMcpServers(profile).map(definition => ({
+      name: definition.name,
+      config: deviceMcpServerConfig(profile, definition, script) as any,
+    })))
+  })
+  startDeviceMcpSync()
+  additionalShutdownSteps.push({
+    name: 'Device app sessions',
+    close: () => deviceAppSessions.close(),
+    forceClose: () => deviceAppSessions.forceClose(),
+  })
   console.log('[bootstrap] terminal + kanban + LAN peer websocket setup')
 
   const loopbackBaseUrl = getLoopbackBaseUrl(server)
@@ -671,6 +695,7 @@ export async function bootstrap() {
         url.pathname !== '/api/hermes/terminal' &&
         url.pathname !== '/api/hermes/kanban/events' &&
         url.pathname !== getLanPeerSocketPath() &&
+        url.pathname !== DEVICE_APP_SESSION_PATH &&
         !url.pathname.startsWith('/socket.io/')) {
         socket.destroy()
       }

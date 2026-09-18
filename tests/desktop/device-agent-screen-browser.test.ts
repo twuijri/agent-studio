@@ -134,6 +134,6 @@ describe('screen input commands', () => {
 
   it('parses the new capabilities in the config', () => {
     expect(parseDeviceAgentConfig({ capabilities: { exec: true, browser: true, screen: 'yes' } }).capabilities)
-      .toEqual({ exec: true, files: false, browser: true, screen: false })
+      .toEqual({ exec: true, files: false, browser: true, screen: false, apps: false })
   })
 })
