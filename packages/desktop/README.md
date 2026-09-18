@@ -2,6 +2,17 @@
 
 Electron desktop distribution for Ekko Studio.
 
+## New-version notice (no auto-updater)
+
+The auto-updater stays disabled in this fork. Instead, packaged builds check the
+fork's GitHub releases 30 s after start and every 6 hours; when a newer release
+exists the app shows a system notification once per version and keeps a
+"Download version X…" entry in the tray menu. Nothing is downloaded or
+installed: the entry opens the release page. "Check for updates" in the tray
+runs the same check on demand, and "Notify about new versions" turns the
+automatic check off. State lives in `release-notice.json` under the app data
+directory; `CORE_HUB_RELEASE_API_URL` overrides the source for testing.
+
 ## Install
 
 Download the latest macOS, Windows, or Linux installer for your CPU

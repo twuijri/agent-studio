@@ -31,6 +31,7 @@ import {
 } from './webui-server'
 import { bundledNode, desktopIcon, desktopLinuxTrayIcon, desktopMacTrayIcon, desktopRuntimeVersion, desktopWindowsTrayIcon, runtimeStorageRoot, webuiDir, webUiHome } from './paths'
 import { checkForDesktopUpdates, initAutoUpdater } from './updater'
+import { availableRelease, onReleaseNoticeChange, releaseNoticesEnabled, setReleaseNoticesEnabled, startReleaseNoticeChecks } from './release-notice'
 import { isRtlDesktopLocale, t } from './desktop-i18n'
 import {
   DESKTOP_MODE_FILE_NAME,
@@ -468,12 +469,29 @@ function updateTrayMenu() {
         updateTrayMenu()
       },
     },
+    ...(availableRelease() ? [{
+      label: t('tray.newVersion', { version: availableRelease()!.version }),
+      click: () => {
+        shell.openExternal(availableRelease()!.url).catch(err => {
+          console.error('[tray] failed to open the release page:', err)
+        })
+      },
+    }] : []),
     {
       label: t('tray.checkForUpdates'),
       click: () => {
         checkForDesktopUpdates(true).catch(err => {
           console.error('[tray] update check failed:', err)
         })
+      },
+    },
+    {
+      label: t('tray.releaseNotices'),
+      type: 'checkbox',
+      checked: releaseNoticesEnabled(),
+      click: (item) => {
+        setReleaseNoticesEnabled(item.checked)
+        updateTrayMenu()
       },
     },
     {
@@ -2179,6 +2197,8 @@ function runDesktopApp() {
     })
     void bootstrap()
     initAutoUpdater({ beforeQuitAndInstall: prepareAppShutdown })
+    onReleaseNoticeChange(() => updateTrayMenu())
+    startReleaseNoticeChecks()
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         void createWindow()
