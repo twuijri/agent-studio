@@ -1,26 +1,17 @@
 # .understandignore — patterns for files/dirs to exclude from analysis
 # Syntax: same as .gitignore (globs, # comments, ! negation, trailing / for dirs)
-# Pilot scope: runtime contracts, composition, and chat entry points only.
-# This is development knowledge, not a full-codebase analysis.
-*
-!*/
-!/package.json
-!/ARCHITECTURE.md
-!packages/server/src/index.ts
-!packages/server/src/bootstrap/http.ts
-!packages/server/src/bootstrap/chat-agent-runtime-adapter.ts
-!packages/server/src/modules/studio/public/chat-agent-runtime.ts
-!packages/server/src/modules/studio/contracts/agents/runtime.ts
-!packages/server/src/modules/studio/contracts/agents/family.ts
-!packages/server/src/modules/studio/sockets/chat-run.ts
-!packages/server/src/modules/studio/routes/chat-run.ts
-!packages/server/src/modules/studio/controllers/chat-run.ts
-!packages/client/src/api/client.ts
+# Owner-approved full repository analysis (2026-09-18).
+# Includes source, tests, docs, scripts, and build/deployment configuration.
+# Developer knowledge only: no production data or generated dependencies.
+!.github/workflows/**
+!tests/**
+!docs/**
 
 # Safety exclusions override all inclusions, including future changes.
 **/.env*
-**/*credentials*
-**/*secret*
+# Keep credential-management SOURCE CODE; exclude secret material, not modules.
+**/credentials.json
+**/secrets.json
 **/*.pem
 **/*.key
 **/*.db*
@@ -38,6 +29,30 @@ dist/
 coverage/
 test-results/
 playwright-report/
+**/.gradle/
+**/release/
+**/resources/python/
+**/resources/node/
+**/*.apk
+**/*.aab
+**/*.dmg
+**/*.exe
+**/*.zip
+**/*.tar.gz
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.webp
+**/*.gif
+**/*.ico
+**/*.icns
+**/*.woff*
+**/*.ttf
+**/*.mp4
+**/*.mp3
+**/*.wav
+**/*.pcm
+**/*.pdf
 # Lines below are suggestions — uncomment to activate.
 # Use ! prefix to force-include something excluded by defaults.
 #
