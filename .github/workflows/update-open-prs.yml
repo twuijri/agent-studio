@@ -1,0 +1,56 @@
+name: Update open pull requests
+
+# After every merge into main, bring the other open pull requests that the
+# owner armed with auto-merge up to date, so branch protection ("branch must be
+# up to date") is satisfied and their checks re-run. Auto-merge then completes
+# each one as soon as its checks are green — one at a time, each verified
+# against the latest main, with no protection rule relaxed.
+#
+# Needs the repository secret PR_UPDATE_TOKEN: a fine-grained token of the
+# owner with Contents: write and Pull requests: write on this repository.
+# Commits made with the default GITHUB_TOKEN never trigger workflows, so the
+# updated branches would sit without checks and auto-merge would never fire.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: update-open-prs
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update armed pull requests
+        env:
+          GH_TOKEN: ${{ secrets.PR_UPDATE_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::PR_UPDATE_TOKEN is not set; open pull requests were not updated. Add the secret or press 'Update branch' manually."
+            exit 0
+          fi
+          gh api --paginate "repos/$REPO/pulls?state=open&base=main&per_page=100" \
+            --jq '.[] | select(.draft == false and .auto_merge != null) | "\(.number) \(.head.sha) \(.head.repo.full_name // "")"' \
+          | while read -r number sha head_repo; do
+              if [ "$head_repo" != "$REPO" ]; then
+                echo "PR #$number comes from a fork; skipping (the author updates it)."
+                continue
+              fi
+              status=$(gh api "repos/$REPO/pulls/$number" --jq '.mergeable_state')
+              if [ "$status" != "behind" ]; then
+                echo "PR #$number is '$status'; nothing to update."
+                continue
+              fi
+              if gh api -X PUT "repos/$REPO/pulls/$number/update-branch" -f expected_head_sha="$sha" >/dev/null; then
+                echo "PR #$number: branch update requested."
+              else
+                echo "::warning::PR #$number could not be updated automatically (conflict or permissions); it needs a manual update."
+              fi
+            done
