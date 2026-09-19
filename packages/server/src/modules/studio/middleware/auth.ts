@@ -108,11 +108,11 @@ function safeEqual(a: string, b: string): boolean {
   }
 }
 
-async function getJwtSecret(): Promise<string> {
+export async function getJwtSecret(): Promise<string> {
   return process.env.AUTH_JWT_SECRET || await getToken()
 }
 
-function requestToken(ctx: Context): string {
+export function requestToken(ctx: Context): string {
   const auth = ctx.headers.authorization || ''
   if (typeof auth === 'string' && auth.startsWith('Bearer ')) return auth.slice(7).trim()
   return typeof ctx.query.token === 'string' ? ctx.query.token.trim() : ''

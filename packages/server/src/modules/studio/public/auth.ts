@@ -1,6 +1,7 @@
 export {
   authenticateUserToken,
   inspectAppUserToken,
+  getJwtSecret,
   getUserJwtExpiresSeconds,
   isAuthEnabled,
   issueAppJwt,
@@ -8,7 +9,9 @@ export {
   issueUserJwt,
   requireAdmin,
   requireSuperAdmin,
+  requestToken,
   requireUserProfile,
+  verifyUserJwt,
   type AuthenticatedUser,
 } from '../middleware/auth'
 

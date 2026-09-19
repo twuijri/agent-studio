@@ -1,6 +1,7 @@
 export {
   consumeAppAuthorizationCode,
   createAppAuthorizationCode,
+  getAppConnectionTokenStatus,
   listAppConnections,
   markCloudAppConnectionRevocationSynced,
   revokeAppConnection,
