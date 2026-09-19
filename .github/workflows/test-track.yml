@@ -7,6 +7,11 @@ name: Test track
 #     ghcr.io/twuijri/core-hub-test with the moving tag `test`.
 # Runs after Playwright succeeds on `test`, so CI is green before anything is
 # built; nothing here touches main, releases, or the public core-hub package.
+# The finished apps are also published to the owner's private repository
+# twuijri/core-hub-test-builds as the single rolling release `latest-test`
+# (https://github.com/twuijri/core-hub-test-builds/releases/latest), which
+# needs the secret TEST_RELEASE_TOKEN (fine-grained token, Contents: write on
+# that repository). Without it the artifacts stay in Actions only.
 
 on:
   workflow_run:
@@ -184,3 +189,56 @@ jobs:
           path: ${{ matrix.artifact_files }}
           retention-days: 14
           if-no-files-found: error
+
+  publish:
+    name: Publish latest-test page
+    needs: [gate, desktop]
+    if: always() && needs.gate.outputs.desktop == 'true' && needs.desktop.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      BUILDS_REPO: twuijri/core-hub-test-builds
+      RELEASE_TAG: latest-test
+    steps:
+      - name: Download the built apps
+        uses: actions/download-artifact@v4
+        with:
+          path: builds
+          pattern: core-hub-test-*
+          merge-multiple: true
+
+      - name: Publish to the private test-builds repository
+        env:
+          GH_TOKEN: ${{ secrets.TEST_RELEASE_TOKEN }}
+          SOURCE_SHA: ${{ needs.gate.outputs.sha }}
+          SOURCE_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::TEST_RELEASE_TOKEN is not set; the apps stay as workflow artifacts only. Add the secret to publish them to $BUILDS_REPO."
+            exit 0
+          fi
+          ls -la builds
+          version=$(ls builds | sed -n 's/^Core\.Hub-\(.*\)-\(arm64\|x64\|x86_64\|amd64\)\..*$/\1/p' | head -1)
+          [ -n "$version" ] || version="test"
+          notes_file=$(mktemp)
+          {
+            echo "# Core Hub Test — $version"
+            echo
+            echo "Built from \`$SOURCE_REPO@${SOURCE_SHA}\` (test branch) on $(date -u +'%Y-%m-%d %H:%M UTC')."
+            echo
+            echo "- Image: \`ghcr.io/twuijri/core-hub-test:test\`"
+            echo "- Source run: $RUN_URL"
+            echo
+            echo "Installs next to the stable Core Hub with its own data. Unsigned: on macOS use System Settings → Privacy & Security → Open Anyway."
+          } > "$notes_file"
+          if ! gh release view "$RELEASE_TAG" --repo "$BUILDS_REPO" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$BUILDS_REPO" --target main --title "Core Hub Test — $version" --notes-file "$notes_file"
+          else
+            gh release edit "$RELEASE_TAG" --repo "$BUILDS_REPO" --title "Core Hub Test — $version" --notes-file "$notes_file"
+            # Replace the previous build's files so the page only ever shows the newest build.
+            for asset in $(gh release view "$RELEASE_TAG" --repo "$BUILDS_REPO" --json assets --jq '.assets[].name'); do
+              gh release delete-asset "$RELEASE_TAG" "$asset" --repo "$BUILDS_REPO" --yes || true
+            done
+          fi
+          gh release upload "$RELEASE_TAG" builds/* --repo "$BUILDS_REPO" --clobber
+          echo "Published Core Hub Test $version to https://github.com/$BUILDS_REPO/releases/latest" >> "$GITHUB_STEP_SUMMARY"
