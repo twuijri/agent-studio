@@ -14,6 +14,7 @@ name: Update open pull requests
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -43,8 +44,15 @@ jobs:
                 echo "PR #$number comes from a fork; skipping (the author updates it)."
                 continue
               fi
-              status=$(gh api "repos/$REPO/pulls/$number" --jq '.mergeable_state')
-              if [ "$status" != "behind" ]; then
+              # Right after a push GitHub is still computing mergeability, so the
+              # state reads 'unknown' for a while; wait for it instead of skipping.
+              status=unknown
+              for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+                status=$(gh api "repos/$REPO/pulls/$number" --jq '.mergeable_state')
+                [ "$status" != "unknown" ] && break
+                sleep 10
+              done
+              if [ "$status" != "behind" ] && [ "$status" != "unknown" ]; then
                 echo "PR #$number is '$status'; nothing to update."
                 continue
               fi
