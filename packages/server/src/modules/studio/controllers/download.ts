@@ -1,3 +1,5 @@
+import { createReadStream } from 'fs'
+import { stat } from 'fs/promises'
 import { basename, extname, isAbsolute } from 'path'
 import {
   createFileProvider,
@@ -65,6 +67,61 @@ function requestedProfile(ctx: any): string {
   return ctx.state?.profile?.name || getActiveProfileName() || 'default'
 }
 
+function isStreamableMedia(mime: string): boolean {
+  return mime.startsWith('video/') || mime.startsWith('audio/')
+}
+
+function parseRange(header: string | undefined, size: number): { start: number; end: number } | null | 'invalid' {
+  if (!header) return null
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim())
+  if (!match || (match[1] === '' && match[2] === '')) return 'invalid'
+  let start = match[1] === '' ? NaN : Number(match[1])
+  let end = match[2] === '' ? size - 1 : Number(match[2])
+  if (Number.isNaN(start)) {
+    // suffix range: last N bytes
+    const suffix = Number(match[2])
+    if (!Number.isFinite(suffix) || suffix <= 0) return 'invalid'
+    start = Math.max(0, size - suffix)
+    end = size - 1
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= size) return 'invalid'
+  return { start, end: Math.min(end, size - 1) }
+}
+
+/**
+ * Local files are streamed straight from disk with HTTP range support instead
+ * of being buffered: media players need 206 responses to seek and to start
+ * playing before the whole file has arrived, and the in-memory buffer has a
+ * size cap that silently froze large exports (e.g. a rendered video) at 0:00.
+ */
+async function streamLocalFile(ctx: any, filePath: string, name: string, mime: string): Promise<void> {
+  const info = await stat(filePath)
+  if (!info.isFile()) throw Object.assign(new Error('Not a file'), { code: 'not_found' })
+  const disposition = isStreamableMedia(mime) ? 'inline' : 'attachment'
+  ctx.set('Content-Type', mime)
+  ctx.set('Content-Disposition', `${disposition}; filename="${encodeURIComponent(name)}"; filename*=UTF-8''${encodeURIComponent(name)}`)
+  ctx.set('Accept-Ranges', 'bytes')
+  ctx.set('Cache-Control', 'no-cache')
+  ctx.set('X-Content-Type-Options', 'nosniff')
+  const range = parseRange(ctx.get('range'), info.size)
+  if (range === 'invalid') {
+    ctx.status = 416
+    ctx.set('Content-Range', `bytes */${info.size}`)
+    ctx.body = ''
+    return
+  }
+  if (range) {
+    ctx.status = 206
+    ctx.set('Content-Range', `bytes ${range.start}-${range.end}/${info.size}`)
+    ctx.set('Content-Length', String(range.end - range.start + 1))
+    ctx.body = createReadStream(filePath, { start: range.start, end: range.end })
+    return
+  }
+  ctx.status = 200
+  ctx.set('Content-Length', String(info.size))
+  ctx.body = createReadStream(filePath)
+}
+
 export async function download(ctx: any) {
   const filePath = ctx.query.path as string | undefined
   const fileName = ctx.query.name as string | undefined
@@ -82,18 +139,17 @@ export async function download(ctx: any) {
     // Support both absolute and relative paths
     const validPath = isAbsolute(filePath) ? validatePath(filePath) : resolveProfileFilePath(filePath, profile)
 
-    // Choose provider: always use local for upload directory files
-    let data: Buffer
-    if (isInUploadDir(validPath)) {
-      data = await localProvider.readFile(validPath)
-    } else {
-      const provider = await createFileProvider(profile)
-      data = await provider.readFile(validPath)
-    }
-
     // Determine filename and MIME type
     const name = fileName || basename(validPath)
     let mime = getMimeType(name)
+
+    // Choose provider: always use local for upload directory files
+    const provider = isInUploadDir(validPath) ? localProvider : await createFileProvider(profile)
+    if (provider.type === 'local' && variant !== 'app-image') {
+      await streamLocalFile(ctx, validPath, name, mime)
+      return
+    }
+    const data: Buffer = await provider.readFile(validPath)
     let responseData = data
     if (variant === 'app-image') {
       const preview = await createAppImagePreview(data, mime)
