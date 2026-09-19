@@ -25,6 +25,16 @@ runs the same check on demand, and "Notify about new versions" turns the
 automatic check off. State lives in `release-notice.json` under the app data
 directory; `CORE_HUB_RELEASE_API_URL` overrides the source for testing.
 
+## Test-channel builds (Core Hub Test)
+
+Every green `test` branch commit produces owner-only builds through
+`.github/workflows/test-track.yml`: desktop apps named **Core Hub Test** (app id
+`us.i3u.agentstudio.test`, own data folder, version `<pkg>-test.<run>`) uploaded
+as private workflow artifacts, and the image `ghcr.io/twuijri/core-hub-test:test`
+in a private package. The channel is baked into the packaged `package.json`
+(`corehubChannel: "test"`, read by `src/main/channel.ts`); test builds skip the
+new-version notice and never touch the stable app or its data.
+
 ## Install
 
 Download the latest macOS, Windows, or Linux installer for your CPU
