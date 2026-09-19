@@ -1,18 +1,153 @@
 import Foundation
 
+/// One `tool.started` / `tool.completed` / `tool.failed` payload.
+struct ToolEvent: Hashable {
+    let id: String
+    let name: String
+    let status: ToolStatus
+    let detail: String?
+    let arguments: String?
+    let output: String?
+    let outputTruncated: Bool
+    let outputOriginalLength: Int?
+    let previewTruncated: Bool
+    let reasoning: String?
+    let duration: Double?
+
+    static func parse(event: String, json: JSON) -> ToolEvent {
+        let rawID = json.string("tool_call_id", "call_id", "id")
+        let name = json.string("tool", "name", "tool_name", "function_name").nilIfEmpty ?? "tool"
+        let status: ToolStatus = event == "tool.started" ? .running : (event == "tool.failed" || json.bool("error") || json.bool("is_error") ? .error : .done)
+        let duration: Double? = json["duration"] != nil ? json.double("duration") : (json["duration_seconds"] != nil ? json.double("duration_seconds") : nil)
+        let originalLength = json["output_original_length"] == nil ? nil : json.int("output_original_length")
+        return ToolEvent(
+            id: rawID.isEmpty ? "\(name)-\(UUID().uuidString)" : rawID,
+            name: name,
+            status: status,
+            detail: detailText(json),
+            arguments: argumentsText(json),
+            output: outputText(json),
+            outputTruncated: json.bool("output_truncated"),
+            outputOriginalLength: originalLength,
+            previewTruncated: json.bool("preview_truncated"),
+            reasoning: json.string("reasoning", "thinking").nilIfEmpty,
+            duration: duration
+        )
+    }
+
+    /// Single-line preview: the server `preview`, else the most descriptive argument.
+    static func detailText(_ json: JSON) -> String? {
+        if let detail = json.string("preview", "detail").nilIfEmpty { return detail.replacingOccurrences(of: "\n", with: " ") }
+        if let object = json["arguments"] as? JSON {
+            for key in ["command", "cmd", "path", "file_path", "query", "url", "prompt"] { if let value = object.string(key).nilIfEmpty { return value.replacingOccurrences(of: "\n", with: " ") } }
+        }
+        return (json["arguments"] as? String)?.replacingOccurrences(of: "\n", with: " ").nilIfEmpty
+    }
+
+    static func argumentsText(_ json: JSON) -> String? {
+        if let text = json["arguments"] as? String { return text.nilIfEmpty }
+        if let object = json["arguments"] as? JSON, let data = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]) { return String(data: data, encoding: .utf8) }
+        return nil
+    }
+
+    static func outputText(_ json: JSON) -> String? {
+        if let text = json["output"] as? String { return text.nilIfEmpty }
+        if let text = json["result"] as? String { return text.nilIfEmpty }
+        if let any = json["output"] ?? json["result"], JSONSerialization.isValidJSONObject(any), let data = try? JSONSerialization.data(withJSONObject: any, options: [.prettyPrinted, .sortedKeys]) { return String(data: data, encoding: .utf8) }
+        if let message = json.string("error", "message").nilIfEmpty, json.bool("error") == false { return message }
+        return json.string("error").nilIfEmpty
+    }
+}
+
+struct ResumeState: Hashable {
+    var workspace: String
+    var model: String
+    var provider: String
+    var apiMode: String
+    var pushEnabled: Bool
+    var workspaceChanges: [String]
+}
+
+struct ResumeCompletion: Hashable {
+    let output: String
+    let reasoning: String
+}
+
+struct SessionSettingsUpdate: Hashable {
+    var model: String
+    var provider: String
+    var apiMode: String
+    var reasoningEffort: String?
+    var pushEnabled: Bool?
+
+    init(_ json: JSON) {
+        model = json.string("model"); provider = json.string("provider"); apiMode = json.string("api_mode")
+        reasoningEffort = json["reasoning_effort"] == nil ? nil : json.string("reasoning_effort")
+        pushEnabled = json["push_enabled"] == nil ? nil : json.bool("push_enabled")
+    }
+}
+
+struct SessionCommandResult: Hashable {
+    let command: String
+    let ok: Bool
+    let action: String
+    let message: String
+    let terminal: Bool
+
+    init(_ json: JSON) {
+        command = json.string("command")
+        ok = json["ok"] == nil ? true : json.bool("ok")
+        action = json.string("action")
+        message = json.string("message", "text", "error")
+        terminal = json["terminal"] == nil ? true : json.bool("terminal")
+    }
+}
+
+/// `location.requested` from the server (this phone is the target device).
+struct LocationRequest: Hashable {
+    let id: String
+    let sessionID: String
+    let purpose: String
+    let accuracy: String
+    let timeoutMs: Int
+
+    init(_ json: JSON) {
+        id = json.string("location_request_id")
+        sessionID = json.string("session_id")
+        purpose = json.string("purpose")
+        accuracy = json.string("accuracy").nilIfEmpty ?? "coarse"
+        timeoutMs = json.int("timeout_ms", default: 30_000)
+    }
+}
+
 enum LiveRunEvent {
+    case connected
+    case disconnected(String?)
     case started(Date)
     case text(String)
+    case interim(String)
     case reasoning(String)
-    case tool(id: String, name: String, detail: String?, status: ToolStatus, duration: Double?)
+    case thinkingAvailable
+    case tool(ToolEvent)
     case usage(contextTokens: Int, contextWindow: Int?)
-    case completed(output: String, reasoning: String)
-    case requiresAction(kind: String, payload: JSON)
-    case actionResolved(id: String)
+    case completed(output: String, reasoning: String, interrupted: Bool)
+    case requiresAction(ChatInteraction)
+    case actionResolved(id: String, choice: String)
     case queued([QueuedRun])
     case queueInsertion(id: String, phase: String)
     case subagent(id: String, event: String, title: String, detail: String)
-    case resumeState(workspace: String, model: String, provider: String, apiMode: String, pushEnabled: Bool, workspaceChanges: [JSON])
+    case resumeState(ResumeState)
+    case resumed(isWorking: Bool, completion: ResumeCompletion?)
+    case settingsUpdated(SessionSettingsUpdate)
+    case titleUpdated(String)
+    case workspaceUpdated(String)
+    case compression(phase: String, messageCount: Int, tokenCount: Int)
+    case abort(phase: String)
+    case peerMessage(role: String, content: String, timestamp: Date?)
+    case sessionCommand(SessionCommandResult)
+    case locationRequested(LocationRequest)
+    case deviceRequested(kind: String, requestID: String)
+    case workspaceDiff(summary: String)
     case failed(String, retryable: Bool)
 }
 
@@ -31,6 +166,8 @@ enum LiveRoomEvent {
 
 private final class ChatReconnectTask: @unchecked Sendable {
     var value: Task<Void, Never>?
+    var closed = false
+    var attempt = 0
 }
 
 final class SocketIOConnection: @unchecked Sendable {
@@ -38,23 +175,33 @@ final class SocketIOConnection: @unchecked Sendable {
     private let token: String
     private let namespace: String
     private let profile: String?
+    private let platform: String?
     private var socket: URLSessionWebSocketTask?
     private var readTask: Task<Void, Never>?
     private var onPacket: ((String) -> Void)?
     private(set) var isConnected = false
 
-    init(baseURL: String, token: String, namespace: String, profile: String? = nil) {
-        self.baseURL = baseURL; self.token = token; self.namespace = namespace; self.profile = profile
+    init(baseURL: String, token: String, namespace: String, profile: String? = nil, platform: String? = nil) {
+        self.baseURL = baseURL; self.token = token; self.namespace = namespace; self.profile = profile; self.platform = platform
+    }
+
+    /// `/socket.io/?EIO=4&transport=websocket&profile=…&platform=ios`; the
+    /// `platform` query registers the phone as a mobile device target.
+    static func handshakeURL(baseURL: String, profile: String?, platform: String?) -> URL? {
+        guard var components = URLComponents(string: baseURL) else { return nil }
+        components.scheme = components.scheme == "https" ? "wss" : "ws"
+        components.path = "/socket.io/"
+        var items = [URLQueryItem(name: "EIO", value: "4"), URLQueryItem(name: "transport", value: "websocket")]
+        if let profile, !profile.isEmpty { items.append(URLQueryItem(name: "profile", value: profile)) }
+        if let platform, !platform.isEmpty { items.append(URLQueryItem(name: "platform", value: platform)) }
+        components.queryItems = items
+        return components.url
     }
 
     func connect(onPacket: @escaping (String) -> Void) {
         close()
         self.onPacket = onPacket
-        guard var components = URLComponents(string: baseURL) else { onPacket("__error__:invalid server"); return }
-        components.scheme = components.scheme == "https" ? "wss" : "ws"
-        components.path = "/socket.io/"
-        components.queryItems = [URLQueryItem(name: "EIO", value: "4"), URLQueryItem(name: "transport", value: "websocket")] + (profile.map { [URLQueryItem(name: "profile", value: $0)] } ?? [])
-        guard let url = components.url else { onPacket("__error__:invalid server"); return }
+        guard let url = Self.handshakeURL(baseURL: baseURL, profile: profile, platform: platform) else { onPacket("__error__:invalid server"); return }
         var request = URLRequest(url: url)
         request.timeoutInterval = 30
         if !token.isEmpty { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
@@ -106,8 +253,14 @@ final class SocketIOConnection: @unchecked Sendable {
     }
 }
 
+/// Persistent `/chat-run` connection for one conversation. It stays open while
+/// the conversation is on screen so device requests (location, calendar…)
+/// and peer messages arrive even when no run is active; it reconnects with
+/// exponential backoff and re-attaches through `app.resume`.
 final class ChatSocket: @unchecked Sendable {
     private var connection: SocketIOConnection?
+    private var sessionID = ""
+    private(set) var isConnected = false
 
     func abort(sessionID: String) { connection?.emit("abort", payload: ["session_id": sessionID]) }
     func resumeApp(sessionID: String) { connection?.emit("app.resume", payload: ["session_id": sessionID, "id": Self.cachedResumeID(sessionID)]) }
@@ -120,125 +273,156 @@ final class ChatSocket: @unchecked Sendable {
     static func clarificationPayload(sessionID: String, clarificationID: String, answer: String) -> JSON { ["session_id": sessionID, "clarify_id": clarificationID, "response": answer] }
     func cancelQueued(sessionID: String, queueID: String) { connection?.emit("cancel_queued_run", payload: ["session_id": sessionID, "queue_id": queueID]) }
     func insertQueued(sessionID: String, queueID: String) { connection?.emit("insert_queued_run", payload: ["session_id": sessionID, "queue_id": queueID]) }
-    func enqueue(profile: String, sessionID: String, input: String, attachments: [Upload], reasoningEffort: String?, model: String?, provider: String?, session: SessionSummary) {
-        var payload = Self.runPayload(profile: profile, sessionID: sessionID, input: input, attachments: attachments, reasoningEffort: reasoningEffort, model: model, provider: provider, session: session)
-        payload["queue_id"] = UUID().uuidString
-        connection?.emit("run", payload: payload)
+    func steerQueued(sessionID: String, queueID: String) { connection?.emit("steer_queued_run", payload: ["session_id": sessionID, "queue_id": queueID]) }
+    func respondToLocation(_ payload: JSON) { connection?.emit("location.respond", payload: payload) }
+    /// Calendar / reminder / health requests are answered `denied` until the
+    /// native integrations land (see docs/mobile/PLAN.md).
+    func denyDeviceRequest(kind: String, sessionID: String, requestID: String) {
+        connection?.emit("\(kind).respond", payload: ["session_id": sessionID, "\(kind)_request_id": requestID, "status": "denied"])
     }
-    func close() { connection?.close(); connection = nil }
 
-    func run(baseURL: String, token: String, profile: String, sessionID: String, input: String, attachments: [Upload], reasoningEffort: String?, model: String?, provider: String?, session: SessionSummary) -> AsyncStream<LiveRunEvent> {
+    /// Emits `run`. Returns false when the socket is not connected so the
+    /// caller can fall back to the REST endpoint.
+    @discardableResult
+    func run(_ payload: JSON) -> Bool {
+        guard let connection, connection.isConnected else { return false }
+        connection.emit("run", payload: payload)
+        return true
+    }
+
+    func enqueue(_ payload: JSON) -> Bool {
+        var queued = payload
+        queued["queue_id"] = UUID().uuidString
+        return run(queued)
+    }
+
+    func close() { connection?.close(); connection = nil; isConnected = false }
+
+    /// Opens the connection and streams every session event until `close()`.
+    func open(baseURL: String, token: String, profile: String, sessionID: String) -> AsyncStream<LiveRunEvent> {
         close()
+        self.sessionID = sessionID
         return AsyncStream { continuation in
-            let payload = Self.runPayload(profile: profile, sessionID: sessionID, input: input, attachments: attachments, reasoningEffort: reasoningEffort, model: model, provider: provider, session: session)
-            let live = SocketIOConnection(baseURL: baseURL, token: token, namespace: "/chat-run", profile: profile)
+            let live = SocketIOConnection(baseURL: baseURL, token: token, namespace: "/chat-run", profile: profile, platform: "ios")
             self.connection = live
-            var started = false
-            var submitted = false
-            var terminal = false
-            var reconnectAttempt = 0
             let retryTask = ChatReconnectTask()
             var handlePacket: ((String) -> Void)!
 
             func scheduleReconnect() {
-                guard !terminal, submitted, retryTask.value == nil else { return }
-                let delay = min(pow(2.0, Double(reconnectAttempt)), 30.0)
-                reconnectAttempt += 1
+                guard !retryTask.closed, retryTask.value == nil else { return }
+                let delay = min(pow(2.0, Double(retryTask.attempt)), 30.0)
+                retryTask.attempt += 1
                 retryTask.value = Task {
                     try? await Task.sleep(for: .seconds(delay))
-                    guard !Task.isCancelled, !terminal else { return }
+                    guard !Task.isCancelled, !retryTask.closed else { return }
                     retryTask.value = nil
                     live.connect(onPacket: handlePacket)
                 }
             }
 
-            func finish() {
-                guard !terminal else { return }
-                terminal = true
-                retryTask.value?.cancel()
-                continuation.finish()
-                live.close()
-            }
-
-            handlePacket = { packet in
+            handlePacket = { [weak self] packet in
                 if packet == "__connected__" {
-                    reconnectAttempt = 0
-                    if submitted {
-                        live.emit("app.resume", payload: ["session_id": sessionID, "id": Self.cachedResumeID(sessionID)])
-                    } else {
-                        submitted = true
-                        live.emit("run", payload: payload)
-                    }
+                    retryTask.attempt = 0
+                    self?.isConnected = true
+                    continuation.yield(.connected)
+                    live.emit("app.resume", payload: ["session_id": sessionID, "id": Self.cachedResumeID(sessionID)])
                     return
                 }
                 if packet == "__disconnected__" || packet.hasPrefix("__error__:") {
-                    if submitted {
-                        scheduleReconnect()
-                    } else {
-                        let message = packet.hasPrefix("__error__:") ? String(packet.dropFirst(10)) : String(localized: "Connection dropped")
-                        continuation.yield(.failed(message, retryable: !started))
-                        finish()
-                    }
+                    self?.isConnected = false
+                    let message = packet.hasPrefix("__error__:") ? String(packet.dropFirst(10)) : nil
+                    continuation.yield(.disconnected(message))
+                    scheduleReconnect()
                     return
                 }
                 guard let (event, json) = Self.event(packet, namespace: "/chat-run") else { return }
-                switch event {
-                case "resumed", "app.resumed":
-                    let restored = Self.restoredResume(json, sessionID: sessionID)
-                    if let usage = Self.usage(restored) { continuation.yield(usage) }
-                    continuation.yield(.resumeState(workspace: restored.string("workspace"), model: restored.string("model"), provider: restored.string("provider"), apiMode: restored.string("api_mode"), pushEnabled: restored.bool("push_enabled"), workspaceChanges: restored.objects("workspaceRunChanges")))
-                    continuation.yield(.queued(restored.objects("queueMessages").map(QueuedRun.init)))
-                    let insertion = restored.object("queueInsertion")
-                    if !insertion.isEmpty { continuation.yield(.queueInsertion(id: insertion.string("queue_id"), phase: insertion.string("phase"))) }
-                    for row in restored.objects("backgroundTasks") { continuation.yield(.subagent(id: row.string("delegation_id", "subagent_id", "id").nilIfEmpty ?? UUID().uuidString, event: row.string("event").nilIfEmpty ?? (row.string("status") == "completed" ? "subagent.complete" : "subagent.progress"), title: row.string("goal", "name", "summary").nilIfEmpty ?? String(localized: "Subagent"), detail: row.string("text", "summary", "status", "tool", "error"))) }
-                    for envelope in restored.objects("events") {
-                        let replayEvent = envelope.string("event"), replayData = envelope.object("data")
-                        if replayEvent == "approval.requested" || replayEvent == "clarify.requested" { continuation.yield(.requiresAction(kind: replayEvent, payload: replayData)) }
-                        else if replayEvent.hasPrefix("subagent.") || replayEvent == "delegation.updated" { continuation.yield(.subagent(id: replayData.string("delegation_id", "subagent_id", "id").nilIfEmpty ?? UUID().uuidString, event: replayEvent, title: replayData.string("goal", "name", "summary").nilIfEmpty ?? String(localized: "Subagent"), detail: replayData.string("text", "summary", "status", "tool", "error"))) }
-                    }
-                    if restored.bool("isWorking") || restored.int("queueLength") > 0 || restored.int("backgroundPending") > 0 {
-                        started = true
-                    } else if let completion = Self.completion(fromResume: restored) {
-                        continuation.yield(.completed(output: completion.output, reasoning: completion.reasoning))
-                        finish()
-                    } else {
-                        continuation.yield(.failed(String(localized: "Run failed"), retryable: false))
-                        finish()
-                    }
-                case "run.started": started = true; continuation.yield(.started(.now))
-                case "run.queued": continuation.yield(.queued(json.objects("queued_messages").map(QueuedRun.init)))
-                case "run.queue_insertion.updated": continuation.yield(.queueInsertion(id: json.string("queue_id"), phase: json.string("phase")))
-                case let value where value.hasPrefix("subagent.") || value == "delegation.updated" || value == "subagent.event":
-                    let nestedEvent = value == "subagent.event" ? json.string("event") : value
-                    continuation.yield(.subagent(id: json.string("delegation_id", "subagent_id", "id").nilIfEmpty ?? UUID().uuidString, event: nestedEvent, title: json.string("goal", "name", "summary").nilIfEmpty ?? String(localized: "Subagent"), detail: json.string("text", "summary", "status", "tool", "error")))
-                case "message.delta":
-                    let delta = json.string("delta", "text"); if !delta.isEmpty { started = true; continuation.yield(.text(delta)) }
-                case "reasoning.delta", "thinking.delta":
-                    let delta = json.string("delta", "text"); if !delta.isEmpty { started = true; continuation.yield(.reasoning(delta)) }
-                case "tool.started", "tool.completed", "tool.failed":
-                    started = true
-                    let id = json.string("tool_call_id", "call_id", "id")
-                    let name = json.string("tool", "name", "tool_name", "function_name").nilIfEmpty ?? "tool"
-                    let detail = Self.toolDetail(json)
-                    let status: ToolStatus = event == "tool.started" ? .running : (event == "tool.failed" || json.bool("error") ? .error : .done)
-                    continuation.yield(.tool(id: id.isEmpty ? "\(name)-\(UUID().uuidString)" : id, name: name, detail: detail, status: status, duration: json["duration_seconds"] == nil ? nil : json.double("duration_seconds")))
-                case "run.completed":
-                    if let usage = Self.usage(json) { continuation.yield(usage) }
-                    continuation.yield(.completed(output: json.string("output"), reasoning: json.string("reasoning")))
-                    if json.int("queue_remaining") == 0 && json.int("background_pending") == 0 { finish() }
-                case "approval.requested", "clarify.requested": continuation.yield(.requiresAction(kind: event, payload: json))
-                case "approval.resolved", "clarify.resolved": continuation.yield(.actionResolved(id: json.string("approval_id", "clarify_id", "id")))
-                case "run.failed": continuation.yield(.failed(json.string("error", "message").nilIfEmpty ?? String(localized: "Run failed"), retryable: false)); if json.int("queue_remaining") == 0 && json.int("background_pending") == 0 { finish() }
-                default: break
-                }
+                for item in Self.events(for: event, json: json, sessionID: sessionID) { continuation.yield(item) }
             }
             live.connect(onPacket: handlePacket)
-            continuation.onTermination = { [weak self] _ in retryTask.value?.cancel(); self?.close() }
+            continuation.onTermination = { [weak self] _ in retryTask.closed = true; retryTask.value?.cancel(); self?.close() }
         }
     }
 
-    static func runPayload(profile: String, sessionID: String, input: String, attachments: [Upload], reasoningEffort: String?, model: String?, provider: String?, session: SessionSummary) -> JSON {
-        var payload: JSON = ["input": content(input, attachments), "profile": profile, "session_id": sessionID, "push_enabled": session.pushEnabled]
+    /// Translates one server event into stream events (pure; unit-tested).
+    static func events(for event: String, json: JSON, sessionID: String) -> [LiveRunEvent] {
+        var out: [LiveRunEvent] = []
+        switch event {
+        case "resumed", "app.resumed":
+            let restored = restoredResume(json, sessionID: sessionID)
+            if let usage = usage(restored) { out.append(usage) }
+            out.append(.resumeState(ResumeState(workspace: restored.string("workspace"), model: restored.string("model"), provider: restored.string("provider"), apiMode: restored.string("api_mode"), pushEnabled: restored.bool("push_enabled", default: true), workspaceChanges: restored.objects("workspaceRunChanges").map(workspaceChangeSummary))))
+            out.append(.queued(restored.objects("queueMessages").map(QueuedRun.init)))
+            let insertion = restored.object("queueInsertion")
+            if !insertion.isEmpty { out.append(.queueInsertion(id: insertion.string("queue_id"), phase: insertion.string("phase"))) }
+            for row in restored.objects("backgroundTasks") { out.append(subagentEvent(row.string("event").nilIfEmpty ?? (row.string("status") == "completed" ? "subagent.complete" : "subagent.progress"), row)) }
+            let working = restored.bool("isWorking") || restored.int("queueLength") > 0 || restored.int("backgroundPending") > 0
+            for envelope in restored.objects("events") {
+                let replay = envelope.string("event"), data = envelope.object("data")
+                guard replay != "resumed", replay != "app.resumed" else { continue }
+                if !working && replay != "approval.requested" && replay != "clarify.requested" && replay != "run.reattach_failed" && !replay.hasPrefix("subagent.") && replay != "delegation.updated" { continue }
+                out += events(for: replay, json: data, sessionID: sessionID)
+            }
+            out.append(.resumed(isWorking: working, completion: completion(fromResume: restored).map { ResumeCompletion(output: $0.output, reasoning: $0.reasoning) }))
+        case "run.started": out.append(.started(.now))
+        case "run.queued": out.append(.queued(json.objects("queued_messages").map(QueuedRun.init)))
+        case "run.queue_insertion.updated": out.append(.queueInsertion(id: json.string("queue_id"), phase: json.string("phase")))
+        case let value where value.hasPrefix("subagent.") || value == "delegation.updated" || value == "subagent.event":
+            out.append(subagentEvent(value == "subagent.event" ? json.string("event") : value, json))
+        case "message.delta":
+            let delta = json.string("delta", "text"); if !delta.isEmpty { out.append(.text(delta)) }
+        case "message.interim":
+            let text = json.string("text", "output"); if !text.isEmpty && !json.bool("already_streamed") { out.append(.interim(text)) }
+        case "reasoning.delta", "thinking.delta":
+            let delta = json.string("delta", "text"); if !delta.isEmpty { out.append(.reasoning(delta)) }
+        case "reasoning.available": out.append(.thinkingAvailable)
+        case "tool.started", "tool.completed", "tool.failed": out.append(.tool(ToolEvent.parse(event: event, json: json)))
+        case "workspace.diff.completed": out.append(.workspaceDiff(summary: workspaceChangeSummary(json)))
+        case "usage.updated": if let usage = usage(json) { out.append(usage) }
+        case "run.completed":
+            if let usage = usage(json) { out.append(usage) }
+            let interrupted = json.bool("interrupted") || json.object("result").bool("interrupted")
+            out.append(.completed(output: json.string("output"), reasoning: json.string("reasoning"), interrupted: interrupted))
+        case "approval.requested", "clarify.requested": out.append(.requiresAction(ChatInteraction(event: event, payload: json)))
+        case "approval.resolved", "clarify.resolved": out.append(.actionResolved(id: json.string("approval_id", "clarify_id", "id"), choice: json.string("choice", "response")))
+        case "run.failed", "run.reattach_failed": out.append(.failed(json.string("error", "message", "text").nilIfEmpty ?? String(localized: "Run failed"), retryable: false))
+        case "session.settings.updated": out.append(.settingsUpdated(SessionSettingsUpdate(json)))
+        case "session.title.updated": if let title = json.string("title").nilIfEmpty { out.append(.titleUpdated(title)) }
+        case "session.workspace.updated": out.append(.workspaceUpdated(json.string("workspace")))
+        case "compression.started", "compression.completed":
+            out.append(.compression(phase: event == "compression.started" ? "started" : "completed", messageCount: json.int("message_count"), tokenCount: json.int("token_count", default: json.int("compressed_tokens"))))
+        case "abort.started": out.append(.abort(phase: "started"))
+        case "abort.timeout": out.append(.abort(phase: "timeout"))
+        case "abort.completed": out.append(.abort(phase: "completed"))
+        case "run.peer_user_message":
+            let message = json.object("message")
+            let content: String
+            if let text = message["content"] as? String { content = text } else { content = Message(message).content }
+            out.append(.peerMessage(role: message.string("role").nilIfEmpty ?? "user", content: content, timestamp: StudioTimestamp.date(from: message.string("timestamp"))))
+        case "session.command": out.append(.sessionCommand(SessionCommandResult(json)))
+        case "location.requested": out.append(.locationRequested(LocationRequest(json)))
+        case "calendar.requested", "reminder.requested", "health.requested":
+            let kind = String(event.prefix(while: { $0 != "." }))
+            out.append(.deviceRequested(kind: kind, requestID: json.string("\(kind)_request_id")))
+        default: break
+        }
+        return out
+    }
+
+    private static func subagentEvent(_ event: String, _ json: JSON) -> LiveRunEvent {
+        .subagent(id: json.string("delegation_id", "subagent_id", "id").nilIfEmpty ?? UUID().uuidString, event: event, title: json.string("goal", "name", "summary").nilIfEmpty ?? String(localized: "Subagent"), detail: json.string("text", "summary", "status", "tool", "error"))
+    }
+
+    static func workspaceChangeSummary(_ json: JSON) -> String {
+        let files = json.objects("files").count + json.objects("changes").count
+        let count = files > 0 ? files : json.int("file_count", default: json.int("files_changed"))
+        let path = json.string("path", "workspace", "file")
+        if count > 0 { return String(localized: "\(count) files changed") }
+        return path.nilIfEmpty ?? json.string("summary").nilIfEmpty ?? String(localized: "Workspace changes")
+    }
+
+    /// Run payload for `run` / queued runs (unit-tested contract).
+    static func runPayload(profile: String, sessionID: String, input: String, attachments: [Upload], reasoningEffort: String?, model: String?, provider: String?, session: SessionSummary, pushEnabled: Bool? = nil) -> JSON {
+        var payload: JSON = ["input": content(input, attachments), "profile": profile, "session_id": sessionID, "push_enabled": pushEnabled ?? session.pushEnabled]
         if let reasoningEffort, !reasoningEffort.isEmpty { payload["reasoning_effort"] = reasoningEffort }
         if let model, !model.isEmpty { payload["model"] = model }
         if let provider, !provider.isEmpty { payload["provider"] = provider }
@@ -261,7 +445,7 @@ final class ChatSocket: @unchecked Sendable {
         return result
     }
 
-    private static func usage(_ json: JSON) -> LiveRunEvent? {
+    static func usage(_ json: JSON) -> LiveRunEvent? {
         func integer(_ keys: [String]) -> Int? {
             for key in keys {
                 if let value = json[key] as? NSNumber { return value.intValue }
@@ -289,11 +473,16 @@ final class ChatSocket: @unchecked Sendable {
         return nil
     }
 
-    private static func content(_ input: String, _ attachments: [Upload]) -> Any {
+    /// `input` is a plain string, or content blocks when files are attached.
+    static func content(_ input: String, _ attachments: [Upload]) -> Any {
         guard !attachments.isEmpty else { return input }
         var blocks: [JSON] = []
         if !input.isEmpty { blocks.append(["type": "text", "text": input]) }
-        blocks += attachments.map { ["type": $0.mime.hasPrefix("image/") ? "image" : "file", "name": $0.name, "path": $0.path, "media_type": $0.mime] }
+        blocks += attachments.map { upload -> JSON in
+            var block: JSON = ["type": upload.mime.hasPrefix("image/") ? "image" : "file", "name": upload.name, "path": upload.path]
+            if !upload.mime.isEmpty { block["media_type"] = upload.mime }
+            return block
+        }
         return blocks
     }
 
@@ -302,15 +491,6 @@ final class ChatSocket: @unchecked Sendable {
         let jsonText = String(packet[bracket...])
         guard let data = jsonText.data(using: .utf8), let array = try? JSONSerialization.jsonObject(with: data) as? [Any], let event = array.first as? String else { return nil }
         return (event, array.count > 1 ? (array[1] as? JSON ?? [:]) : [:])
-    }
-
-    private static func toolDetail(_ json: JSON) -> String? {
-        if let detail = json.string("preview", "detail").nilIfEmpty { return detail.replacingOccurrences(of: "\n", with: " ") }
-        if let object = json["arguments"] as? JSON {
-            for key in ["command", "cmd", "path", "file_path", "query", "url", "prompt"] { if let value = object.string(key).nilIfEmpty { return value.replacingOccurrences(of: "\n", with: " ") } }
-            if let data = try? JSONSerialization.data(withJSONObject: object), let text = String(data: data, encoding: .utf8) { return text }
-        }
-        return (json["arguments"] as? String)?.replacingOccurrences(of: "\n", with: " ")
     }
 }
 

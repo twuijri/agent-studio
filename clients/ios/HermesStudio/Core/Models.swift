@@ -331,18 +331,28 @@ struct Message: Identifiable, Hashable {
     let id: String
     let role: String
     let content: String
+    let reasoning: String
     let timestamp: String?
+    let attachments: [ChatAttachmentRef]
 
     init(_ json: JSON) {
         id = json.string("id", "message_id").nilIfEmpty ?? UUID().uuidString
         role = json.string("role", "sender")
-        if let text = json["content"] as? String { content = text }
-        else if let blocks = json["content"] as? [Any] {
+        var files: [ChatAttachmentRef] = []
+        let raw = json["display_content"] ?? json["content"]
+        if let text = raw as? String { content = text }
+        else if let blocks = raw as? [Any] {
             content = blocks.compactMap { block -> String? in
                 guard let item = block as? JSON else { return nil }
+                if ["file", "image"].contains(item.string("type")), let path = item.string("path").nilIfEmpty {
+                    files.append(ChatAttachmentRef(name: item.string("name").nilIfEmpty ?? URL(fileURLWithPath: path).lastPathComponent, path: path, mime: item.string("media_type", "mime")))
+                    return nil
+                }
                 return item.string("text", "content").nilIfEmpty
             }.joined(separator: "\n")
         } else { content = json.string("text", "message") }
+        reasoning = json.string("reasoning", "reasoning_content")
+        attachments = files
         timestamp = json.string("timestamp", "createdAt", "created_at").nilIfEmpty
     }
 
@@ -381,22 +391,89 @@ struct RoomMessage: Identifiable, Hashable {
     }
 }
 
-enum ToolStatus: String, Hashable { case running, done, error }
+enum ToolStatus: String, Hashable { case running, done, error, interrupted }
 
+/// One tool call inside an assistant turn (or a subagent progress row).
 struct ToolStep: Identifiable, Hashable {
     let id: String
     var name: String
+    /// One-line preview of the arguments (server `preview`).
     var detail: String?
+    var arguments: String?
+    var output: String?
+    var outputTruncated = false
+    var outputOriginalLength: Int?
+    var previewTruncated = false
+    /// Reasoning captured at the tool boundary (shown as "Thinking" in the line).
+    var reasoning: String?
     var status: ToolStatus
     var duration: Double?
     var startedAt: Date
+    var isSubagent = false
+
+    init(id: String, name: String, detail: String? = nil, status: ToolStatus, duration: Double? = nil, startedAt: Date = .now, isSubagent: Bool = false) {
+        self.id = id; self.name = name; self.detail = detail; self.status = status; self.duration = duration; self.startedAt = startedAt; self.isSubagent = isSubagent
+    }
+}
+
+enum ChatLineKind: String, Hashable { case user, assistant, system, command, error, interaction }
+
+/// An approval or clarification request rendered inline in the stream.
+struct ChatInteraction: Hashable {
+    enum Kind: String, Hashable { case approval, clarify }
+    let id: String
+    let kind: Kind
+    var prompt: String
+    var command: String
+    var choices: [String]
+    var allowPermanent: Bool
+    var responseMode: String
+    var initialResponse: String
+    var remainingSeconds: Int
+    var resolved = false
+    var resolution = ""
+
+    init(id: String, kind: Kind, prompt: String, command: String = "", choices: [String] = [], allowPermanent: Bool = true, responseMode: String = "", initialResponse: String = "", remainingSeconds: Int = 0) {
+        self.id = id; self.kind = kind; self.prompt = prompt; self.command = command; self.choices = choices; self.allowPermanent = allowPermanent
+        self.responseMode = responseMode; self.initialResponse = initialResponse; self.remainingSeconds = remainingSeconds
+    }
+
+    /// Builds the interaction from an `approval.requested` / `clarify.requested`
+    /// payload. Choice entries may be strings or `{ value, label }` objects.
+    init(event: String, payload: JSON) {
+        let approval = event.hasPrefix("approval")
+        kind = approval ? .approval : .clarify
+        id = payload.string("approval_id", "approvalId", "clarify_id", "clarification_id", "clarificationId", "id")
+        command = payload.string("command", "tool_name")
+        let text = payload.string("description", "prompt", "question", "message")
+        prompt = text.nilIfEmpty ?? command.nilIfEmpty ?? String(localized: "The agent needs your response before it can continue.")
+        var values: [String] = []
+        for raw in payload.array("choices") {
+            if let value = raw as? String, !value.isEmpty { values.append(value) }
+            else if let object = raw as? JSON, let value = object.string("value", "id", "choice", "key").nilIfEmpty { values.append(value) }
+        }
+        allowPermanent = payload["allow_permanent"] == nil ? true : payload.bool("allow_permanent")
+        if values.isEmpty && approval { values = allowPermanent ? ["once", "session", "always"] : ["once", "session"] }
+        choices = values
+        responseMode = payload.string("response_mode")
+        initialResponse = payload.string("initial_response")
+        remainingSeconds = max(0, payload.int("remaining_timeout_ms", default: payload.int("timeout_ms")) / 1000)
+    }
+}
+
+/// A file the user attached to a message (shown as a chip in the bubble).
+struct ChatAttachmentRef: Hashable {
+    let name: String
+    let path: String
+    let mime: String
 }
 
 struct ChatLine: Identifiable, Hashable {
     let id: UUID
+    var kind: ChatLineKind
     var text: String
-    var fromUser: Bool
-    var isError: Bool
+    /// `message.interim` text shown while no delta has arrived yet.
+    var interim: String
     var timestamp: Date?
     var sender: String?
     var reasoning: String
@@ -404,11 +481,42 @@ struct ChatLine: Identifiable, Hashable {
     var tools: [ToolStep]
     var startedAt: Date?
     var finishedAt: Date?
+    var thinkingStartedAt: Date?
+    var thinkingEndedAt: Date?
+    var interaction: ChatInteraction?
+    var attachments: [ChatAttachmentRef]
+    /// Server message id when known (history and peer messages).
+    var remoteID: String?
 
-    init(text: String, fromUser: Bool, isError: Bool = false, timestamp: Date? = Date(), sender: String? = nil, reasoning: String = "", isStreaming: Bool = false, tools: [ToolStep] = []) {
-        id = UUID(); self.text = text; self.fromUser = fromUser; self.isError = isError; self.timestamp = timestamp
+    var fromUser: Bool { kind == .user }
+    var isError: Bool { kind == .error }
+
+    init(text: String, fromUser: Bool, isError: Bool = false, timestamp: Date? = Date(), sender: String? = nil, reasoning: String = "", isStreaming: Bool = false, tools: [ToolStep] = [], kind: ChatLineKind? = nil, attachments: [ChatAttachmentRef] = [], remoteID: String? = nil) {
+        id = UUID()
+        self.kind = kind ?? (isError ? .error : (fromUser ? .user : .assistant))
+        self.text = text; self.interim = ""; self.timestamp = timestamp
         self.sender = sender; self.reasoning = reasoning; self.isStreaming = isStreaming; self.tools = tools
+        self.attachments = attachments; self.remoteID = remoteID
         startedAt = isStreaming ? (timestamp ?? .now) : nil; finishedAt = isStreaming ? nil : timestamp
+    }
+
+    init(interaction: ChatInteraction, timestamp: Date = .now) {
+        id = UUID(); kind = .interaction; text = ""; interim = ""; self.timestamp = timestamp; sender = nil; reasoning = ""
+        isStreaming = false; tools = []; attachments = []; self.interaction = interaction
+    }
+
+    /// Body shown in the bubble: streamed text, else the interim text.
+    var displayText: String { text.isEmpty ? interim : text }
+
+    /// Maps a persisted history role to a line kind.
+    static func kind(forRole role: String) -> ChatLineKind {
+        switch role.lowercased() {
+        case "user": return .user
+        case "command": return .command
+        case "system": return .system
+        case "error": return .error
+        default: return .assistant
+        }
     }
 }
 

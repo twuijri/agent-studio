@@ -65,6 +65,16 @@ enum Preferences {
         get { UserDefaults.standard.string(forKey: "voiceInput") ?? voiceInputDevice }
         set { UserDefaults.standard.set(newValue, forKey: "voiceInput") }
     }
+    /// Composer ⚙ settings shared with the web: tool-call trace visibility and
+    /// "Voice mode" (speak every assistant reply automatically).
+    static var showToolCalls: Bool {
+        get { UserDefaults.standard.object(forKey: "showToolCalls") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "showToolCalls") }
+    }
+    static var autoSpeakReplies: Bool {
+        get { UserDefaults.standard.bool(forKey: "autoSpeakReplies") }
+        set { UserDefaults.standard.set(newValue, forKey: "autoSpeakReplies") }
+    }
     static func session(for profile: String) -> String { UserDefaults.standard.string(forKey: "session.\(profile)") ?? "" }
     static func setSession(_ id: String, profile: String) { UserDefaults.standard.set(id, forKey: "session.\(profile)") }
 }

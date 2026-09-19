@@ -1,0 +1,121 @@
+import SwiftUI
+
+/// Queued runs: insert (run next), steer (interrupt the current turn), cancel.
+struct QueuedRunsPanel: View {
+    let items: [QueuedRun]
+    let insertionID: String
+    let onInsert: (QueuedRun) -> Void
+    let onSteer: (QueuedRun) -> Void
+    let onCancel: (QueuedRun) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(items) { item in QueuedRunChip(item: item, inserting: insertionID == item.id, onInsert: onInsert, onSteer: onSteer, onCancel: onCancel) }
+            }
+            .padding(.horizontal, 12)
+        }
+        .padding(.vertical, 5)
+    }
+}
+
+private struct QueuedRunChip: View {
+    let item: QueuedRun
+    let inserting: Bool
+    let onInsert: (QueuedRun) -> Void
+    let onSteer: (QueuedRun) -> Void
+    let onCancel: (QueuedRun) -> Void
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: inserting ? "arrow.down.to.line.compact" : "clock")
+            Text(item.text.nilIfEmpty ?? String(localized: "Queued message")).lineLimit(1).frame(maxWidth: 160)
+            Button { onInsert(item) } label: { Image(systemName: "arrow.up.to.line.compact") }.accessibilityLabel("Run next")
+            Button { onSteer(item) } label: { Image(systemName: "arrow.uturn.forward") }.accessibilityLabel("Steer now")
+            Button { onCancel(item) } label: { Image(systemName: "xmark.circle.fill") }.accessibilityLabel("Cancel queued message")
+        }
+        .font(CoreHubTokens.Typography.metaFont)
+        .foregroundStyle(CoreHubTokens.Palette.textSecondary)
+        .padding(8)
+        .background(CoreHubTokens.Palette.bgSecondary, in: Capsule())
+    }
+}
+
+/// "Compressing context…" while the summariser runs, then "Context compressed".
+struct CompressionBanner: View {
+    let compression: ChatStreamState.Compression
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if compression.phase == "started" { ProgressView().controlSize(.mini) } else { Image(systemName: "checkmark.circle").font(.system(size: 11)) }
+            Text(compression.phase == "started" ? "Compressing context…" : "Context compressed")
+            if compression.messageCount > 0 || compression.tokenCount > 0 {
+                Text(verbatim: "· ")
+                Text("\(compression.messageCount) messages · \(ContextUsageFormat.tokens(compression.tokenCount)) tokens")
+            }
+            Spacer()
+        }
+        .font(CoreHubTokens.Typography.metaFont)
+        .foregroundStyle(CoreHubTokens.Palette.textSecondary)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(CoreHubTokens.Palette.bgSecondary)
+    }
+}
+
+/// abort.started / abort.timeout.
+struct AbortBanner: View {
+    let phase: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if phase == "timeout" { Image(systemName: "exclamationmark.triangle").font(.system(size: 11)) } else { ProgressView().controlSize(.mini) }
+            Text(phase == "timeout" ? "Stopping is taking longer than expected…" : "Stopping…")
+            Spacer()
+        }
+        .font(CoreHubTokens.Typography.metaFont)
+        .foregroundStyle(phase == "timeout" ? CoreHubTokens.Palette.warning : CoreHubTokens.Palette.textSecondary)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(CoreHubTokens.Palette.bgSecondary)
+    }
+}
+
+/// Shown after the first successful connection drops.
+struct ConnectionBanner: View {
+    let error: String?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.mini)
+            Text("Reconnecting to Core Hub…")
+            if let error, !error.isEmpty { Text(verbatim: "· ") + Text(error) }
+            Spacer()
+        }
+        .font(CoreHubTokens.Typography.metaFont)
+        .foregroundStyle(CoreHubTokens.Palette.warning)
+        .lineLimit(1)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(CoreHubTokens.Palette.warning.opacity(CoreHubTokens.Alpha.hover))
+    }
+}
+
+struct WorkspaceChangesRow: View {
+    let changes: [String]
+    let workspace: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.triangle.branch").font(.system(size: 11))
+            Text("\(changes.count) workspace changes")
+            if let last = changes.last { Text(verbatim: "· "); TechnicalText(text: last, font: CoreHubTokens.Typography.metaFont, color: CoreHubTokens.Palette.textMuted) }
+            Spacer()
+            if !workspace.isEmpty { TechnicalText(text: WorkspaceChip.label(for: workspace)) }
+        }
+        .font(CoreHubTokens.Typography.metaFont)
+        .foregroundStyle(CoreHubTokens.Palette.textSecondary)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 5)
+    }
+}
