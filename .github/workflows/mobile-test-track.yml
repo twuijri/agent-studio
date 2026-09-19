@@ -115,15 +115,7 @@ jobs:
               # Recent Xcode releases keep the assertion message only inside the
               # result bundle, so print it from there as well.
               echo "::group::assertion messages"; xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/tests.xcresult" 2>/dev/null \
-                | python3 -c 'import json,sys
-def walk(n):
-    if isinstance(n, dict):
-        if n.get("result") == "Failed" and n.get("nodeType") in ("Test Case","Failure Message"):
-            print(n.get("nodeType"), ":", n.get("name"))
-        for v in n.values(): walk(v)
-    elif isinstance(n, list):
-        for v in n: walk(v)
-walk(json.load(sys.stdin))' 2>/dev/null | head -80; echo "::endgroup::"
+                | python3 scripts/ci/xcresult-failures.py | head -80; echo "::endgroup::"
               tail -60 "$RUNNER_TEMP/xcodebuild-test.log"; exit 1; }
           grep -E "Executed [0-9]+ tests" "$RUNNER_TEMP/xcodebuild-test.log" | tail -1
       - name: Unsigned .ipa for sideloading
