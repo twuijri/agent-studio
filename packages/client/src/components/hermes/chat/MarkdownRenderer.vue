@@ -17,7 +17,7 @@ import {
   isMermaidFence,
   renderMermaidPlaceholder,
 } from './mermaidRenderer'
-import { downloadFile, getDownloadUrl, inferDownloadFileName } from '@/api/studio/download'
+import { downloadFile, getDownloadUrl, inferDownloadFileName, parseDeviceFileUrl } from '@/api/studio/download'
 import { getBaseUrlValue } from '@/api/client'
 import { isPreviewableFile } from '@/utils/hermes/file-preview'
 import { openUrlInDesktopBrowser } from '@/utils/desktop-browser'
@@ -151,6 +151,13 @@ let unmounted = false
 
 function isLocalFilePath(path: string): boolean {
   return (path.startsWith('/') && !path.startsWith('//')) || /^[a-zA-Z]:[\\/]/.test(path)
+}
+
+// Files on a linked device are written as device://<device id>/<absolute path>
+// (device tools and device apps produce them). They are served by the same
+// download route, which streams them from the device instead of the server.
+function isDeviceFilePath(path: string): boolean {
+  return parseDeviceFileUrl(path) !== null
 }
 
 function normalizeLocalFilePath(path: string): string {
@@ -288,6 +295,32 @@ const renderedHtml = computed(() => {
   // Match optional title attributes and rich labels such as **file.ts** or `file.ts`.
   html = html.replace(/<a href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g, (match, rawHref, innerHtml) => {
     const target = localFileTargetFromRenderedHref(rawHref)
+    if (isDeviceFilePath(target)) {
+      // Device media plays in place; anything else stays a download from the device.
+      const downloadUrl = getDownloadUrl(target)
+      if (hasExtension(target, VIDEO_EXTENSIONS)) {
+        return `<div class="markdown-video-container markdown-device-file">
+        <video class="markdown-video" controls preload="metadata" src="${downloadUrl}"></video>
+        <div class="markdown-video-footer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          <span class="att-name">${innerHtml}</span>
+          <span class="markdown-device-badge">${md.utils.escapeHtml(t('chat.onDevice'))}</span>
+        </div>
+      </div>`
+      }
+      if (hasExtension(target, AUDIO_EXTENSIONS)) {
+        return `<div class="markdown-audio-container markdown-device-file">
+        <audio class="markdown-audio" controls preload="metadata" src="${downloadUrl}"></audio>
+        <div class="markdown-audio-footer">
+          <span class="att-name">${innerHtml}</span>
+          <span class="markdown-device-badge">${md.utils.escapeHtml(t('chat.onDevice'))}</span>
+        </div>
+      </div>`
+      }
+      return `<a href="${downloadUrl}" class="markdown-device-file-link" target="_blank" rel="noopener">${innerHtml} <span class="markdown-device-badge">${md.utils.escapeHtml(t('chat.onDevice'))}</span></a>`
+    }
     if (!isLocalFilePath(target)) return match
 
     const location = parseLocalFileLocation(target)
@@ -735,6 +768,15 @@ async function handleMarkdownClick(event: MouseEvent): Promise<void> {
     max-width: 640px;
     max-height: 480px;
     object-fit: contain;
+  }
+
+  .markdown-device-badge {
+    margin-inline-start: 8px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 11px;
+    background: var(--hover-bg, rgba(128, 128, 128, 0.18));
+    color: var(--text-secondary, #888);
   }
 
   .markdown-video-footer {

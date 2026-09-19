@@ -938,6 +938,7 @@ export default {
 
   // 對話
   chat: {
+    onDevice: '在裝置上',
     contextRemaining: '剩餘',
     contextClickToEdit: '點擊編輯上下文長度',
     contextEditTitle: '編輯上下文長度',

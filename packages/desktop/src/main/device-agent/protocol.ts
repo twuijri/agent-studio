@@ -550,15 +550,29 @@ export class DeviceAgentProtocol {
   private download(msg: PeerMessage) {
     const filePath = this.allowedFilePath(msg, this.options.policy())
     if (!filePath) return
+    let size = 0
     try {
-      if (!statSync(filePath).isFile()) throw new Error('Not a file')
+      const info = statSync(filePath)
+      if (!info.isFile()) throw new Error('Not a file')
+      size = info.size
     } catch (err) {
       this.send({ type: 'file.error', request_id: msg.request_id, transfer_id: msg.transfer_id, message: err instanceof Error ? err.message : 'File not found' })
       return
     }
+    // Optional byte range (offset/length) so the server can stream media with
+    // HTTP range support without pulling the whole file for every seek.
+    const offset = typeof (msg as any).offset === 'number' && Number.isFinite((msg as any).offset) ? Math.max(0, Math.floor((msg as any).offset)) : 0
+    const length = typeof (msg as any).length === 'number' && Number.isFinite((msg as any).length) ? Math.max(0, Math.floor((msg as any).length)) : null
+    if (offset > size || (length !== null && length === 0 && size > 0 && offset >= size)) {
+      this.send({ type: 'file.error', request_id: msg.request_id, transfer_id: msg.transfer_id, message: 'Range not satisfiable' })
+      return
+    }
+    const end = length === null ? size - 1 : Math.min(size - 1, offset + length - 1)
     const chunkSize = this.options.fileChunkSize ?? DEFAULT_FILE_CHUNK_SIZE
-    const stream = createReadStream(filePath, { highWaterMark: chunkSize })
-    this.send({ type: 'file.download.started', request_id: msg.request_id, transfer_id: msg.transfer_id })
+    const stream = size === 0 || end < offset
+      ? createReadStream(filePath, { highWaterMark: chunkSize, start: 0, end: -1 })
+      : createReadStream(filePath, { highWaterMark: chunkSize, start: offset, end })
+    this.send({ type: 'file.download.started', request_id: msg.request_id, transfer_id: msg.transfer_id, size, offset, length: end < offset ? 0 : end - offset + 1 })
     stream.on('data', chunk => {
       this.send({ type: 'file.download.chunk', transfer_id: msg.transfer_id, data: Buffer.from(chunk).toString('base64') })
     })
