@@ -75,7 +75,7 @@ struct AssistantMessageRow: View {
             AgentAvatarView(asset: context.agent, size: CoreHubTokens.Layout.assistantAvatar, streaming: line.isStreaming)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 8) {
-                Text(line.sender.nilIfEmpty ?? context.agent.label)
+                Text(line.sender?.nilIfEmpty ?? context.agent.label)
                     .font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.author, weight: .medium))
                     .foregroundStyle(CoreHubTokens.Palette.textSecondary)
                 AssistantBubbleBody(line: line, context: context)
