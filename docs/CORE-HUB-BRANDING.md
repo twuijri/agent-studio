@@ -23,7 +23,7 @@ Hermes Agent أو Ekko Agent أو بقية الوكلاء. تبقى LICENSE وNO
 
 لا تتغير HERMES_HOME أو HERMES_WEB_UI_HOME أو `.hermes` أو `.hermes-web-ui`،
 ولا الفوليومات أو مسارات API وIPC ومفاتيح localStorage وأسماء الوكلاء.
-يحافظ سطح المكتب على `package.name=hermes-studio` و`appId=us.i3u.agentstudio`
+يحافظ سطح المكتب على `package.name=hermes-studio` و`appId=com.twuijri.corehub` (منذ 2026-09-19؛ كان `us.i3u.agentstudio`)
 وعلى userData قبل تغيير اسم العرض؛ تغييرها قد يفصل التطبيق عن بياناته القديمة.
 أسماء مثبتات جديدة Core.Hub، لكن هوية حزمة Linux التنفيذية القديمة باقية.
 تعامل Windows مع العمليات يحتفظ بالأسماء القديمة ويضيف Core Hub.

@@ -31,7 +31,7 @@ describe('desktop build channel', () => {
     expect(notice).toContain('if (isTestChannel()) return')
     // Overrides travel in a config file (CLI values with spaces break on Windows).
     expect(workflow).toContain('extends: "./electron-builder.yml"')
-    expect(workflow).toContain('appId: "us.i3u.agentstudio.test"')
+    expect(workflow).toContain('appId: "com.twuijri.corehub.test"')
     expect(workflow).toContain('extraMetadata: { productName: "Core Hub Test", version, corehubChannel: "test" }')
     expect(workflow).toContain('--config electron-builder.test.json')
   })
