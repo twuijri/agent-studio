@@ -813,3 +813,10 @@
 "Version %@ is available." = "Version %@ is available.";
 "Waiting to update" = "Waiting to update";
 "Skills and tools" = "Skills and tools";
+"My Notes" = "My Notes";
+"No notes yet." = "No notes yet.";
+"User Profile" = "User Profile";
+"No profile yet." = "No profile yet.";
+"Soul" = "Soul";
+"No soul configuration yet." = "No soul configuration yet.";
+"Written to the profile %@ on the server." = "Written to the profile %@ on the server.";

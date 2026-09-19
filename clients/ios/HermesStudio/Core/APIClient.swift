@@ -243,6 +243,14 @@ final class APIClient: @unchecked Sendable {
     }
     func importProfile(data: Data, name: String) async throws { _ = try await multipart("/api/hermes/profiles/import", data: data, name: name, mime: "application/gzip", field: "file", profile: nil) }
 
+    /// `GET /api/hermes/memory` — the profile's three Markdown files
+    /// (`memory`, `user`, `soul`) as the web's Memory page reads them.
+    func hermesMemory() async throws -> HermesMemory { HermesMemory(try await object("/api/hermes/memory")) }
+    /// `POST /api/hermes/memory { section, content }`.
+    func saveHermesMemory(section: String, content: String) async throws {
+        _ = try await object("/api/hermes/memory", method: "POST", body: ["section": section, "content": content])
+    }
+
     func ekkoConfig() async throws -> JSON { try await object("/api/ekko/config") }
     func saveEkkoConfig(_ config: JSON) async throws { _ = try await object("/api/ekko/config", method: "PUT", body: ["config": config]) }
     func ekkoMemory(query: String = "") async throws -> [EkkoMemoryItem] { try await array("/api/ekko/memory\(query.isEmpty ? "" : "?query=\(query.urlEncoded)")", keys: ["memories"]).map(EkkoMemoryItem.init) }

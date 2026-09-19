@@ -49,7 +49,8 @@ struct SettingsView: View {
             }
             Section("Advanced") {
                 NavigationLink { StudioSectionSettings(section: .agent) } label: { SettingsRow(icon: "sparkles", color: CoreHubTokens.Palette.accent, title: "Agent") }
-                NavigationLink { StudioSectionSettings(section: .memory) } label: { SettingsRow(icon: "lightbulb.max.fill", color: CoreHubTokens.Palette.warning, title: "Memory") }
+                NavigationLink { HermesMemoryView() } label: { SettingsRow(icon: "brain", color: CoreHubTokens.Palette.warning, title: "Memory") }
+                NavigationLink { StudioSectionSettings(section: .memory) } label: { SettingsRow(icon: "lightbulb.max.fill", color: CoreHubTokens.Palette.warning, title: "Memory settings") }
                 NavigationLink { StudioSectionSettings(section: .session) } label: { SettingsRow(icon: "clock.arrow.circlepath", color: CoreHubTokens.Palette.info, title: "Session reset") }
                 NavigationLink { StudioSectionSettings(section: .approvals) } label: { SettingsRow(icon: "checkmark.shield.fill", color: CoreHubTokens.Palette.success, title: "Approvals") }
                 NavigationLink { StudioSectionSettings(section: .skills) } label: { SettingsRow(icon: "checkmark.shield", color: CoreHubTokens.Palette.info, title: "Skill approvals") }

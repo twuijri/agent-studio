@@ -416,6 +416,31 @@ struct AgentUpdatePolicy: Hashable {
     }
 }
 
+/// `GET /api/hermes/memory` — the three Markdown files the Hermes agent
+/// keeps for a profile. `§` is the server's paragraph separator, which the
+/// web expands back to a blank line before rendering.
+struct HermesMemory: Hashable {
+    var memory: String
+    var user: String
+    var soul: String
+
+    init(_ json: JSON) {
+        memory = HermesMemory.expand(json.string("memory"))
+        user = HermesMemory.expand(json.string("user"))
+        soul = HermesMemory.expand(json.string("soul"))
+    }
+
+    static func expand(_ raw: String) -> String { raw.replacingOccurrences(of: "§", with: "\n\n") }
+
+    func text(for section: String) -> String {
+        switch section {
+        case "user": return user
+        case "soul": return soul
+        default: return memory
+        }
+    }
+}
+
 /// `GET/PUT /api/coding-agents/{id}/config-files/{key}` — one of the agent's
 /// own files on the Core Hub host.
 struct CodingAgentConfigFile: Hashable {

@@ -1038,3 +1038,10 @@
 "Version %@ is available." = "الإصدار %@ متاح.";
 "Waiting to update" = "في انتظار التحديث";
 "Skills and tools" = "المهارات والأدوات";
+"My Notes" = "ملاحظاتي";
+"No notes yet." = "لا توجد ملاحظات بعد.";
+"User Profile" = "ملف المستخدم";
+"No profile yet." = "لا يوجد ملف بعد.";
+"Soul" = "الروح";
+"No soul configuration yet." = "لا يوجد إعداد للروح بعد.";
+"Written to the profile %@ on the server." = "يُكتب في الملف الشخصي %@ على الخادم.";

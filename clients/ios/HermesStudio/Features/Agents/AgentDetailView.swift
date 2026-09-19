@@ -185,6 +185,7 @@ struct AgentDetailView: View {
             Section {
                 NavigationLink { RuntimeVersionsView() } label: { Label("Runtime versions", systemImage: "shippingbox.and.arrow.backward.fill") }
                 NavigationLink { StudioSectionSettings(section: .agent) } label: { Label("Agent settings", systemImage: "sparkles") }
+                NavigationLink { HermesMemoryView() } label: { Label("Memory", systemImage: "brain") }
                 NavigationLink { StudioSectionSettings(section: .memory) } label: { Label("Memory settings", systemImage: "lightbulb.max.fill") }
             } header: { Text("Hermes runtime") } footer: {
                 Text("Core Hub installs complete runtime packages; it never installs the Hermes CLI on its own.")

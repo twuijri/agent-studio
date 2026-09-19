@@ -41,9 +41,14 @@
   أن الثلاثة كانوا يندمجون في صفّ Hermes حتى لو وصلوا من الخادم. الخادم يُرجع
   ثمانية وكلاء بترتيبه في `modules/studio/public/agent-status-registry.ts`،
   وستة أدوات في `GET /api/coding-agents`.
-- **«جانب Hermes غير موجود»**: غير دقيق حرفيًا — كانبان والمهارات والذاكرة
-  و MCP والإضافات كلها موجودة تحت الإعدادات ← أدوات مساحة العمل. الناقص فعلًا
-  هو المدخل من شاشة الوكلاء، وهو المكان الذي يضعها فيه الويب.
+- **«جانب Hermes غير موجود»**: غير دقيق حرفيًا في معظمه — كانبان والمهارات
+  و MCP والإضافات كلها موجودة تحت الإعدادات ← أدوات مساحة العمل، والناقص هو
+  المدخل من شاشة الوكلاء وهو المكان الذي يضعها فيه الويب. لكن نقطة واحدة
+  صحيحة تمامًا: **متصفّح ذاكرة Hermes** (`GET/POST /api/hermes/memory`، أي
+  «ملاحظاتي» و«ملف المستخدم» و«الروح») لم يكن له وجود على الهاتف إطلاقًا.
+  ما كان موجودًا هو *إعدادات* الذاكرة (قسم `memory` في إعدادات الملف الشخصي)
+  وذاكرة إيكو (`/api/ekko/memory`)، وهما شيئان مختلفان، وصفّ الإعدادات كان
+  مسمّى «Memory» فيوهم بأنه المتصفّح.
 - **مهلة الطلب**: `URLSession` مضبوطة على ٦٠ ثانية، بينما تثبيت وكيل برمجة
   ينفّذ `npm install -g` على الخادم بمهلة عشر دقائق. أي أن زر «تثبيت» كان
   سيفشل على الهاتف قبل أن ينتهي الخادم.
@@ -99,6 +104,8 @@ N» قابلة للطي (أو `N/الإجمالي` عند وجود قاعدة إ
 - `clients/ios/HermesStudio/Features/Agents/AgentDetailView.swift`: شاشة الوكيل.
 - `clients/ios/HermesStudio/Features/Agents/AgentConfigFileView.swift`: محرّرا
   ملفّي الإعداد وقائمة خوادم MCP.
+- `clients/ios/HermesStudio/Features/Agents/HermesMemoryView.swift`: متصفّح
+  ذاكرة Hermes الثلاثي (`§` تُعاد إلى سطرين فارغين كما في الويب).
 - `clients/ios/HermesStudioTests/BoringAvatarTests.swift`
 - `clients/ios/HermesStudioTests/AgentsAndModelsTests.swift`
 
@@ -126,7 +133,9 @@ N» قابلة للطي (أو `N/الإجمالي` عند وجود قاعدة إ
 - `Features/CapabilitiesView.swift`: حذف `ModelsView`، وتحويل `ProvidersView`
   إلى `ProviderSignInView` (تسجيل الدخول بالمتصفح فقط).
 - `Features/AgentHubView.swift`: حذف `AgentManagerView` القديمة و`AgentDescriptor`.
-- `Features/RootShell.swift` و`Features/SettingsView.swift`: توجيه المداخل.
+- `Features/RootShell.swift` و`Features/SettingsView.swift`: توجيه المداخل،
+  وصفّ «Memory» صار يفتح المتصفّح، وأُعيدت تسمية صفّ الإعدادات إلى
+  «Memory settings».
 - `Resources/{en,ar}.lproj/Localizable.strings`: ٨٤ مفتاحًا جديدًا بالإنجليزية
   و٨١ بالعربية (الباقي كان موجودًا في العربية أصلًا).
 - `clients/ios/README.md`: قسم «Models and Agents (M5)» ووصف الصور الرمزية.
