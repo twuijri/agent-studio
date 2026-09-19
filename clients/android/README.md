@@ -545,6 +545,10 @@ every tab or section the web has:
   per-agent skills, and the DeepSeek Harness presets and plugins — are not on the
   phone; the shared Skills and MCP screens under the Agent Manager cover the Hermes
   side of those. Managing Hermes runtime versions stays on its own Runtimes screen.
+- **Copilot**: the web gives GitHub Copilot its own "disable" action, which keeps a
+  token that came from `gh` or VS Code. The phone treats it like any other built-in
+  provider, so its destructive action clears the credentials outright. Disable
+  Copilot from the web if that distinction matters.
 - **Deliberately absent**: the web can ask the server to open a native terminal for a
   coding agent (`/launch/native`). The server refuses that inside Docker and without
   a desktop session anyway, so the card says so instead of offering a button that

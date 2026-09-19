@@ -1,7 +1,7 @@
 package us.i3u.hermesstudio.ui.models
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,16 +29,18 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
@@ -53,6 +55,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,6 +74,7 @@ import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.StudioHorizontalPadding
 import us.i3u.hermesstudio.TextPromptDialog
 import us.i3u.hermesstudio.UiState
+import us.i3u.hermesstudio.canManageProviders
 import us.i3u.hermesstudio.ui.theme.CoreHub
 
 /**
@@ -290,7 +295,7 @@ private fun ProviderCard(
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = palette.bgCard,
-        border = androidx.compose.foundation.BorderStroke(1.dp, palette.border),
+        border = BorderStroke(1.dp, palette.border),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -390,12 +395,12 @@ private fun ProviderCard(
                 TextButton(onClick = { managingVisibility = true }) {
                     Text(stringResource(R.string.models_manage_visible))
                 }
-                if (provider.refreshable) {
+                if (provider.refreshable && state.canManageProviders) {
                     TextButton(onClick = { viewModel.refreshProviderModels(provider.id) }) {
                         Text(stringResource(R.string.models_refresh))
                     }
                 }
-                if (provider.restoreAvailable) {
+                if (provider.restoreAvailable && state.canManageProviders) {
                     TextButton(onClick = { viewModel.restoreProviderModels(provider.id) }) {
                         Text(stringResource(R.string.models_restore))
                     }
@@ -403,7 +408,7 @@ private fun ProviderCard(
                 TextButton(onClick = { viewModel.testProvider(provider.id) }) {
                     Text(stringResource(R.string.action_test))
                 }
-                TextButton(onClick = onRemove) {
+                if (state.canManageProviders) TextButton(onClick = onRemove) {
                     Text(
                         stringResource(
                             if (provider.deletable) R.string.models_remove_provider
@@ -425,7 +430,7 @@ private fun ModelChip(entry: ModelEntry, isDefault: Boolean, onClick: () -> Unit
     Surface(
         shape = RoundedCornerShape(50),
         color = if (isDefault) palette.selected else palette.bgSecondary,
-        border = androidx.compose.foundation.BorderStroke(
+        border = BorderStroke(
             1.dp,
             if (isDefault) palette.accent else palette.borderLight,
         ),
@@ -476,7 +481,7 @@ private fun ModelChip(entry: ModelEntry, isDefault: Boolean, onClick: () -> Unit
 }
 
 @Composable
-private fun Badge(text: String, color: androidx.compose.ui.graphics.Color) {
+private fun Badge(text: String, color: Color) {
     Surface(shape = RoundedCornerShape(50), color = color.copy(alpha = 0.14f)) {
         Text(
             text,
@@ -488,7 +493,7 @@ private fun Badge(text: String, color: androidx.compose.ui.graphics.Color) {
 }
 
 @Composable
-private fun CardNote(text: String, color: androidx.compose.ui.graphics.Color) {
+private fun CardNote(text: String, color: Color) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = color)
 }
 
@@ -601,7 +606,7 @@ private fun VisibilitySheet(
                             )
                         }
                     }
-                    androidx.compose.material3.Switch(
+                    Switch(
                         checked = entry.visible,
                         onCheckedChange = { onToggle(entry, it) },
                     )
@@ -705,7 +710,7 @@ private fun FallbackRow(
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = palette.bgCard,
-        border = androidx.compose.foundation.BorderStroke(1.dp, palette.border),
+        border = BorderStroke(1.dp, palette.border),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -816,26 +821,26 @@ private fun AddProviderSheet(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
-            androidx.compose.material3.OutlinedTextField(
+            OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
                 label = { Text(stringResource(R.string.models_provider_name)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            androidx.compose.material3.OutlinedTextField(
+            OutlinedTextField(
                 value = baseUrl,
                 onValueChange = { baseUrl = it },
                 label = { Text(stringResource(R.string.models_base_url)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            androidx.compose.material3.OutlinedTextField(
+            OutlinedTextField(
                 value = key,
                 onValueChange = { key = it },
                 label = { Text(stringResource(R.string.models_api_key)) },
                 singleLine = true,
-                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(
@@ -845,7 +850,7 @@ private fun AddProviderSheet(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 modes.forEach { mode ->
-                    androidx.compose.material3.FilterChip(
+                    FilterChip(
                         selected = apiMode == mode,
                         onClick = { apiMode = mode },
                         label = { Text(mode, style = MaterialTheme.typography.labelSmall) },

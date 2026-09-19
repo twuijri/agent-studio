@@ -440,6 +440,14 @@ data class WeixinQrUi(
 val UiState.isSuperAdmin: Boolean get() = currentUser?.role == "super_admin"
 
 /**
+ * Admin or above. The web gates the provider actions that write to the server
+ * (`canEditProvider`, `canRefreshModels` in `ProviderCard.vue`) on exactly
+ * this, and the server answers 403 to anyone else, so the phone hides them
+ * rather than offering a button that cannot work.
+ */
+val UiState.canManageProviders: Boolean get() = currentUser?.role in setOf("super_admin", "admin")
+
+/**
  * The profile the open conversation runs under, and therefore the only profile
  * whose voice settings apply to it — the one that goes into `X-Hermes-Profile`
  * on the chat run, on `GET /api/studio/tts/settings` and on every
