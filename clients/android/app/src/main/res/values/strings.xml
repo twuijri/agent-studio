@@ -1061,4 +1061,27 @@
     <string name="workflow_status_canceled">canceled</string>
     <string name="workflow_status_waiting">waiting</string>
     <string name="workflow_status_skipped">skipped</string>
+
+    <!-- M4: Display and Models tabs -->
+    <string name="display_theme_open">Theme and background</string>
+    <string name="display_text_scale">Text size on this device</string>
+    <string name="display_text_scale_note">Scales every message and label, 0.85 to 1.3.</string>
+    <string name="models_default_model">Default model</string>
+    <string name="models_default_none">Not set</string>
+    <string name="models_pick_default">Pick the default model</string>
+    <string name="models_show_models">Show the %1$d models</string>
+    <string name="models_hide_models">Hide the %1$d models</string>
+    <string name="models_show_all">Show every model</string>
+    <string name="models_restore">Restore the provider list</string>
+    <string name="models_add_custom">Add a model</string>
+    <string name="models_custom_model_hint">Model id, as the provider spells it</string>
+    <string name="models_remove_provider">Remove this provider</string>
+    <string name="models_add_provider">Add a provider</string>
+    <string name="models_provider_name">Provider name</string>
+    <string name="models_provider_base_url">Base URL</string>
+    <string name="model_alias">Alias</string>
+    <string name="model_alias_hint">What this model is called in the picker</string>
+    <string name="model_context">Context window</string>
+    <string name="model_context_hint">Tokens, for the context indicator</string>
+    <string name="model_remove_custom">Remove</string>
 </resources>
