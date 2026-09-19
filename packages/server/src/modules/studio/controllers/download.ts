@@ -10,6 +10,8 @@ import {
 } from '../services/files/file-provider'
 import { getActiveProfileName } from '../public/profile-config'
 import { createAppImagePreview } from '../services/files/app-image-preview'
+import { getLanPeerSocketManager } from '../services/network/lan-peer-socket'
+import { isDeviceAllowedForProfile } from '../services/devices/device-bindings'
 
 // MIME type mapping for common extensions
 const MIME_MAP: Record<string, string> = {
@@ -122,10 +124,84 @@ async function streamLocalFile(ctx: any, filePath: string, name: string, mime: s
   ctx.body = createReadStream(filePath)
 }
 
+/**
+ * Files on linked devices. A chat link of the form device://<device id>/<abs
+ * path> (or ?device=<id>) is streamed from that device through its Device
+ * Agent, which enforces the device's shared folders. When no device is named
+ * and the path does not exist on the server, the controllable devices bound to
+ * the profile are asked in turn — device apps (e.g. a video editor) report
+ * plain device paths, and the work they produce stays on the device.
+ */
+async function streamDeviceFile(ctx: any, deviceId: string, filePath: string, name: string, mime: string, profile: string): Promise<boolean> {
+  if (!isDeviceAllowedForProfile(deviceId, profile)) return false
+  const connection = getLanPeerSocketManager().findControllableConnection(deviceId)
+  if (!connection) return false
+  const wantedRange = parseRangeHeader(ctx.get('range'))
+  if (wantedRange === 'invalid') {
+    ctx.status = 416
+    ctx.body = ''
+    return true
+  }
+  const { started, stream } = connection.downloadFileStream(filePath, wantedRange ? { offset: wantedRange.start, length: wantedRange.end === null ? undefined : wantedRange.end - wantedRange.start + 1 } : {})
+  let info
+  try {
+    info = await started
+  } catch {
+    stream.destroy()
+    return false
+  }
+  const disposition = isStreamableMedia(mime) ? 'inline' : 'attachment'
+  ctx.set('Content-Type', mime)
+  ctx.set('Content-Disposition', `${disposition}; filename="${encodeURIComponent(name)}"; filename*=UTF-8''${encodeURIComponent(name)}`)
+  ctx.set('Accept-Ranges', 'bytes')
+  ctx.set('Cache-Control', 'no-cache')
+  ctx.set('X-Content-Type-Options', 'nosniff')
+  ctx.set('X-Core-Hub-Source', `device:${deviceId}`)
+  if (wantedRange) {
+    if (info.length <= 0 || info.offset >= info.size) {
+      ctx.status = 416
+      ctx.set('Content-Range', `bytes */${info.size}`)
+      ctx.body = ''
+      stream.destroy()
+      return true
+    }
+    ctx.status = 206
+    ctx.set('Content-Range', `bytes ${info.offset}-${info.offset + info.length - 1}/${info.size}`)
+    ctx.set('Content-Length', String(info.length))
+  } else {
+    ctx.status = 200
+    ctx.set('Content-Length', String(info.size))
+  }
+  ctx.body = stream
+  return true
+}
+
+/** Parses a Range header into start/end without knowing the size yet (end null = open). */
+function parseRangeHeader(header: string | undefined): { start: number; end: number | null } | null | 'invalid' {
+  if (!header) return null
+  const match = /^bytes=(\d+)-(\d*)$/.exec(header.trim())
+  if (!match) return 'invalid'
+  const start = Number(match[1])
+  const end = match[2] === '' ? null : Number(match[2])
+  if (!Number.isFinite(start) || (end !== null && (!Number.isFinite(end) || end < start))) return 'invalid'
+  return { start, end }
+}
+
+export function parseDeviceFileTarget(value: string): { deviceId: string; path: string } | null {
+  const match = /^device:\/\/([A-Za-z0-9_.-]+)(\/.*)$/.exec(value)
+  return match ? { deviceId: match[1], path: match[2] } : null
+}
+
 export async function download(ctx: any) {
-  const filePath = ctx.query.path as string | undefined
+  let filePath = ctx.query.path as string | undefined
   const fileName = ctx.query.name as string | undefined
   const variant = ctx.query.variant as string | undefined
+  let deviceId = typeof ctx.query.device === 'string' && ctx.query.device.trim() ? ctx.query.device.trim() : ''
+  const deviceTarget = filePath ? parseDeviceFileTarget(filePath) : null
+  if (deviceTarget) {
+    deviceId = deviceTarget.deviceId
+    filePath = deviceTarget.path
+  }
 
   if (!filePath) {
     ctx.status = 400
@@ -135,6 +211,15 @@ export async function download(ctx: any) {
 
   try {
     const profile = requestedProfile(ctx)
+    if (deviceId) {
+      // Explicit device file: the device validates the path against its shared folders.
+      const name = fileName || basename(filePath.replace(/\\/g, '/'))
+      if (!(await streamDeviceFile(ctx, deviceId, filePath, name, getMimeType(name), profile))) {
+        ctx.status = 404
+        ctx.body = { error: 'Device file is not available (device offline, not allowed for this profile, or outside its shared folders)', code: 'device_file_unavailable' }
+      }
+      return
+    }
     // Validate the path first
     // Support both absolute and relative paths
     const validPath = isAbsolute(filePath) ? validatePath(filePath) : resolveProfileFilePath(filePath, profile)
@@ -146,8 +231,18 @@ export async function download(ctx: any) {
     // Choose provider: always use local for upload directory files
     const provider = isInUploadDir(validPath) ? localProvider : await createFileProvider(profile)
     if (provider.type === 'local' && variant !== 'app-image') {
-      await streamLocalFile(ctx, validPath, name, mime)
-      return
+      try {
+        await streamLocalFile(ctx, validPath, name, mime)
+        return
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT' || !isAbsolute(filePath)) throw err
+      }
+      // Not on the server: a device app may have produced it on a linked device.
+      for (const candidate of getLanPeerSocketManager().listConnections()) {
+        if (!candidate.controllable || !candidate.device_id) continue
+        if (await streamDeviceFile(ctx, candidate.device_id, filePath, name, mime, profile)) return
+      }
+      throw Object.assign(new Error('File not found'), { code: 'ENOENT' })
     }
     const data: Buffer = await provider.readFile(validPath)
     let responseData = data

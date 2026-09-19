@@ -1,6 +1,7 @@
 import WebSocket, { WebSocketServer, type RawData } from 'ws'
 import type { Server as HttpServer, IncomingMessage } from 'http'
 import type { Duplex } from 'stream'
+import { PassThrough } from 'node:stream'
 import { randomUUID } from 'crypto'
 import { createReadStream, createWriteStream, type WriteStream } from 'fs'
 import { existsSync } from 'fs'
@@ -135,6 +136,21 @@ type PendingDownload = {
   resolve: (data: Buffer) => void
   reject: (err: Error) => void
   timer: NodeJS.Timeout
+  /** Streaming mode: chunks are pushed here instead of being collected. */
+  stream?: PassThrough
+  onStarted?: (info: LanPeerDownloadStart) => void
+}
+
+export interface LanPeerDownloadStart {
+  size: number
+  offset: number
+  length: number
+}
+
+export interface LanPeerDownloadStream {
+  /** Resolves once the device confirmed the file and reported its size. */
+  started: Promise<LanPeerDownloadStart>
+  stream: PassThrough
 }
 
 type RemoteTerminal = {
@@ -742,6 +758,43 @@ class LanPeerConnection {
     })
   }
 
+  /**
+   * Streams a file from the device (optionally a byte range) without buffering
+   * it on the server: the chat's media player plays a device video in place.
+   */
+  downloadFileStream(path: string, range: { offset?: number; length?: number } = {}, timeoutMs = 60000): LanPeerDownloadStream {
+    const stream = new PassThrough()
+    if (this.ws.readyState !== WebSocket.OPEN) {
+      const err = new Error('Peer connection is not open')
+      stream.destroy(err)
+      return { started: Promise.reject(err), stream }
+    }
+    const transferId = randomUUID()
+    const started = new Promise<LanPeerDownloadStart>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingDownloads.delete(transferId)
+        const err = new Error('Peer file download timed out')
+        reject(err)
+        stream.destroy(err)
+      }, timeoutMs)
+      timer.unref?.()
+      this.pendingDownloads.set(transferId, {
+        chunks: [],
+        resolve: () => stream.end(),
+        reject: err => { reject(err); stream.destroy(err) },
+        timer,
+        stream,
+        onStarted: info => { clearTimeout(timer); resolve(info) },
+      })
+      const payload: Record<string, unknown> = { type: 'file.download', transfer_id: transferId, path }
+      if (typeof range.offset === 'number') payload.offset = range.offset
+      if (typeof range.length === 'number') payload.length = range.length
+      this.sendJson(payload)
+    })
+    started.catch(() => undefined)
+    return { started, stream }
+  }
+
   async uploadFileFromBuffer(path: string, data: Buffer, timeoutMs = 60000): Promise<{ path: string; size: number }> {
     const transferId = randomUUID()
     await this.request({ type: 'file.upload.start', transfer_id: transferId, path }, ['file.upload.ready'], ['file.error', 'error'], timeoutMs)
@@ -805,7 +858,6 @@ class LanPeerConnection {
         this.downloadFile(msg)
         break
       case 'file.download.started':
-        break
       case 'file.download.chunk':
       case 'file.download.complete':
       case 'file.error':
@@ -890,8 +942,17 @@ class LanPeerConnection {
     const transfer = msg.transfer_id ? this.pendingDownloads.get(msg.transfer_id) : null
     if (!transfer) return false
 
+    if (msg.type === 'file.download.started') {
+      const size = typeof (msg as any).size === 'number' ? (msg as any).size : 0
+      const offset = typeof (msg as any).offset === 'number' ? (msg as any).offset : 0
+      const length = typeof (msg as any).length === 'number' ? (msg as any).length : size
+      transfer.onStarted?.({ size, offset, length })
+      return true
+    }
     if (msg.type === 'file.download.chunk' && typeof msg.data === 'string') {
-      transfer.chunks.push(Buffer.from(msg.data, 'base64'))
+      const chunk = Buffer.from(msg.data, 'base64')
+      if (transfer.stream) transfer.stream.write(chunk)
+      else transfer.chunks.push(chunk)
       return true
     }
     if (msg.type === 'file.download.complete') {

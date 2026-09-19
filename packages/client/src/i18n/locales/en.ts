@@ -945,6 +945,7 @@ export default {
 
   // Chat
   chat: {
+    onDevice: 'on the device',
     contextRemaining: 'remaining',
     contextClickToEdit: 'Click to edit context length',
     contextEditTitle: 'Edit Context Length',
