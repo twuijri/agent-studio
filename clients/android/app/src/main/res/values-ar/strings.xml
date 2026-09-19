@@ -1024,6 +1024,7 @@
     <string name="room_deleted">حُذفت الغرفة</string>
     <string name="room_no_agents">لا وكلاء</string>
     <string name="room_agent_count">%1$d وكلاء</string>
+    <string name="room_member_count">%1$d أعضاء</string>
     <string name="room_agents">الوكلاء (%1$d)</string>
     <string name="room_add_agent">إضافة وكيل</string>
     <string name="room_edit_agent">تعديل الوكيل</string>

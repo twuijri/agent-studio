@@ -37,8 +37,12 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
 - **Navigation is the web app's** (M2): the app bar hamburger opens an off-canvas
   drawer with the primary rail (New Chat, Search, Device connections, Agent Manager
   for super-admins, Models), the four-segment switch (Chat, Group Chat, Workflow,
-  History), the grouped session list and the footer (profile, model, sign out,
-  connection status, `Core Hub v{server version}`, language). Every agent tool —
+  History), the list that segment selects, and the footer (profile and model chips,
+  Sign Out with the username chip, the settings gear, connection status, the
+  language and theme toggles, `Core Hub v{server version}` and a GitHub link). The
+  segment switches the list in place — sessions, rooms or workflows — with the
+  drawer still open; only a row navigates, and only History (a page of its own)
+  closes the drawer. Every agent tool —
   Jobs, Kanban, Channels, Skills, Plugins, MCP, Runtimes, Workflows, Ekko hub, Files,
   Logs, Connections, Journey, Webhooks, Insights, Memory, Models — lives under the
   Agent Manager; every one opens a native Android screen, none sends you to the
@@ -214,7 +218,14 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   `CoreHubIcons` carries the web's line icons
 - Off-canvas drawer + hamburger instead of three bottom tabs; Chat, Group Chat,
   Workflow and History are sections of the same shell; Agent Manager (super-admin),
-  the settings drawer and the tabbed Settings page follow the web's order
+  the settings drawer and the tabbed Settings page follow the web's order. The
+  drawer is at most 300 dp wide and at most 84 % of the screen, square with a
+  hairline down its outer edge, and opens with an 18 dp edge swipe. Its open state
+  lives on the view model (`UiState.drawerOpen`), not in `HomeShell`, so changing
+  section does not take the open drawer with it. The segmented bar draws a 16 dp
+  icon above each 10 sp label and slides a bg.card thumb to the selection in
+  150 ms. `DrawerParityTest` and `DrawerRtlTest` pin these values against
+  `clients/ios/HermesStudio/Features/SidebarDrawer.swift`
 - The session list, chat header, message bubbles and composer surfaces use the tokens
   (bubble radius 10, composer card 18 with the spec shadow, 16 sp input, pill buttons)
 - Bottom sheets use the same tokens: `ui/chat/AttachmentSheet.kt` (the composer's `+`) is a

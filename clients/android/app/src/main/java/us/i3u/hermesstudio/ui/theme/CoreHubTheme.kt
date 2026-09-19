@@ -108,6 +108,12 @@ object CoreHubTextStyles {
         fontWeight = CoreHubTokens.Type.groupHeaderWeight,
         letterSpacing = CoreHubTokens.Type.groupHeaderLetterSpacing,
     )
+    /** Conversation-switch label: group-header size, no tracking. */
+    val segmentLabel: TextStyle = TextStyle(
+        fontFamily = CoreHubTokens.Type.sans,
+        fontSize = CoreHubTokens.Type.segmentLabel,
+        lineHeight = 13.sp,
+    )
     val categoryTag: TextStyle = TextStyle(
         fontFamily = CoreHubTokens.Type.sans,
         fontSize = CoreHubTokens.Type.categoryTag,

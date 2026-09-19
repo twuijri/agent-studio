@@ -50,7 +50,25 @@ Primary rail (top of the session-list drawer), icons 24-viewBox stroke 1.8 round
 1. New Chat / محادثة جديدة  (+)   2. Search / بحث (⌘K)   3. Device connections / ترابط الأجهزة
 4. Computer apps / برامج الجهاز (desktop only — hide on mobile)   5. Agent Manager / إدارة الوكلاء (super-admin only)
 6. Models / النماذج
-Conversation switch (4-segment control, 30px tall, radius 5, track accent@5%): Chat / محادثة · Group Chat / محادثة جماعية · Workflow / مسار العمل · History / السجل
+Conversation switch (4 segments): Chat / محادثة · Group Chat / محادثة جماعية · Workflow / مسار العمل · History / السجل.
+Track accent@5% at radius 7 (segment radius + its 2px inset) with 2px of padding; segments 2px apart, each
+the base 30px plus 12px for a 16px icon sitting 2px above its label; label at the group-header size (10),
+semibold when selected, regular otherwise, text.primary vs text.secondary. The selected segment is a bg.card
+thumb at radius 5 that slides to the selection in 150ms, in the reading direction. Outer gutter 12 × 8.
+The switch picks what the drawer's list shows — sessions, rooms, workflows — in place; the drawer stays open
+and only a row navigates. History is a page of its own and closes the drawer.
+Drawer shell: width min(300, 84% of the screen), square with a 1px border rule down its outer edge, 18px
+edge-swipe strip to open. Header 60 tall inside a 14 gutter: 26 app mark, 10 gap, 16/600 title, 20 close
+glyph in a 34 target. Rail rows 36 tall, 2 apart, 20 icon + 10 gap, inside an 8 gutter with a 4 lead-in;
+an unselected row is text.secondary.
+Drawer list per segment: sessions (RECENT + groups), rooms (GROUP CHAT n, with “New room” and “Join by code”
+at 14 in 24 targets; row = 18 avatars, 10 gap, title 13 … time 11, then “n agents  n members” 11 muted),
+workflows (WORKFLOW n; row = 16 icon, name 13, node count 11).
+Drawer footer (12 × 10, rows 6 apart): profile and model chips side by side (30 tall, radius 6, bg.card on a
+1px border, 18 avatar / 14 icon, label 13, 9 up-down chevron); Sign Out as a 34 pill (bg.card, capsule,
+accent@18% border, 12 glyph, 13/500) with the username chip beside it (11, 22 tall, capsule, accent@6%) and
+the settings gear (18 in 32) at the end; connection dot 7 + label 11, then the language and theme toggles
+(28 × 24, radius 4, accent@6%; language shows “A” / “EN” / “ع”); version 11 muted forced LTR + GitHub 14.
 Settings drawer (AppSidebar) order: Logs/السجلات, Usage/الاستخدام, Performance/الأداء (super-admin), Skills Usage/استخدام المهارات,
 Theme/المظهر, Pets/الحيوانات الأليفة, Profiles/البروفايلات (super-admin), Settings/الإعدادات; then ProfileSelector, ModelSelector;
 footer: Sign Out/تسجيل الخروج (+username chip), status dot Connected/متصل · Disconnected/غير متصل + language switch,

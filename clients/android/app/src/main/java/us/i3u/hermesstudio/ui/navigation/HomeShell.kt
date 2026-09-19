@@ -3,10 +3,6 @@ package us.i3u.hermesstudio.ui.navigation
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import us.i3u.hermesstudio.AppViewModel
 import us.i3u.hermesstudio.R
@@ -25,13 +21,15 @@ fun HomeShell(
     viewModel: AppViewModel,
     content: @Composable (openDrawer: () -> Unit) -> Unit,
 ) {
-    var open by rememberSaveable { mutableStateOf(false) }
+    // The flag lives on the view model, not here: the conversation switch
+    // changes `state.screen`, which swaps this shell for another section's
+    // shell, and a shell-local flag would take the open drawer with it.
     CoreHubDrawerHost(
-        open = open,
-        onOpenChange = { open = it },
-        drawer = { CoreHubDrawerContent(state, viewModel, onClose = { open = false }) },
+        open = state.drawerOpen,
+        onOpenChange = viewModel::setDrawerOpen,
+        drawer = { CoreHubDrawerContent(state, viewModel, onClose = { viewModel.setDrawerOpen(false) }) },
     ) {
-        content { open = true }
+        content { viewModel.setDrawerOpen(true) }
     }
 }
 

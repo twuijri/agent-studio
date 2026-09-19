@@ -1025,6 +1025,7 @@
     <string name="room_deleted">Room deleted</string>
     <string name="room_no_agents">No agents</string>
     <string name="room_agent_count">%1$d agents</string>
+    <string name="room_member_count">%1$d members</string>
     <string name="room_agents">Agents (%1$d)</string>
     <string name="room_add_agent">Add agent</string>
     <string name="room_edit_agent">Edit agent</string>
