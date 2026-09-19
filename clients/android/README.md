@@ -71,7 +71,7 @@ directly and renders a native, phone-shaped interface instead of wrapping a web 
   Hermes Studio server yourself
 - **Splash while the stored session is verified** — the sign-in form only appears when
   you actually need to sign in
-- Sign in with your Studio server address, username and password
+- Sign in with your Studio server address, username and password (or the QR code above)
 - Bearer token stored in `EncryptedSharedPreferences`, backed by the Android Keystore
 - **Your existing Studio conversations**, with the same list shape as the web sidebar:
   title, timestamp, profile badge and model
@@ -84,16 +84,43 @@ directly and renders a native, phone-shaped interface instead of wrapping a web 
   you type, then becomes send
 - **The `+` sheet** carries everything the conversation needs: Camera, Gallery and File
   tiles, plus the model and the reasoning effort — new controls become one more row
-- **Change the model** per conversation, applied with `POST /api/hermes/sessions/{id}/model`
+- **Change the model** per conversation, applied with `POST /api/studio/sessions/{id}/model`
 - **Change reasoning effort** (default, low, medium, high), sent as `reasoning_effort`
   on every run, the same field the web composer sets
 - Attachments upload to your server and ride along with the message as proper
   content blocks
-- **Voice**: record, then transcribe directly into the composer through your Studio
-  STT provider without sending the recording as a chat attachment
+- **Voice, on the device by default**: tap the microphone and the words appear in the
+  composer as you speak (Android speech recognition in the app language, inserted at
+  the caret); nothing is sent until you press send. Settings → Voice switches to the
+  **Core Hub server** path instead, which records a 16 kHz WAV and transcribes it with
+  the STT provider configured in Studio. The mic shows idle, listening, transcribing
+  and error states, and every failure is shown in words
+- **Sign in by scanning the QR code** Core Hub shows under Device connections → App →
+  Direct connection: the server address comes from the code and the phone appears as
+  a named device on the server. Username and password remain as the second option
+- **The device token renews itself**: refreshed silently on launch when it has under a
+  week left or was last refreshed more than a day ago, and once after any `401`, with
+  the request retried; a revoked token sends you back to the login screen with a message
 - Profiles screen to switch which agent a new chat talks to
 - Start a fresh conversation at any time
 - Studio's dark palette, RTL-aware layout (Arabic reads correctly)
+
+## Changed in M1 (Core Hub mobile branch)
+
+- Every Studio-owned call uses its canonical `/api/studio/*` route: sessions, session
+  search and categories, conversation messages and context length, group-chat rooms,
+  STT, TTS, file downloads, the chat-run REST wrapper, usage and performance. The
+  "try `/api/studio`, then fall back to `/api/hermes`" negotiation is gone; the server's
+  legacy shim is no longer relied on. Profiles, config, available models, skills,
+  plugins, MCP, kanban and jobs stay under `/api/hermes/*`, where they are canonical
+- QR pairing through `POST /api/auth/app-login` with a stable per-install `device_code`
+  kept in `EncryptedSharedPreferences`, and silent renewal through
+  `POST /api/auth/app-refresh`
+- Dictation on the device with live text, the Core Hub server as a setting, and the
+  server path corrected to the Studio contract (profile status first, PCM WAV, `provider`
+  and `language` fields, `no_speech_detected` shown as a message)
+- Network failures that used to vanish inside `runCatching { … }.getOrNull()` now reach
+  the error bar
 
 ## Screenshots
 
@@ -127,28 +154,35 @@ the installation and to allow this app as an update source once.
 
 | Purpose | Endpoint |
 | --- | --- |
-| Sign in | `POST /api/auth/login` |
+| Sign in with a password | `POST /api/auth/login` |
+| Sign in by QR code | `POST /api/auth/app-login` |
+| Renew the device token | `POST /api/auth/app-refresh` |
 | Verify a stored token | `GET /api/auth/me` |
 | Account security and IP locks | `POST /api/auth/change-password` · `POST /api/auth/change-username` · `GET` / `DELETE /api/auth/locked-ips` |
 | Super-admin account management | `GET` · `POST /api/auth/users` · `PUT` · `DELETE /api/auth/users/{id}` |
 | Profiles | `GET /api/hermes/profiles` |
-| Conversations | `GET /api/hermes/sessions?profile=…` |
-| Conversation history | `GET /api/hermes/sessions/conversations/{id}/messages` |
-| Group chat rooms | `GET /api/hermes/group-chat/rooms` |
-| Room detail and messages | `GET /api/hermes/group-chat/rooms/{id}` |
+| Conversations | `GET /api/studio/sessions?profile=…` |
+| Search conversations | `GET /api/studio/sessions/search?q=…` |
+| Conversation history | `GET /api/studio/sessions/conversations/{id}/messages` |
+| Context window of a model | `GET /api/studio/sessions/context-length` |
+| Group chat rooms | `GET /api/studio/group-chat/rooms` |
+| Room detail and messages | `GET /api/studio/group-chat/rooms/{id}` |
 | Upload an attachment | `POST /upload?profile=…` |
-| Transcribe a recording | `POST /api/hermes/stt/transcribe` |
+| Transcribe a recording (server voice input) | `GET /api/studio/stt/profile-status` · `POST /api/studio/stt/transcribe` |
+| Spoken replies | `POST /api/studio/tts/synthesize` |
+| Generated files | `GET /api/studio/files/download` |
+| Usage and performance | `GET /api/studio/usage/stats` · `GET /api/studio/performance/runtime` |
 | Available models | `GET /api/hermes/available-models?profile=…` |
-| Set a conversation's model | `POST /api/hermes/sessions/{id}/model` |
+| Set a conversation's model | `POST /api/studio/sessions/{id}/model` |
 | Profile default model | `GET /api/hermes/config` · `PUT /api/hermes/config/model` |
 | Studio setting sections | `GET /api/hermes/config` · `PUT /api/hermes/config` |
 | Model-provider credentials | `PUT /api/hermes/config/providers/{provider}` |
 | Restart a profile's gateway | `POST /api/hermes/profiles/{name}/gateway/restart` |
 | Send a message (streaming) | Socket.IO `/chat-run` — `run`, `abort` |
-| Send a message (fallback) | `POST /api/chat-run/runs` |
-| Rename / delete a conversation | `POST /api/hermes/sessions/{id}/rename` · `DELETE /api/hermes/sessions/{id}` |
+| Send a message (fallback) | `POST /api/studio/chat-run/runs` |
+| Rename / delete a conversation | `POST /api/studio/sessions/{id}/rename` · `DELETE /api/studio/sessions/{id}` |
 | Create / rename / delete a profile | `POST /api/hermes/profiles` · `POST /api/hermes/profiles/{name}/rename` · `DELETE /api/hermes/profiles/{name}` |
-| Create / delete a room | `POST` · `DELETE /api/hermes/group-chat/rooms` |
+| Create / delete a room | `POST` · `DELETE /api/studio/group-chat/rooms` |
 | Post into a room | Socket.IO `/group-chat` — `join`, `message` |
 | Channel state and gateway auto-start | `GET /api/hermes/config` · `PUT /api/hermes/config` |
 | Channel credentials | `PUT /api/hermes/config/credentials` · `DELETE /api/hermes/config/credentials/{platform}` |
@@ -164,15 +198,18 @@ the installation and to allow this app as an update source once.
 | App mark | `GET /logo.png` (static, cached on the device) |
 
 Both sockets authenticate with the same bearer token, passed in the Socket.IO
-handshake (`auth.token`) rather than a header. `POST /api/chat-run/runs` is the
+handshake (`auth.token`) rather than a header. `POST /api/studio/chat-run/runs` is the
 server's own REST wrapper around `/chat-run`: the app uses it whenever the socket
 cannot connect, which is why the app still works behind a proxy that drops
 WebSocket upgrades.
 
-All traffic goes to the address you enter, over HTTPS. Nothing is sent anywhere else and
-there is no analytics. The app asks for `INTERNET`, plus `RECORD_AUDIO` and `CAMERA` only
-at the moment you first use the microphone or the camera. Recordings and captures are
-written to the app cache, uploaded, and deleted immediately.
+All traffic goes to the address you enter (or the one inside the QR code), over HTTPS.
+Nothing is sent anywhere else and there is no analytics. The app asks for `INTERNET`,
+plus `RECORD_AUDIO` and `CAMERA` only at the moment you first use the microphone, the
+camera, or the QR scanner. With voice input set to *This device*, speech goes through the
+phone's own recognition service and never through this app's network code; with *Core
+Hub server*, the WAV is kept in memory, sent to your server, and dropped. Camera captures
+are written to the app cache, uploaded, and deleted immediately.
 
 ## Roadmap
 
@@ -186,10 +223,11 @@ written to the app cache, uploaded, and deleted immediately.
 ## Build locally
 
 ```bash
-gradle assembleDebug
+gradle testDebugUnitTest assembleDebug
 ```
 
-Requires JDK 17 and the Android SDK (compileSdk 35). CI builds the same target on every
+Requires JDK 17, Gradle 8.11.1 or newer (the Android Gradle plugin 8.9.2 refuses older
+Gradle releases), and the Android SDK (compileSdk 35). CI builds the same target on every
 push, so a local SDK is optional.
 
 ### Running it without a Studio server
