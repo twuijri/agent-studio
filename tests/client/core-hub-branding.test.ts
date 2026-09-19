@@ -52,10 +52,12 @@ describe('Core Hub branding without a data or deployment migration', () => {
     expect(text).toContain('Refuse to promote the test-track package to latest')
     expect(text).not.toContain('ghcr.io/twuijri/agent-studio:')
     expect(text).not.toContain('packages/container/agent-studio')
-    expect(text.match(/packages\/container\/core-hub/g)).toHaveLength(2)
-    const imageReferences = text.match(/ghcr\.io\/twuijri\/[a-z-]+/g) || []
+    expect(text.match(/packages\/container\/\$\{\{ inputs\.image_repo \}\}/g)).toHaveLength(2)
+    expect(text.match(/packages\/container\/core-hub\b/g)).toBeNull()
+    // Every image reference goes through the input; no literal package name is left behind.
+    const imageReferences = text.match(/ghcr\.io\/twuijri\/[^\s:"']+/g) || []
     expect(imageReferences.length).toBeGreaterThan(5)
-    expect(new Set(imageReferences)).toEqual(new Set(['ghcr.io/twuijri/core-hub']))
+    expect(new Set(imageReferences)).toEqual(new Set(['ghcr.io/twuijri/${{ inputs.image_repo }}']))
     expect(text).toContain('--install-agents')
     expect(text).toContain('node scripts/check-personal-license.mjs')
     expect(read('compose.personal.yml')).toContain('agent-studio-hermes:/home/agent/.hermes')
