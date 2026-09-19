@@ -186,9 +186,11 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import us.i3u.hermesstudio.ui.agents.*
 import us.i3u.hermesstudio.ui.chat.*
 import us.i3u.hermesstudio.ui.groups.*
 import us.i3u.hermesstudio.ui.navigation.*
+import us.i3u.hermesstudio.ui.models.*
 import us.i3u.hermesstudio.ui.sessions.*
 import us.i3u.hermesstudio.ui.settings.*
 import us.i3u.hermesstudio.ui.workflows.*
@@ -251,7 +253,7 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
         Screen.Kanban, Screen.KanbanTask, Screen.Skills, Screen.Skill, Screen.Plugins, Screen.Mcp, Screen.Pets,
         Screen.Insights, Screen.AgentRuntimes, Screen.AgentHub, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files,
         Screen.Logs, Screen.Connections, Screen.Journey, Screen.Webhooks, Screen.RuntimeVersions, Screen.Appearance,
-        Screen.Workflow, Screen.WorkflowRun,
+        Screen.Workflow, Screen.WorkflowRun, Screen.AgentSettings,
         -> BackHandler { viewModel.back() }
         Screen.Groups, Screen.Workflows, Screen.History -> BackHandler { viewModel.showTab(Tab.Chat) }
         else -> Unit
@@ -295,13 +297,14 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
         Screen.Webhooks -> WebhooksScreen(state, viewModel)
         Screen.RuntimeVersions -> RuntimeVersionsScreen(state, viewModel)
         Screen.Appearance -> AppearanceScreen(state, viewModel)
+        Screen.AgentSettings -> AgentSettingsScreen(state, viewModel)
         Screen.Login -> LoginScreen(state, viewModel)
         // The four sections of the conversation switch share the drawer shell.
         Screen.Chats, Screen.Conversation -> HomeShell(state, viewModel) { openDrawer -> ConversationScreen(state, viewModel, onMenu = openDrawer) }
         Screen.Groups -> HomeShell(state, viewModel) { openDrawer -> GroupsScreen(state, viewModel, onMenu = openDrawer) }
         Screen.Workflows -> HomeShell(state, viewModel) { openDrawer -> WorkflowsScreen(state, viewModel, onMenu = openDrawer) }
         Screen.History -> HomeShell(state, viewModel) { openDrawer -> HistoryScreen(state, viewModel, onMenu = openDrawer) }
-        Screen.AgentHub -> AgentHubScreen(state, viewModel)
+        Screen.AgentHub -> AgentManagerScreen(state, viewModel) { HermesToolsSection(state, viewModel) }
         Screen.Room -> RoomScreen(state, viewModel)
         Screen.Workflow -> WorkflowScreen(state, viewModel)
         Screen.WorkflowRun -> WorkflowRunScreen(state, viewModel)
@@ -729,216 +732,173 @@ internal fun LanguageAction(state: UiState, viewModel: AppViewModel) {
 }
 
 /**
- * Agent Manager: the super-admin's home for every agent tool (the web's
- * hermes.agentManager route), reached from the drawer rail.
+ * The Hermes side of Core Hub, as it hangs below the agent list on the Agent
+ * Manager screen.
+ *
+ * This used to be the whole screen, which is why the owner read the Agent
+ * Manager as a settings page: it opened a column of links and never showed an
+ * agent. The links are still worth having — Kanban, skills, memory, MCP,
+ * plugins and the rest have no other entry point on the phone — so they stay,
+ * grouped and named, under the agents rather than instead of them.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AgentHubScreen(state: UiState, viewModel: AppViewModel) {
+private fun HermesToolsSection(state: UiState, viewModel: AppViewModel) {
     val channels = state.serverConfig?.channels.orEmpty()
     val profile = state.profiles.firstOrNull { it.name == state.activeProfile }
         ?: state.profiles.firstOrNull { it.active }
         ?: state.profiles.firstOrNull()
     val profileName = profile?.name ?: state.activeProfile.ifBlank { "default" }
 
-    Scaffold(
-        topBar = {
-            StudioLargeTopBar(
-                title = stringResource(R.string.nav_agent_manager),
-                navigationIcon = {
-                    IconButton(onClick = { viewModel.back() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.openSettings() }) {
-                        Icon(
-                            Icons.Filled.Settings,
-                            contentDescription = stringResource(R.string.action_settings),
-                            tint = MaterialTheme.colorScheme.primary,
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        StudioSectionTitle(stringResource(R.string.agent_hub_hermes_side))
+            StudioGroupedCard {
+                StudioDestinationRow(
+                    icon = Icons.Filled.Psychology,
+                    color = Color(0xFF7A5CFF),
+                    title = stringResource(R.string.agent_runtimes_title),
+                    subtitle = stringResource(R.string.agent_runtimes_hub_note),
+                    onClick = { viewModel.openAgentRuntimes() },
+                )
+                StudioCardDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { viewModel.openProfiles() }
+                        .padding(horizontal = 16.dp, vertical = 15.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ProfileAvatar(profileName, profile?.avatar, size = 58.dp)
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(profileName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(
+                            profile?.model.orEmpty().ifBlank { stringResource(R.string.settings_default_model_server) },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
-                },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(
-                start = StudioHorizontalPadding,
-                end = StudioHorizontalPadding,
-                top = 8.dp,
-                bottom = 28.dp,
-            ),
-        ) {
-            state.error?.let { message -> item { ErrorNote(message) { viewModel.dismissError() } } }
-            state.notice?.let { message -> item { NoticeNote(message) { viewModel.dismissNotice() } } }
-
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(
-                        icon = Icons.Filled.Psychology,
-                        color = Color(0xFF7A5CFF),
-                        title = stringResource(R.string.agent_runtimes_title),
-                        subtitle = stringResource(R.string.agent_runtimes_hub_note),
-                        onClick = { viewModel.openAgentRuntimes() },
-                    )
-                    StudioCardDivider()
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { viewModel.openProfiles() }
-                            .padding(horizontal = 16.dp, vertical = 15.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    Surface(
+                        color = Color(0xFF43C879).copy(alpha = 0.16f),
+                        shape = RoundedCornerShape(50.dp),
                     ) {
-                        ProfileAvatar(profileName, profile?.avatar, size = 58.dp)
-                        Spacer(Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(profileName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            Text(
-                                profile?.model.orEmpty().ifBlank { stringResource(R.string.settings_default_model_server) },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Surface(
-                            color = Color(0xFF43C879).copy(alpha = 0.16f),
-                            shape = RoundedCornerShape(50.dp),
-                        ) {
-                            Text(
-                                if (profile?.active == true) stringResource(R.string.agent_status_active)
-                                else stringResource(R.string.agent_status_ready),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF43C879),
-                            )
-                        }
+                        Text(
+                            if (profile?.active == true) stringResource(R.string.agent_status_active)
+                            else stringResource(R.string.agent_status_ready),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF43C879),
+                        )
                     }
                 }
             }
 
-            item { StudioSectionTitle(stringResource(R.string.agent_hub_work)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(
-                        icon = Icons.Filled.AccountTree,
-                        color = Color(0xFF35B7DB),
-                        title = stringResource(R.string.workflows_title),
-                        subtitle = stringResource(R.string.workflows_hub_note),
-                        onClick = { viewModel.showTab(Tab.Workflow) },
-                    )
-                    StudioCardDivider()
-                    StudioDestinationRow(
-                        icon = Icons.Filled.Schedule,
-                        color = Color(0xFF4D8DFF),
-                        title = stringResource(R.string.cron_title),
-                        subtitle = stringResource(R.string.settings_group_cron_note),
-                        onClick = { viewModel.openCronJobs() },
-                    )
-                    StudioCardDivider()
-                    StudioDestinationRow(
-                        icon = Icons.Filled.ViewKanban,
-                        color = Color(0xFFFF9F43),
-                        title = stringResource(R.string.agent_hub_kanban),
-                        subtitle = stringResource(R.string.agent_hub_kanban_note),
-                        onClick = { viewModel.openKanban() },
-                    )
-                    StudioCardDivider()
-                    StudioDestinationRow(
-                        icon = Icons.Filled.Forum,
-                        color = Color(0xFF45C878),
-                        title = stringResource(R.string.settings_channels),
-                        subtitle = if (channels.isEmpty()) {
-                            stringResource(R.string.settings_group_channels_note)
-                        } else {
-                            stringResource(
-                                R.string.settings_channels_summary,
-                                channels.count { it.configured },
-                                channels.size.coerceAtLeast(CHANNELS.size),
-                            )
-                        },
-                        onClick = { viewModel.openChannels() },
-                    )
-                }
+            StudioSectionTitle(stringResource(R.string.agent_hub_work))
+            StudioGroupedCard {
+                StudioDestinationRow(
+                    icon = Icons.Filled.AccountTree,
+                    color = Color(0xFF35B7DB),
+                    title = stringResource(R.string.workflows_title),
+                    subtitle = stringResource(R.string.workflows_hub_note),
+                    onClick = { viewModel.showTab(Tab.Workflow) },
+                )
+                StudioCardDivider()
+                StudioDestinationRow(
+                    icon = Icons.Filled.Schedule,
+                    color = Color(0xFF4D8DFF),
+                    title = stringResource(R.string.cron_title),
+                    subtitle = stringResource(R.string.settings_group_cron_note),
+                    onClick = { viewModel.openCronJobs() },
+                )
+                StudioCardDivider()
+                StudioDestinationRow(
+                    icon = Icons.Filled.ViewKanban,
+                    color = Color(0xFFFF9F43),
+                    title = stringResource(R.string.agent_hub_kanban),
+                    subtitle = stringResource(R.string.agent_hub_kanban_note),
+                    onClick = { viewModel.openKanban() },
+                )
+                StudioCardDivider()
+                StudioDestinationRow(
+                    icon = Icons.Filled.Forum,
+                    color = Color(0xFF45C878),
+                    title = stringResource(R.string.settings_channels),
+                    subtitle = if (channels.isEmpty()) {
+                        stringResource(R.string.settings_group_channels_note)
+                    } else {
+                        stringResource(
+                            R.string.settings_channels_summary,
+                            channels.count { it.configured },
+                            channels.size.coerceAtLeast(CHANNELS.size),
+                        )
+                    },
+                    onClick = { viewModel.openChannels() },
+                )
             }
 
-            item { StudioSectionTitle(stringResource(R.string.insights_title)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(
-                        icon = Icons.Filled.Insights,
-                        color = Color(0xFF7A5CFF),
-                        title = stringResource(R.string.insights_title),
-                        subtitle = stringResource(R.string.insights_subtitle),
-                        onClick = { viewModel.openInsights() },
-                    )
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.Folder, Color(0xFFFFB547), stringResource(R.string.files_title), stringResource(R.string.files_hub_note), { viewModel.openFiles() })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.History, Color(0xFF4D8DFF), stringResource(R.string.logs_title), stringResource(R.string.logs_hub_note), { viewModel.openLogs() })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.Dns, Color(0xFF2AAE88), stringResource(R.string.connections_title), stringResource(R.string.connections_hub_note), { viewModel.openConnections() })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.AccountTree, Color(0xFF35B7DB), stringResource(R.string.journey_title), stringResource(R.string.journey_note), { viewModel.openJourney() })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.Link, Color(0xFFFF9F43), stringResource(R.string.webhooks_title), stringResource(R.string.webhooks_note), { viewModel.openWebhooks() })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.SystemUpdate, Color(0xFF45C878), stringResource(R.string.runtime_versions_title), stringResource(R.string.runtime_versions_note), { viewModel.openRuntimeVersions() })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.Palette, Color(0xFFB45CFF), stringResource(R.string.appearance_title), stringResource(R.string.appearance_note), { viewModel.openAppearance() })
-                }
+            StudioSectionTitle(stringResource(R.string.insights_title))
+            StudioGroupedCard {
+                StudioDestinationRow(
+                    icon = Icons.Filled.Insights,
+                    color = Color(0xFF7A5CFF),
+                    title = stringResource(R.string.insights_title),
+                    subtitle = stringResource(R.string.insights_subtitle),
+                    onClick = { viewModel.openInsights() },
+                )
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.Folder, Color(0xFFFFB547), stringResource(R.string.files_title), stringResource(R.string.files_hub_note), { viewModel.openFiles() })
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.History, Color(0xFF4D8DFF), stringResource(R.string.logs_title), stringResource(R.string.logs_hub_note), { viewModel.openLogs() })
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.Dns, Color(0xFF2AAE88), stringResource(R.string.connections_title), stringResource(R.string.connections_hub_note), { viewModel.openConnections() })
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.AccountTree, Color(0xFF35B7DB), stringResource(R.string.journey_title), stringResource(R.string.journey_note), { viewModel.openJourney() })
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.Link, Color(0xFFFF9F43), stringResource(R.string.webhooks_title), stringResource(R.string.webhooks_note), { viewModel.openWebhooks() })
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.SystemUpdate, Color(0xFF45C878), stringResource(R.string.runtime_versions_title), stringResource(R.string.runtime_versions_note), { viewModel.openRuntimeVersions() })
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.Palette, Color(0xFFB45CFF), stringResource(R.string.appearance_title), stringResource(R.string.appearance_note), { viewModel.openAppearance() })
             }
 
-            item { StudioSectionTitle(stringResource(R.string.global_agent_title)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(Icons.Filled.AutoAwesome, Color(0xFF2AAE88), stringResource(R.string.global_agent_title), stringResource(R.string.global_agent_hub_note), { viewModel.openGlobalAgent() })
-                }
+            StudioSectionTitle(stringResource(R.string.global_agent_title))
+            StudioGroupedCard {
+                StudioDestinationRow(Icons.Filled.AutoAwesome, Color(0xFF2AAE88), stringResource(R.string.global_agent_title), stringResource(R.string.global_agent_hub_note), { viewModel.openGlobalAgent() })
             }
 
-            item { StudioSectionTitle(stringResource(R.string.agent_hub_capabilities)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(Icons.Filled.School, Color(0xFF7A5CFF), stringResource(R.string.agent_hub_skills), stringResource(R.string.agent_hub_skills_note), { viewModel.openSkills() })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.Extension, Color(0xFFB45CFF), stringResource(R.string.agent_hub_plugins), stringResource(R.string.agent_hub_plugins_note), { viewModel.openPlugins() })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.Cable, Color(0xFF35B7DB), stringResource(R.string.agent_hub_mcp), stringResource(R.string.agent_hub_mcp_note), { viewModel.openMcp() })
-                    StudioCardDivider()
-                }
+            StudioSectionTitle(stringResource(R.string.agent_hub_capabilities))
+            StudioGroupedCard {
+                StudioDestinationRow(Icons.Filled.School, Color(0xFF7A5CFF), stringResource(R.string.agent_hub_skills), stringResource(R.string.agent_hub_skills_note), { viewModel.openSkills() })
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.Extension, Color(0xFFB45CFF), stringResource(R.string.agent_hub_plugins), stringResource(R.string.agent_hub_plugins_note), { viewModel.openPlugins() })
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.Cable, Color(0xFF35B7DB), stringResource(R.string.agent_hub_mcp), stringResource(R.string.agent_hub_mcp_note), { viewModel.openMcp() })
+                StudioCardDivider()
             }
 
-            item { StudioSectionTitle(stringResource(R.string.ekko_hub_title)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(Icons.Filled.Psychology, Color(0xFF2AAE88), stringResource(R.string.ekko_hub_title), stringResource(R.string.ekko_hub_note), { viewModel.openEkkoHub() })
-                }
+            StudioSectionTitle(stringResource(R.string.ekko_hub_title))
+            StudioGroupedCard {
+                StudioDestinationRow(Icons.Filled.Psychology, Color(0xFF2AAE88), stringResource(R.string.ekko_hub_title), stringResource(R.string.ekko_hub_note), { viewModel.openEkkoHub() })
             }
 
-            item { StudioSectionTitle(stringResource(R.string.agent_hub_intelligence)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(Icons.Filled.Memory, Color(0xFFFFB547), stringResource(R.string.settings_group_memory), stringResource(R.string.settings_group_memory_note), { viewModel.openSettingsGroup(SettingsGroup.Memory) })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.ModelTraining, Color(0xFF39C6A3), stringResource(R.string.settings_group_models), stringResource(R.string.settings_group_models_note), { viewModel.openSettingsGroup(SettingsGroup.Models) })
-                }
+            StudioSectionTitle(stringResource(R.string.agent_hub_intelligence))
+            StudioGroupedCard {
+                StudioDestinationRow(Icons.Filled.Memory, Color(0xFFFFB547), stringResource(R.string.settings_group_memory), stringResource(R.string.settings_group_memory_note), { viewModel.openSettingsGroup(SettingsGroup.Memory) })
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.ModelTraining, Color(0xFF39C6A3), stringResource(R.string.settings_group_models), stringResource(R.string.settings_group_models_note), { viewModel.openSettingsGroup(SettingsGroup.Models) })
             }
 
             // The agent-side configuration that used to hide behind "More settings".
-            item { StudioSectionTitle(stringResource(R.string.agent_hub_configuration)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(Icons.Filled.Tune, Color(0xFF7A5CFF), stringResource(R.string.settings_group_agent), stringResource(R.string.settings_group_agent_note), { viewModel.openSettingsGroup(SettingsGroup.Agent) })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.History, Color(0xFF6F72E8), stringResource(R.string.settings_group_sessions), stringResource(R.string.settings_group_sessions_note), { viewModel.openSettingsGroup(SettingsGroup.Sessions) })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.Compress, Color(0xFFFF9F43), stringResource(R.string.settings_group_compression), stringResource(R.string.settings_group_compression_note), { viewModel.openSettingsGroup(SettingsGroup.Compression) })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.Person, Color(0xFF4D8DFF), stringResource(R.string.action_profiles), state.activeProfile, { viewModel.openProfiles() })
-                }
+            StudioSectionTitle(stringResource(R.string.agent_hub_configuration))
+            StudioGroupedCard {
+                StudioDestinationRow(Icons.Filled.Tune, Color(0xFF7A5CFF), stringResource(R.string.settings_group_agent), stringResource(R.string.settings_group_agent_note), { viewModel.openSettingsGroup(SettingsGroup.Agent) })
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.History, Color(0xFF6F72E8), stringResource(R.string.settings_group_sessions), stringResource(R.string.settings_group_sessions_note), { viewModel.openSettingsGroup(SettingsGroup.Sessions) })
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.Compress, Color(0xFFFF9F43), stringResource(R.string.settings_group_compression), stringResource(R.string.settings_group_compression_note), { viewModel.openSettingsGroup(SettingsGroup.Compression) })
+                StudioCardDivider()
+                StudioDestinationRow(Icons.Filled.Person, Color(0xFF4D8DFF), stringResource(R.string.action_profiles), state.activeProfile, { viewModel.openProfiles() })
             }
-        }
     }
 }
 
@@ -1044,6 +1004,14 @@ private fun InsightMetric(label: String, value: String, supporting: String? = nu
 @Composable
 private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
     val group = state.openGroup ?: return
+    // Models is a page, not a settings body: it mirrors the web's ModelsView
+    // (providers and their catalogues), while the key form it used to show
+    // stays on the Settings page's Models tab, as on the web. It keeps this
+    // destination so the drawer's Models item still marks itself selected.
+    if (group == SettingsGroup.Models) {
+        ModelsScreen(state, viewModel)
+        return
+    }
     val title = stringResource(
         when (group) {
             SettingsGroup.Account -> R.string.settings_account

@@ -349,6 +349,120 @@ class HermesApi(
         }
     }
 
+    /**
+     * GET /api/coding-agents — the six npm-installed coding agents, with the
+     * version the server got from `<command> --version`. Reachable by any
+     * signed-in user, unlike `/api/agents/status`.
+     */
+    fun codingAgents(): List<AgentToolStatus> =
+        parseAgentTools(call("/api/coding-agents").optJSONArray("tools"))
+
+    /**
+     * GET /api/agents/status — the eight-agent registry snapshot, which is the
+     * only place Hermes and Ekko appear. Super-admin only, so the caller has
+     * to survive a 403.
+     */
+    fun agentStatusSnapshot(): List<AgentToolStatus> =
+        parseAgentTools(call("/api/agents/status").optJSONArray("agents"))
+
+    /** GET /api/coding-agents/update-policies — admin only. */
+    fun agentUpdatePolicies(): Map<String, AgentUpdatePolicy> {
+        val agents = call("/api/coding-agents/update-policies").optJSONObject("agents") ?: JSONObject()
+        return agents.keys().asSequence().mapNotNull { key ->
+            val item = agents.optJSONObject(key) ?: return@mapNotNull null
+            key to AgentUpdatePolicy(
+                autoUpdate = item.optBoolean("autoUpdate", false),
+                autoUpdateSupported = item.optBoolean("autoUpdateSupported", false),
+                status = item.optString("status"),
+                currentVersion = item.optString("currentVersion"),
+                latestVersion = item.optString("latestVersion"),
+                error = item.optString("error"),
+            )
+        }.toMap()
+    }
+
+    /** PUT /api/coding-agents/{id}/update-policy {autoUpdate} — admin only. */
+    fun setAgentAutoUpdate(id: String, autoUpdate: Boolean) {
+        call("/api/coding-agents/${enc(id)}/update-policy", "PUT", JSONObject().put("autoUpdate", autoUpdate))
+    }
+
+    /**
+     * POST /api/coding-agents/{id}/install — runs `npm install -g` **on the
+     * Core Hub server**, not on this phone. Answers 200 with
+     * `success: false` when npm fails, so the message has to be read out of
+     * the body rather than from an HTTP error.
+     */
+    fun installCodingAgent(id: String): AgentMutationResult =
+        parseAgentMutation(call("/api/coding-agents/${enc(id)}/install", "POST", JSONObject()))
+
+    /** DELETE /api/coding-agents/{id} — `npm uninstall -g` on the server. */
+    fun deleteCodingAgent(id: String): AgentMutationResult =
+        parseAgentMutation(call("/api/coding-agents/${enc(id)}", "DELETE"))
+
+    /** POST /api/coding-agents/{id}/check-update — `npm view <pkg> version`. */
+    fun checkCodingAgentUpdate(id: String): AgentUpdateCheck {
+        val result = call("/api/coding-agents/${enc(id)}/check-update", "POST", JSONObject())
+        return AgentUpdateCheck(
+            success = result.optBoolean("success", false),
+            latestVersion = result.optString("latestVersion"),
+            updateAvailable = result.optBoolean("updateAvailable", false),
+            message = result.optString("message"),
+        )
+    }
+
+    /** GET /api/coding-agents/{id}/config-files/{key}. */
+    fun codingAgentConfigFile(id: String, key: String): AgentConfigFile =
+        parseAgentConfigFile(call("/api/coding-agents/${enc(id)}/config-files/${enc(key)}"))
+
+    /** PUT /api/coding-agents/{id}/config-files/{key} {content}. */
+    fun saveCodingAgentConfigFile(id: String, key: String, content: String): AgentConfigFile =
+        parseAgentConfigFile(
+            call(
+                "/api/coding-agents/${enc(id)}/config-files/${enc(key)}",
+                "PUT",
+                JSONObject().put("content", content),
+            ),
+        )
+
+    private fun parseAgentConfigFile(item: JSONObject): AgentConfigFile = AgentConfigFile(
+        key = item.optString("key"),
+        path = item.optString("path"),
+        absolutePath = item.optString("absolutePath"),
+        language = item.optString("language"),
+        content = item.optString("content"),
+        exists = item.optBoolean("exists", false),
+    )
+
+    private fun parseAgentMutation(result: JSONObject): AgentMutationResult = AgentMutationResult(
+        success = result.optBoolean("success", false),
+        message = firstNonBlank(result, "message", "error").orEmpty(),
+        code = result.optString("code"),
+        tools = parseAgentTools(result.optJSONArray("tools")),
+    )
+
+    /**
+     * `/api/coding-agents` and `/api/agents/status` describe an agent with the
+     * same field names, so one parser reads both. Anything without an id is
+     * dropped; everything else keeps whatever the server sent.
+     */
+    private fun parseAgentTools(array: JSONArray?): List<AgentToolStatus> {
+        val items = array ?: JSONArray()
+        return (0 until items.length()).mapNotNull { index ->
+            val item = items.optJSONObject(index) ?: return@mapNotNull null
+            val rawId = firstNonBlank(item, "id", "agent") ?: return@mapNotNull null
+            AgentToolStatus(
+                id = AgentCatalog.canonicalId(rawId),
+                name = item.optString("name"),
+                provider = item.optString("provider"),
+                installed = item.optBoolean("installed", false),
+                version = firstNonBlank(item, "version", "rawVersion").orEmpty(),
+                source = item.optString("source").ifBlank { "not-installed" },
+                path = item.optString("path"),
+                error = item.optString("error"),
+            )
+        }
+    }
+
     /** POST /api/studio/sessions/{id}/rename */
     fun renameSession(sessionId: String, title: String) {
         call("/api/studio/sessions/${enc(sessionId)}/rename", "POST", JSONObject().put("title", title))
@@ -1195,6 +1309,39 @@ class HermesApi(
 
     fun refreshProviderModels(profile: String, provider: String) {
         call("/api/hermes/config/providers/${enc(provider)}/models/refresh?profile=${enc(profile)}", "POST", JSONObject(), profile)
+    }
+
+    /**
+     * POST /api/hermes/provider-models/cache/refresh — the Models page header
+     * action. Drops the server's cached catalogue for every provider.
+     */
+    fun refreshModelCache() { call("/api/hermes/provider-models/cache/refresh", "POST", JSONObject()) }
+
+    /**
+     * GET /api/hermes/config/fallback-providers — the ordered chain Hermes
+     * walks when the chosen model fails.
+     */
+    fun fallbackProviders(profile: String): List<FallbackEntry> {
+        val array = call("/api/hermes/config/fallback-providers?profile=${enc(profile)}", profile = profile)
+            .optJSONArray("fallback_providers") ?: JSONArray()
+        return (0 until array.length()).mapNotNull { index ->
+            val item = array.optJSONObject(index) ?: return@mapNotNull null
+            val provider = item.optString("provider").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val model = item.optString("model").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            FallbackEntry(provider, model)
+        }
+    }
+
+    /** PUT /api/hermes/config/fallback-providers {fallback_providers}. */
+    fun saveFallbackProviders(profile: String, chain: List<FallbackEntry>) {
+        val array = JSONArray()
+        chain.forEach { array.put(JSONObject().put("provider", it.provider).put("model", it.model)) }
+        call(
+            "/api/hermes/config/fallback-providers?profile=${enc(profile)}",
+            "PUT",
+            JSONObject().put("fallback_providers", array),
+            profile,
+        )
     }
 
     fun testProvider(profile: String, provider: String): String {
@@ -3009,6 +3156,56 @@ data class ModelEntry(
 
 /** The whole Settings › Models tab. */
 data class ModelCatalog(val defaultModel: String, val defaultProvider: String, val providers: List<ModelProvider>)
+
+/** One link of the fallback chain: a provider pool and one of its models. */
+data class FallbackEntry(val provider: String, val model: String)
+
+/** What the server says about one agent, from either agent endpoint. */
+data class AgentToolStatus(
+    val id: String,
+    val name: String,
+    val provider: String,
+    val installed: Boolean,
+    val version: String,
+    val source: String,
+    val path: String,
+    val error: String,
+)
+
+/** One entry of `GET /api/coding-agents/update-policies`. */
+data class AgentUpdatePolicy(
+    val autoUpdate: Boolean,
+    val autoUpdateSupported: Boolean,
+    val status: String,
+    val currentVersion: String,
+    val latestVersion: String,
+    val error: String,
+)
+
+/** Install and delete both answer 200 even when npm failed. */
+data class AgentMutationResult(
+    val success: Boolean,
+    val message: String,
+    val code: String,
+    val tools: List<AgentToolStatus>,
+)
+
+data class AgentUpdateCheck(
+    val success: Boolean,
+    val latestVersion: String,
+    val updateAvailable: Boolean,
+    val message: String,
+)
+
+/** One of the two files the per-agent settings page edits. */
+data class AgentConfigFile(
+    val key: String,
+    val path: String,
+    val absolutePath: String,
+    val language: String,
+    val content: String,
+    val exists: Boolean,
+)
 
 data class ChannelStatus(
     val platform: String,

@@ -249,12 +249,81 @@ CONFIG = {
     "platforms": {"telegram": {"enabled": True}},
     "platformCredentialStatus": {"telegram": True},
 }
+# The Models page draws provider cards, so the fixtures carry everything a
+# card reads: the visible catalogue, the full catalogue behind a visibility
+# rule, refresh/restore capability, per-model metadata, and a provider whose
+# catalogue is still loading.
 PROVIDERS = [
     {"provider": "anthropic", "label": "Anthropic", "builtin": True, "base_url": "https://api.anthropic.com",
-     "api_key": "configured", "models": ["claude-opus-5", "claude-sonnet-5"]},
+     "api_key": "configured", "api_mode": "anthropic_messages",
+     "models": ["claude-opus-5", "claude-sonnet-5"],
+     "available_models": ["claude-opus-5", "claude-sonnet-5", "claude-haiku-5"],
+     "model_refreshable": True, "model_restore_available": True,
+     "model_meta": {"claude-haiku-5": {"disabled": True}}},
     {"provider": "openai", "label": "OpenAI", "builtin": True, "base_url": "https://api.openai.com/v1",
-     "api_key": "", "models": ["gpt-5"]},
+     "api_key": "", "api_mode": "chat_completions", "models": ["gpt-5"],
+     "model_meta": {"gpt-5": {"preview": True}}},
+    {"provider": "custom:subrouter.ai", "label": "Subrouter", "builtin": False,
+     "base_url": "https://subrouter.ai/v1", "api_key": "configured", "api_mode": "chat_completions",
+     "provider_source": "custom_providers", "provider_key": "subrouter", "provider_editable": True,
+     "model_refreshable": True, "models": ["sub/fast", "sub/deep"]},
+    {"provider": "opencode-free", "label": "OpenCode Free", "builtin": True,
+     "base_url": "https://opencode.ai/api", "api_key": "configured", "catalog_status": "loading",
+     "models": []},
 ]
+MODEL_ALIASES = {"anthropic": {"claude-opus-5": "Opus"}}
+MODEL_VISIBILITY = {"anthropic": {"mode": "include", "models": ["claude-opus-5", "claude-sonnet-5"]}}
+CUSTOM_MODELS = {"anthropic": ["local/experiment"]}
+FALLBACK_PROVIDERS = [
+    {"provider": "anthropic", "model": "claude-sonnet-5"},
+    {"provider": "custom:subrouter.ai", "model": "sub/fast"},
+]
+
+# The Agent Manager lists the fixed catalogue the server source declares, so
+# the mock answers with all eight ids: the six coding agents on
+# /api/coding-agents, and Hermes and Ekko only on /api/agents/status.
+CODING_AGENTS = [
+    {"id": "claude-code", "name": "Claude Code", "provider": "Anthropic", "command": "claude",
+     "packageName": "@anthropic-ai/claude-code", "installed": True, "version": "1.2.3",
+     "rawVersion": "1.2.3 (Claude Code)", "source": "user-cli", "path": "/usr/local/bin/claude"},
+    {"id": "codex", "name": "Codex", "provider": "OpenAI", "command": "codex",
+     "packageName": "@openai/codex", "installed": True, "version": "0.9.0", "rawVersion": "0.9.0",
+     "source": "user-cli", "path": "/usr/local/bin/codex"},
+    {"id": "pi", "name": "Pi", "provider": "Pi", "command": "pi",
+     "packageName": "@earendil-works/pi-coding-agent", "installed": False, "version": "",
+     "rawVersion": "", "source": "not-installed", "path": ""},
+    {"id": "grok", "name": "Grok", "provider": "xAI", "command": "grok",
+     "packageName": "@xai-official/grok", "installed": False, "version": "", "rawVersion": "",
+     "source": "not-installed", "path": "",
+     "error": "Node/npm environment was not detected. Please install Node.js and try again."},
+    {"id": "opencode", "name": "OpenCode", "provider": "OpenCode", "command": "opencode",
+     "packageName": "opencode-ai", "installed": False, "version": "", "rawVersion": "",
+     "source": "not-installed", "path": ""},
+    {"id": "dsh", "name": "DeepSeek Harness", "provider": "DeepSeek", "command": "dsh",
+     "packageName": "@deepseek-ai/dsh", "installed": False, "version": "", "rawVersion": "",
+     "source": "not-installed", "path": ""},
+]
+AGENT_STATUS = [
+    {"id": "hermes", "name": "Hermes", "provider": "Nous Research", "kind": "hermes", "installed": True,
+     "version": "0.21.3", "source": "user-cli", "path": "/usr/local/bin/hermes", "error": "",
+     "installations": []},
+    {"id": "ekko-agent", "name": "Ekko", "provider": "Core Hub", "kind": "built-in", "installed": True,
+     "version": "1.0.2", "source": "built-in", "path": "", "error": "", "installations": []},
+] + [dict(tool, kind="coding-agent", error=tool.get("error", ""), installations=[]) for tool in CODING_AGENTS]
+AGENT_UPDATE_POLICIES = {
+    "claude-code": {"autoUpdate": True, "autoUpdateSupported": True, "status": "available",
+                    "currentVersion": "1.2.3", "latestVersion": "1.3.0", "checkedAt": "2026-09-20T00:00:00Z"},
+    "codex": {"autoUpdate": False, "autoUpdateSupported": True, "status": "current",
+              "currentVersion": "0.9.0", "latestVersion": "0.9.0", "checkedAt": "2026-09-20T00:00:00Z"},
+}
+AGENT_CONFIG_FILES = {
+    ("claude-code", "memory"): {"path": "~/.claude/CLAUDE.md", "language": "markdown",
+                                "content": "# Project notes\n\nAlways answer in Arabic.\n"},
+    ("claude-code", "settings"): {"path": "~/.claude/settings.json", "language": "json",
+                                  "content": "{\n  \"model\": \"sonnet\"\n}\n"},
+    ("codex", "agents"): {"path": "~/.codex/AGENTS.md", "language": "markdown", "content": "# Agents\n"},
+    ("codex", "config"): {"path": "~/.codex/config.toml", "language": "ini", "content": "model = \"gpt-5\"\n"},
+}
 USERS = [
     {"id": 1, "username": "twuijri", "role": "super_admin", "status": "active", "profiles": [],
      "default_profile": None, "last_login_at": 1785492000000},
@@ -618,6 +687,44 @@ class Handler(BaseHTTPRequestHandler):
             return {"updated": len(body.get('ids', [])), "failed": 0}
         return {"ok": True, "success": True}
 
+    @staticmethod
+    def find_agent(agent_id):
+        return next((tool for tool in CODING_AGENTS if tool['id'] == agent_id), None)
+
+    def agent_config_file(self, agent, key):
+        """GET/PUT /api/coding-agents/{id}/config-files/{key}."""
+        stored = AGENT_CONFIG_FILES.get((agent, key))
+        if stored is None:
+            # The server answers for a key it knows even when the file is not
+            # on disk yet, so the editor can create it.
+            stored = {"path": f"~/.{agent}/{key}", "language": "text", "content": ""}
+            exists = False
+        else:
+            exists = True
+        return {"key": key, "path": stored['path'], "absolutePath": stored['path'].replace('~', '/home/agent'),
+                "language": stored['language'], "content": stored['content'], "exists": exists,
+                "size": len(stored['content']), "profile": "default", "provider": agent,
+                "rootDir": "/home/agent"}
+
+    def agent_install(self, agent_id):
+        """npm failures are HTTP 200 with success:false, like the real server."""
+        agent = self.find_agent(agent_id)
+        if agent is None:
+            return {"success": False, "code": "unknown_agent", "message": "unknown agent",
+                    "tools": CODING_AGENTS}
+        if agent.get('error'):
+            # Grok keeps its npm failure so the phone has a real error to draw.
+            return {"success": False, "code": "npm_missing", "message": agent['error'],
+                    "tool": agent, "tools": CODING_AGENTS}
+        latest = AGENT_UPDATE_POLICIES.get(agent_id, {}).get('latestVersion') or "1.0.0"
+        agent.update(installed=True, version=latest, rawVersion=latest, source="user-cli",
+                     path=f"/usr/local/bin/{agent['command']}")
+        AGENT_UPDATE_POLICIES.setdefault(agent_id, {"autoUpdate": False, "autoUpdateSupported": True,
+                                                    "checkedAt": ""})
+        AGENT_UPDATE_POLICIES[agent_id].update(status="current", currentVersion=latest, latestVersion=latest)
+        return {"success": True, "tool": agent, "tools": CODING_AGENTS,
+                "message": f"Installed {agent['packageName']} {latest}"}
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
@@ -668,7 +775,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send({section: CONFIG.get(section, {})} if section else CONFIG)
         elif path == '/api/hermes/available-models':
             self.send({"default": "claude-opus-5", "default_provider": "anthropic", "groups": PROVIDERS,
-                       "allProviders": PROVIDERS})
+                       "allProviders": PROVIDERS, "model_aliases": MODEL_ALIASES,
+                       "model_visibility": MODEL_VISIBILITY, "custom_models": CUSTOM_MODELS})
+        elif path == '/api/hermes/config/fallback-providers':
+            self.send({"fallback_providers": FALLBACK_PROVIDERS})
+        elif path == '/api/coding-agents': self.send({"tools": CODING_AGENTS})
+        elif path == '/api/coding-agents/update-policies': self.send({"agents": AGENT_UPDATE_POLICIES})
+        elif path == '/api/agents/status':
+            self.send({"revision": 12, "updatedAt": "2026-09-20T00:00:00Z", "agents": AGENT_STATUS})
+        elif path == '/api/agents/availability':
+            self.send({"revision": 12, "updatedAt": "2026-09-20T00:00:00Z",
+                       "agents": [{"id": a["id"], "installed": a["installed"], "source": a["source"]}
+                                  for a in AGENT_STATUS]})
+        elif re.fullmatch(r'/api/coding-agents/[^/]+/config-files/[^/]+', path):
+            agent, key = unquote(path.split('/')[3]), unquote(path.split('/')[5])
+            self.send(self.agent_config_file(agent, key))
         elif path == '/api/hermes/jobs': self.send({"jobs": JOBS})
         elif path == '/api/hermes/jobs/delivery-targets':
             self.send({"updated_at": "2026-07-31T09:00:00Z", "targets": [
@@ -750,6 +871,21 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.startswith('/api/studio/group-chat/') or path.startswith('/api/studio/workflows') or path.startswith('/api/studio/sessions'):
             self.send(self.m4_write(path, body))
+            return
+        install = re.fullmatch(r'/api/coding-agents/([^/]+)/install', path)
+        if install:
+            self.send(self.agent_install(unquote(install.group(1))))
+            return
+        check = re.fullmatch(r'/api/coding-agents/([^/]+)/check-update', path)
+        if check:
+            agent = unquote(check.group(1))
+            policy = AGENT_UPDATE_POLICIES.get(agent, {})
+            self.send({"success": True, "tool": self.find_agent(agent) or {},
+                       "latestVersion": policy.get("latestVersion", ""),
+                       "updateAvailable": policy.get("status") == "available"})
+            return
+        if path == '/api/hermes/provider-models/cache/refresh':
+            self.send({"success": True})
             return
         if path == '/api/auth/login': self.send({"token": "mock-token"})
         elif path in ('/api/auth/change-password', '/api/auth/change-username'):
@@ -849,6 +985,27 @@ class Handler(BaseHTTPRequestHandler):
             TTS_ACTIVE_PROVIDER = provider
             self.send({"activeProvider": TTS_ACTIVE_PROVIDER})
             return
+        if path == '/api/hermes/config/fallback-providers':
+            FALLBACK_PROVIDERS[:] = body.get('fallback_providers', [])
+            self.send({"success": True, "fallback_providers": FALLBACK_PROVIDERS})
+            return
+        policy_put = re.fullmatch(r'/api/coding-agents/([^/]+)/update-policy', path)
+        if policy_put:
+            agent = unquote(policy_put.group(1))
+            AGENT_UPDATE_POLICIES.setdefault(agent, {"autoUpdateSupported": True, "status": "unknown",
+                                                     "currentVersion": "", "latestVersion": "",
+                                                     "checkedAt": ""})
+            AGENT_UPDATE_POLICIES[agent]['autoUpdate'] = bool(body.get('autoUpdate'))
+            self.send({"agents": AGENT_UPDATE_POLICIES})
+            return
+        config_put = re.fullmatch(r'/api/coding-agents/([^/]+)/config-files/([^/]+)', path)
+        if config_put:
+            agent, key = unquote(config_put.group(1)), unquote(config_put.group(2))
+            stored = AGENT_CONFIG_FILES.setdefault((agent, key), {"path": f"~/.{agent}/{key}",
+                                                                  "language": "text", "content": ""})
+            stored['content'] = body.get('content', '')
+            self.send(self.agent_config_file(agent, key))
+            return
         if path == '/api/hermes/config':
             section = body.get('section')
             if section:
@@ -937,6 +1094,14 @@ class Handler(BaseHTTPRequestHandler):
         if user_match:
             USERS[:] = [user for user in USERS if user['id'] != int(user_match.group(1))]
             self.send({"users": USERS})
+            return
+        agent_delete = re.fullmatch(r'/api/coding-agents/([^/]+)', path)
+        if agent_delete:
+            agent = self.find_agent(unquote(agent_delete.group(1)))
+            if agent:
+                agent.update(installed=False, version="", rawVersion="", source="not-installed", path="")
+            self.send({"success": bool(agent), "tool": agent or {}, "tools": CODING_AGENTS,
+                       "message": "" if agent else "unknown agent"})
             return
         mcp_match = re.fullmatch(r'/api/hermes/mcp/servers/([^/]+)', path)
         if mcp_match:

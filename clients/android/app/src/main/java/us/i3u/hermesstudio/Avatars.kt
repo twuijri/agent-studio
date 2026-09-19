@@ -29,14 +29,12 @@ import androidx.compose.ui.unit.dp
 import com.caverock.androidsvg.SVG
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.security.MessageDigest
 
 /**
  * A profile picture as Studio describes it: either an uploaded image (inlined as
- * a data URL) or a Multiavatar generated from a seed.
+ * a data URL) or a generated avatar drawn from a seed.
  */
 data class AvatarSpec(
     val type: String,
@@ -109,7 +107,7 @@ object Avatars {
             decode(png)?.let { return it }
         }
 
-        val bitmap = runCatching { render(context, profile, spec) }.getOrNull() ?: return null
+        val bitmap = runCatching { render(profile, spec) }.getOrNull() ?: return null
         runCatching {
             png.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             stamp.writeText(wanted)
@@ -131,11 +129,11 @@ object Avatars {
     private fun decode(file: File): Bitmap? =
         runCatching { BitmapFactory.decodeFile(file.absolutePath) }.getOrNull()
 
-    private fun render(context: Context, profile: String, spec: AvatarSpec?): Bitmap? {
+    private fun render(profile: String, spec: AvatarSpec?): Bitmap? {
         if (spec?.type == "image" && !spec.dataUrl.isNullOrBlank()) {
             decodeDataUrl(spec.dataUrl)?.let { return square(it) }
         }
-        return renderSvg(MultiAvatar.svg(context, spec?.seed ?: profile))
+        return renderSvg(BoringAvatar.beam(spec?.seed ?: profile, size = PX))
     }
 
     private fun decodeDataUrl(dataUrl: String): Bitmap? {
@@ -159,86 +157,6 @@ object Avatars {
         svg.renderToCanvas(Canvas(bitmap))
         bitmap
     }.getOrNull()
-}
-
-/**
- * The Multiavatar generator, ported from the JavaScript Studio runs in the
- * browser so both sides draw the very same face for a given seed.
- *
- * Avatars by Multiavatar.com — see assets/multiavatar-LICENSE.txt.
- */
-internal object MultiAvatar {
-
-    private val order = listOf("env", "clo", "head", "mouth", "eyes", "top")
-    private val colourPattern = Regex("#.*?;")
-
-    @Volatile
-    private var data: JSONObject? = null
-
-    fun svg(context: Context, seed: String): String {
-        val source = data(context)
-        val themes = source.getJSONObject("themes")
-        val parts = source.getJSONObject("parts")
-        val hash = pickDigits(seed)
-
-        val rendered = HashMap<String, String>(order.size)
-        order.forEachIndexed { index, part ->
-            val value = hash.substring(index * 2, index * 2 + 2).toInt()
-            val scaled = Math.round((47.0 / 100.0) * value).toInt()
-            val version: String
-            val theme: String
-            when {
-                scaled > 31 -> {
-                    version = pad(scaled - 32); theme = "C"
-                }
-                scaled > 15 -> {
-                    version = pad(scaled - 16); theme = "B"
-                }
-                else -> {
-                    version = pad(scaled); theme = "A"
-                }
-            }
-            val colours = themes.getJSONObject(version).getJSONObject(theme).getJSONArray(part)
-            rendered[part] = paint(parts.getJSONObject(version).getString(part), colours)
-        }
-
-        return source.getString("svgStart") +
-            rendered["env"] + rendered["head"] + rendered["clo"] +
-            rendered["top"] + rendered["eyes"] + rendered["mouth"] +
-            source.getString("svgEnd")
-    }
-
-    /** Twelve digits of the SHA-256 hex, exactly how the JS picks its parts. */
-    private fun pickDigits(seed: String): String {
-        val hash = MessageDigest.getInstance("SHA-256")
-            .digest(seed.toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
-        return (hash.filter { it.isDigit() } + "000000000000").take(12)
-    }
-
-    private fun pad(value: Int): String = if (value < 10) "0$value" else "$value"
-
-    /** Substitutes the theme colours into the part, first match first. */
-    private fun paint(part: String, colours: JSONArray): String {
-        var result = part
-        colourPattern.findAll(part).forEachIndexed { index, match ->
-            if (index >= colours.length()) return@forEachIndexed
-            val at = result.indexOf(match.value)
-            if (at < 0) return@forEachIndexed
-            result = result.substring(0, at) + colours.getString(index) + ";" +
-                result.substring(at + match.value.length)
-        }
-        return result
-    }
-
-    private fun data(context: Context): JSONObject {
-        data?.let { return it }
-        synchronized(this) {
-            data?.let { return it }
-            val text = context.assets.open("multiavatar.json").bufferedReader().use { it.readText() }
-            return JSONObject(text).also { data = it }
-        }
-    }
 }
 
 /** The round profile picture Studio shows next to a name. */

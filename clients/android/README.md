@@ -44,9 +44,23 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   drawer still open; only a row navigates, and only History (a page of its own)
   closes the drawer. Every agent tool —
   Jobs, Kanban, Channels, Skills, Plugins, MCP, Runtimes, Workflows, Ekko hub, Files,
-  Logs, Connections, Journey, Webhooks, Insights, Memory, Models — lives under the
+  Logs, Connections, Journey, Webhooks, Insights, Memory — lives under the
   Agent Manager; every one opens a native Android screen, none sends you to the
   website
+- **Models is the web's Models page, not a key form**: the drawer's Models item opens
+  a page of provider cards — each provider's id, base URL, API mode, credential
+  state, catalogue status, default model and the models it offers as chips you can
+  rename — plus the actions the web offers there (make default, visible models,
+  refresh, restore, test, delete or clear credentials) and the fallback chain.
+  API keys stay in Settings → Models, which is where the web keeps them too
+- **Agent Manager lists agents**: the eight agents Core Hub declares — Hermes, Ekko
+  and the six coding agents — grouped as built-in, Hermes runtime and coding agents,
+  each with its install state, version, source, npm package and any error the server
+  reported. Install, reinstall, update, check for an update, delete and the
+  auto-update switch all work, and every coding-agent card opens that agent's own
+  settings: the instruction file and the configuration file the web edits. Agents the
+  server never reported are shown as "not on this server" rather than dropped, and
+  the page says plainly that installing runs on your server, not on the phone
 - **Mobile Kanban inspired by modern task apps**: switch boards, search, create a
   task, inspect its result and runs, assign it, and comment. Hold a card and drag
   left or right to move it between stages, or use its Move menu for precise and
@@ -89,9 +103,9 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   placeholder. Right-to-left layouts are handled too, mirrored icons included, and the
   language is picked in Settings or before signing in — see
   [docs/adding-a-language.md](docs/adding-a-language.md)
-- **The same profile pictures Studio shows**: an uploaded avatar, or the Multiavatar
-  generated from the profile name — rendered on the device and cached, so a launch
-  draws them from disk instead of pulling them again
+- **The same profile pictures Studio shows**: an uploaded avatar, or the abstract
+  `boring-avatars` beam the web draws from the same seed — generated on the device
+  and cached, so a launch draws them from disk instead of pulling them again
 - **Your Studio logo as the app mark**, fetched from your own server (`/logo.png`) and
   cached; swap it for any picture on your phone from Settings → This device
 - **First-run walkthrough** explaining what the app is and that you supply the
@@ -371,6 +385,13 @@ app/src/main/java/us/i3u/hermesstudio/
                           dialogs
   ui/workflows/           the workflow list, one workflow, a run timeline, status
   ui/settings/            the tabbed Settings page
+  ui/models/              the Models page: provider cards, their catalogues, the
+                          fallback chain — the web's ModelsView, not the key form
+  ui/agents/              the Agent Manager list and one agent's settings files
+  AgentCatalog.kt         the fixed agent catalogue and the merge of the two agent
+                          endpoints, so a short answer never shortens the list
+  BoringAvatar.kt         the boring-avatars `beam` generator, ported from the web
+                          library so a seed draws the same avatar on both
   AgentToolScreens.kt, CronJobs.kt, KanbanScreens.kt, Studio*Screens.kt   agent tools
 app/src/main/res/         strings (values, values-ar), Core Hub drawables, launcher
 app/src/test/             JVM tests (contract, translations, RTL, navigation structure,
@@ -519,6 +540,31 @@ phone's own recognition service and never through this app's network code; with 
 Hub server*, the WAV is kept in memory, sent to your server, and dropped. Camera captures
 are written to the app cache, uploaded, and deleted immediately.
 
+## Not ported from the web yet
+
+The two pages rebuilt around the web's own information architecture do not carry
+every tab or section the web has:
+
+- **Models**: the Providers and Fallback tabs are here. The web also has Auxiliary
+  models (fifteen per-task overrides), Combination models (MoA presets) and the STT
+  and TTS provider tabs; none of those is on the phone yet. Editing a provider's
+  advanced fields (the revision-checked provider editor: rate limits, timeouts,
+  `extra_body`, per-model context lengths) is also web-only — adding a custom
+  provider from the phone asks only for the name, base URL, key and API mode.
+- **Agent Manager**: an agent card opens the two settings files the web's
+  `CodingAgentConfigView` edits. Its other sections — per-agent MCP servers,
+  per-agent skills, and the DeepSeek Harness presets and plugins — are not on the
+  phone; the shared Skills and MCP screens under the Agent Manager cover the Hermes
+  side of those. Managing Hermes runtime versions stays on its own Runtimes screen.
+- **Copilot**: the web gives GitHub Copilot its own "disable" action, which keeps a
+  token that came from `gh` or VS Code. The phone treats it like any other built-in
+  provider, so its destructive action clears the credentials outright. Disable
+  Copilot from the web if that distinction matters.
+- **Deliberately absent**: the web can ask the server to open a native terminal for a
+  coding agent (`/launch/native`). The server refuses that inside Docker and without
+  a desktop session anyway, so the card says so instead of offering a button that
+  cannot work.
+
 ## Roadmap
 
 - Editing the workflow graph itself (the phone lists it; the editor is desktop-only)
@@ -577,10 +623,11 @@ API behavior and public release versions aligned when changing either platform.
 
 ## Credits
 
-Generated profile pictures come from the Multiavatar generator, ported to Kotlin so the
-app and the web UI draw the same face for the same profile. Avatars by
-[Multiavatar.com](https://multiavatar.com) — its license ships in
-`app/src/main/assets/multiavatar-LICENSE.txt`.
+Generated profile pictures come from `boring-avatars`, variant `beam`, ported to
+Kotlin in `BoringAvatar.kt` from the `boring-avatars-vanilla` library (MIT) the web
+client uses in `packages/client/src/components/hermes/profiles/ProfileAvatar.vue`, so
+a seed draws the same avatar on the phone and in the browser. `BoringAvatarTest`
+compares the port against output captured from that library for eighteen seeds.
 
 The Core Hub logo, vector mark and the coding-agent avatars are bundled from
 `packages/client/public/` (same licence as the repository). The in-app mark still
