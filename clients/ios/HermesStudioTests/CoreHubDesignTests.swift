@@ -130,9 +130,26 @@ final class CoreHubDesignTests: XCTestCase {
         ])
     }
 
+    /// Relative coordinates accumulate floating-point error (8.2 + 7.6 is not
+    /// exactly 15.8), so compare points with a tolerance instead of `==`.
+    private func assertCommands(_ actual: [IconPathCommand], _ expected: [IconPathCommand], file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(actual.count, expected.count, "command count", file: file, line: line)
+        for (a, e) in zip(actual, expected) {
+            switch (a, e) {
+            case let (.move(pa), .move(pe)), let (.line(pa), .line(pe)):
+                XCTAssertEqual(pa.x, pe.x, accuracy: 0.001, file: file, line: line)
+                XCTAssertEqual(pa.y, pe.y, accuracy: 0.001, file: file, line: line)
+            case (.close, .close):
+                break
+            default:
+                XCTFail("command kind mismatch: \(a) vs \(e)", file: file, line: line)
+            }
+        }
+    }
+
     func testImplicitLineToAfterMoveAndClose() {
-        XCTAssertEqual(IconPath.parse("M4.9 4.9 7 7"), [.move(CGPoint(x: 4.9, y: 4.9)), .line(CGPoint(x: 7, y: 7))])
-        XCTAssertEqual(IconPath.parse("m8.2 10.7 7.6-4.4M8.2 13.3l7.6 4.4"), [
+        assertCommands(IconPath.parse("M4.9 4.9 7 7"), [.move(CGPoint(x: 4.9, y: 4.9)), .line(CGPoint(x: 7, y: 7))])
+        assertCommands(IconPath.parse("m8.2 10.7 7.6-4.4M8.2 13.3l7.6 4.4"), [
             .move(CGPoint(x: 8.2, y: 10.7)), .line(CGPoint(x: 15.8, y: 6.3)),
             .move(CGPoint(x: 8.2, y: 13.3)), .line(CGPoint(x: 15.8, y: 17.7)),
         ])
