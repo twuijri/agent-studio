@@ -18,7 +18,9 @@ describe('Computer apps navigation', () => {
     expect(nav.indexOf("t('sidebar.connections')")).toBeLessThan(nav.indexOf("t('sidebar.appConnections')"))
     expect(nav.indexOf("t('sidebar.appConnections')")).toBeLessThan(nav.indexOf("t('sidebar.agentManager')"))
     expect(nav).toContain("void router.push({ name: 'hermes.appConnections' })")
-    expect(sidebar).toContain("hasRoute('hermes.appConnections')")
+    // The settings drawer (AppSidebar) must not repeat the entry: opening it from there
+    // stacked the drawer next to the chat shell's own sidebar.
+    expect(sidebar).not.toContain('hermes.appConnections')
   })
 
   it('renders inside the chat shell as its own content mode', () => {
