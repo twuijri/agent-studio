@@ -81,3 +81,12 @@ AgentToolScreens, CronJobs, KanbanScreens, StudioOperationsScreens}.kt`،
 الحالة: الالتزامات على `mobile-m2-android` محليًا، بلا دفع. الخطوة التالية
 للمالك: مراجعة الفرع، تجربة APK على هاتف (فاتح/داكن، عربي/إنجليزي)، ثم الدفع
 وفتح PR إلى `mobile`، ثم M3 (تفاصيل الفقاعة) وتطبيق البنية على iOS.
+
+## إضافة: آيفون (المرحلة نفسها)
+الالتزام `c24b0205` على الفرع نفسه: `CoreHubTokens.swift` (لوحة/خطوط/زوايا/ظلال)،
+`RootShell` + `SidebarDrawer` (درج 250ms وحاجب 40%، سحب من الحافة، انعكاس RTL)،
+أيقونات المسار من بيانات المواصفة عبر `IconPath`، مفتاح المحادثات الرباعي،
+`SessionListView` + `SessionGrouping` (الترتيب نفسه، تنسيق الوقت)، رأس الدردشة،
+تطبيق الرموز على الفقاعات والمؤلّف، أيقونة التطبيق من `core-hub-mark.svg`،
+`DirectionalText`/`TechnicalText` للاتجاه، 24 اختبارًا جديدًا. غير مُترجم محليًا
+(يُتحقق في CI على macOS وقائمة Xcode في `docs/mobile/PLAN.md`).
