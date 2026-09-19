@@ -23,8 +23,8 @@ import {
   type UserStatus,
 } from '../public/users'
 import { getUserTheme, removeAllUserThemeAssets, toUserThemePayload } from '../services/theme/user-theme'
-import { getUserJwtExpiresSeconds, issueAppJwt, issueUserJwt } from '../public/auth'
-import { consumeAppAuthorizationCode, upsertAppConnection, type AppConnectionType } from '../services/app-relay/app-connections'
+import { getJwtSecret, getUserJwtExpiresSeconds, issueAppJwt, issueUserJwt, requestToken, verifyUserJwt } from '../public/auth'
+import { consumeAppAuthorizationCode, getAppConnectionTokenStatus, listAppConnections, upsertAppConnection, type AppConnectionType } from '../services/app-relay/app-connections'
 import { listProfileNamesFromDisk } from '../public/profile-config'
 import { startOutboundRelayClient, stopOutboundRelayClient } from '../public/global-agent'
 import { getLanEndpointKind } from '../services/network/lan-discovery'
@@ -818,4 +818,72 @@ export async function unlockIpHandler(ctx: Context) {
   // No IP specified — unlock all
   const count = unlockAll()
   ctx.body = { success: true, count }
+}
+
+/**
+ * POST /api/auth/app-refresh
+ * Silent renewal for the mobile App: a still-valid, device-bound App token is
+ * exchanged for a fresh one (new expiry, new token id) so the user never has
+ * to scan the QR again while they keep using the App. Revoking the connection
+ * from Device connections → App still cuts the device off immediately: the old
+ * token hash is replaced at once and a revoked row never renews.
+ */
+export async function appRefresh(ctx: Context) {
+  const token = requestToken(ctx)
+  const payload = token ? verifyUserJwt(token, await getJwtSecret()) : null
+  const authenticated = ctx.state.user as { id: number } | undefined
+  if (!payload || payload.type !== 'app_access' || !payload.app_device_code || !authenticated || String(authenticated.id) !== String(payload.sub)) {
+    ctx.status = 401
+    ctx.body = { error: 'An App token is required', code: 'app_token_required' }
+    return
+  }
+  const deviceCode = payload.app_device_code
+  const connectionType: AppConnectionType = payload.app_connection_type === 'cloud' ? 'cloud' : 'lan'
+  const user = findUserById(payload.sub)
+  if (!user || user.status !== 'active') {
+    ctx.status = 403
+    ctx.body = { error: 'The authorizing user is disabled or does not exist' }
+    return
+  }
+  const now = Math.floor(Date.now() / 1000)
+  if (getAppConnectionTokenStatus(deviceCode, connectionType, token, user.id, now) !== 'active') {
+    ctx.status = 401
+    ctx.body = { error: 'App connection is no longer active', code: 'app_connection_inactive' }
+    return
+  }
+  const current = listAppConnections().find(record => (
+    record.device_code === deviceCode && record.connection_type === connectionType && record.user_id === user.id && record.revoked_at == null
+  ))
+  if (!current) {
+    ctx.status = 401
+    ctx.body = { error: 'App connection is no longer active', code: 'app_connection_inactive' }
+    return
+  }
+  const nextToken = await issueAppJwt(user, deviceCode, connectionType)
+  const connection = upsertAppConnection({
+    deviceCode,
+    deviceName: current.device_name,
+    deviceBrand: current.device_brand,
+    deviceModel: current.device_model,
+    connectionType,
+    userId: user.id,
+    cloudUserId: current.cloud_user_id,
+    token: nextToken,
+    tokenExpiresAt: now + getUserJwtExpiresSeconds(),
+    now,
+  })
+  ctx.body = {
+    token: nextToken,
+    token_expires_at: connection.token_expires_at,
+    appConnection: {
+      id: connection.id,
+      device_code: connection.device_code,
+      device_name: connection.device_name,
+      device_brand: connection.device_brand,
+      device_model: connection.device_model,
+      connection_type: connection.connection_type,
+      cloud_user_id: connection.cloud_user_id,
+      token_expires_at: connection.token_expires_at,
+    },
+  }
 }
