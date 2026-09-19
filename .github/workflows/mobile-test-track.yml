@@ -37,12 +37,17 @@ jobs:
     outputs:
       name: ${{ steps.v.outputs.name }}
       code: ${{ steps.v.outputs.code }}
+      store: ${{ steps.v.outputs.store }}
     steps:
       - uses: actions/checkout@v4
       - id: v
         run: |
           core=$(node -p "require('./package.json').version")
           echo "name=${core}-test.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          # TestFlight rejects anything but one to three period-separated
+          # integers, so the store build carries the plain core version and
+          # the run number identifies it as the build number.
+          echo "store=${core}" >> "$GITHUB_OUTPUT"
           echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           echo "Core Hub Mobile ${core}-test.${{ github.run_number }}" >> "$GITHUB_STEP_SUMMARY"
 
@@ -151,7 +156,7 @@ jobs:
     if: needs.ios.result == 'success'
     runs-on: macos-latest
     env:
-      MARKETING_VERSION: ${{ needs.version.outputs.name }}
+      MARKETING_VERSION: ${{ needs.version.outputs.store }}
       CURRENT_PROJECT_VERSION: ${{ needs.version.outputs.code }}
     steps:
       - uses: actions/checkout@v4
@@ -243,7 +248,7 @@ jobs:
             -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_API_KEY_ID" -authenticationKeyIssuerID "$ASC_API_ISSUER_ID" \
             > "$RUNNER_TEMP/export.log" 2>&1 || { grep -E "error:|Error" "$RUNNER_TEMP/export.log" | sort -u | head -40; tail -40 "$RUNNER_TEMP/export.log"; exit 1; }
           grep -E "EXPORT SUCCEEDED|Upload|uploaded" "$RUNNER_TEMP/export.log" | tail -3
-          echo "Uploaded Core Hub Mobile $MARKETING_VERSION (build $CURRENT_PROJECT_VERSION) to TestFlight" >> "$GITHUB_STEP_SUMMARY"
+          echo "Uploaded Core Hub Mobile $MARKETING_VERSION (build $CURRENT_PROJECT_VERSION, test track) to TestFlight" >> "$GITHUB_STEP_SUMMARY"
       - name: Remove the signing keychain and API key
         if: always()
         run: |
