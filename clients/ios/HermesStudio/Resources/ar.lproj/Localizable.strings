@@ -802,6 +802,8 @@
 "is typing…" = "يكتب الآن…";
 "Mention" = "إشارة";
 "Mention an agent" = "الإشارة إلى وكيل";
+"Inserts the agent's name into the message" = "يُدرج اسم الوكيل في الرسالة";
+"%@ tokens" = "%@ رمز";
 "Camera" = "الكاميرا";
 "Invite QR code" = "رمز QR للدعوة";
 "The QR code could not be generated." = "تعذّر توليد رمز QR.";
