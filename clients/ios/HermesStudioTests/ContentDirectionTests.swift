@@ -36,11 +36,20 @@ final class ContentDirectionTests: XCTestCase {
     // MARK: - What is *not* a direction signal
 
     func testTextWithNoStrongCharacterKeepsTheInterfaceDirection() {
-        for neutral in ["", "   ", "2026-09-19", "45.0k / 256.0k", "…", "1 + 2 = 3", "🎤🎤"] {
+        // No Latin letters here: "45.0k" would be strongly left-to-right,
+        // because `k` is a letter and the first strong character decides.
+        for neutral in ["", "   ", "2026-09-19", "45.0 / 256.0", "…", "1 + 2 = 3", "🎤🎤"] {
             XCTAssertEqual(ContentDirection.resolve(neutral, interface: .rightToLeft), .rightToLeft, neutral)
             XCTAssertEqual(ContentDirection.resolve(neutral, interface: .leftToRight), .leftToRight, neutral)
             XCTAssertNil(ContentDirection.firstStrong(neutral), neutral)
         }
+    }
+
+    func testALatinUnitSuffixIsAStrongCharacter() {
+        // The token counter reads "45.0k / 256.0k": the `k` decides, so the
+        // string is left-to-right even in an Arabic interface.
+        XCTAssertEqual(ContentDirection.resolve("45.0k / 256.0k", interface: .rightToLeft), .leftToRight)
+        XCTAssertEqual(ContentDirection.firstStrong("45.0k"), .leftToRight)
     }
 
     func testDigitsAndPunctuationAreNotEvidenceOfDirection() {
