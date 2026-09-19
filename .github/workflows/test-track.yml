@@ -205,7 +205,7 @@ jobs:
             const version = process.argv[1];
             fs.writeFileSync("packages/desktop/electron-builder.test.json", JSON.stringify({
               extends: "./electron-builder.yml",
-              appId: "us.i3u.agentstudio.test",
+              appId: "com.twuijri.corehub.test",
               extraMetadata: { productName: "Core Hub Test", version, corehubChannel: "test" },
             }, null, 2));
           ' "$version"
