@@ -23,6 +23,13 @@ describe('Computer apps navigation', () => {
     expect(sidebar).not.toContain('hermes.appConnections')
   })
 
+  it('uses the page sidebar like Device connections (no settings drawer next to it)', () => {
+    const app = readFileSync('packages/client/src/App.vue', 'utf8')
+    const list = app.slice(app.indexOf('const usesPageSidebar'), app.indexOf('].includes(route.name as string)'))
+    expect(list).toContain('"hermes.appConnections"')
+    expect(list).toContain('"hermes.connections"')
+  })
+
   it('renders inside the chat shell as its own content mode', () => {
     expect(router).toMatch(/name: 'hermes\.appConnections',\n\s+component: \(\) => import\('@\/views\/hermes\/ChatView\.vue'\)/)
     expect(chatView).toContain("if (route.name === 'hermes.appConnections') return 'apps'")
