@@ -22,6 +22,15 @@ final class APIClient: @unchecked Sendable {
     private(set) var token: String
     private let session: URLSession
 
+    /// Installed by `AppStore` for QR-paired connections. Called once after a
+    /// 401 so the original request can be retried with a fresh app token.
+    /// Returns the new token, or `nil` when no refresh is possible.
+    var tokenRefresher: (@Sendable () async -> String?)?
+
+    /// Paths that must never trigger a silent refresh (they are the auth
+    /// endpoints themselves).
+    private static let authPaths = ["/api/auth/login", "/api/auth/app-login", "/api/auth/app-refresh"]
+
     init(baseURL: String = "", token: String = "") {
         self.baseURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         self.token = token
@@ -42,22 +51,42 @@ final class APIClient: @unchecked Sendable {
         return url
     }
 
+    /// Sends a request with the bearer token in the `Authorization` header.
+    /// The token is never placed in the URL. On a 401 the installed
+    /// `tokenRefresher` runs once and the request is retried with the new token.
+    func send(_ request: URLRequest, allowRefresh: Bool = true) async throws -> (Data, HTTPURLResponse) {
+        var request = request
+        if !token.isEmpty { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw HermesError.malformedResponse }
+        let path = request.url?.path ?? ""
+        if http.statusCode == 401, allowRefresh, !Self.authPaths.contains(path), let refresher = tokenRefresher {
+            if let refreshed = await refresher(), !refreshed.isEmpty {
+                token = refreshed
+                return try await send(request, allowRefresh: false)
+            }
+        }
+        return (data, http)
+    }
+
+    private func checkedSend(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let (data, http) = try await send(request)
+        guard (200..<300).contains(http.statusCode) else {
+            throw HermesError.http(http.statusCode, Self.errorDetail(data))
+        }
+        return (data, http)
+    }
+
     func request(_ path: String, method: String = "GET", body: Any? = nil, profile: String? = nil) async throws -> Any {
         var request = URLRequest(url: try url(path))
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if !token.isEmpty { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let profile, !profile.isEmpty { request.setValue(profile, forHTTPHeaderField: "X-Hermes-Profile") }
         if let body {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
             request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         }
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw HermesError.malformedResponse }
-        guard (200..<300).contains(http.statusCode) else {
-            let detail = Self.errorDetail(data)
-            throw HermesError.http(http.statusCode, detail)
-        }
+        let (data, _) = try await checkedSend(request)
         guard !data.isEmpty else { return JSON() }
         return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
     }
@@ -81,6 +110,26 @@ final class APIClient: @unchecked Sendable {
         let json = try await object("/api/auth/login", method: "POST", body: ["username": username, "password": password])
         guard let token = json.string("token").nilIfEmpty else { throw HermesError.server(String(localized: "Login succeeded but no token was returned")) }
         return token
+    }
+
+    /// `POST /api/auth/app-login` — exchanges a one-time QR authorization code
+    /// for a device-bound app token. Status codes are left to the caller:
+    /// 400 fields, 401 invalid code, 403 user disabled, 409 already used, 410 expired.
+    func appLogin(authorizationCode: String, deviceCode: String, deviceName: String, deviceModel: String) async throws -> AppAuthResponse {
+        let body: JSON = [
+            "authorization_code": authorizationCode,
+            "device_code": deviceCode,
+            "device_name": deviceName,
+            "device_brand": "Apple",
+            "device_model": deviceModel,
+        ]
+        return try AppAuthResponse(try await object("/api/auth/app-login", method: "POST", body: body))
+    }
+
+    /// `POST /api/auth/app-refresh` with the current app token as bearer and an
+    /// empty JSON body. A 401 means the connection was revoked or expired.
+    func appRefresh() async throws -> AppAuthResponse {
+        try AppAuthResponse(try await object("/api/auth/app-refresh", method: "POST", body: JSON()))
     }
 
     func currentUser() async throws -> CurrentUser {
@@ -120,8 +169,10 @@ final class APIClient: @unchecked Sendable {
     func setProfileAvatar(_ name: String, dataURL: String) async throws { _ = try await object("/api/hermes/profiles/\(name.urlEncoded)/avatar", method: "PUT", body: ["type": "image", "dataUrl": dataURL]) }
     func resetProfileAvatar(_ name: String) async throws { _ = try await object("/api/hermes/profiles/\(name.urlEncoded)/avatar", method: "DELETE") }
     func exportProfile(_ name: String) async throws -> Data {
-        var request = URLRequest(url: try url("/api/hermes/profiles/\(name.urlEncoded)/export")); request.httpMethod = "POST"; if !token.isEmpty { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
-        let (data, response) = try await session.data(for: request); guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw HermesError.server(String(localized: "Profile export failed")) }; return data
+        var request = URLRequest(url: try url("/api/hermes/profiles/\(name.urlEncoded)/export")); request.httpMethod = "POST"
+        let (data, http) = try await send(request)
+        guard (200..<300).contains(http.statusCode) else { throw HermesError.server(String(localized: "Profile export failed")) }
+        return data
     }
     func importProfile(data: Data, name: String) async throws { _ = try await multipart("/api/hermes/profiles/import", data: data, name: name, mime: "application/gzip", field: "file", profile: nil) }
 
@@ -153,24 +204,18 @@ final class APIClient: @unchecked Sendable {
 
     static func sessionsPath(profile: String?, limit: Int = 80) -> String {
         guard let profile = profile?.trimmingCharacters(in: .whitespacesAndNewlines), !profile.isEmpty else {
-            return "/api/hermes/sessions?limit=\(limit)"
+            return "/api/studio/sessions?limit=\(limit)"
         }
-        return "/api/hermes/sessions?profile=\(profile.urlEncoded)&limit=\(limit)"
+        return "/api/studio/sessions?limit=\(limit)&profile=\(profile.urlEncoded)"
     }
 
     func sessions(profile: String? = nil, limit: Int = 100) async throws -> [SessionSummary] {
         let fallbackProfile = profile?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        var canonical = "/api/studio/sessions?limit=\(limit)"
-        if !fallbackProfile.isEmpty { canonical += "&profile=\(fallbackProfile.urlEncoded)" }
-        do {
-            return try await array(canonical, keys: ["sessions"]).map { SessionSummary($0, profile: fallbackProfile) }.filter { !$0.id.isEmpty }
-        } catch {
-            return try await array(Self.sessionsPath(profile: profile), keys: ["sessions", "conversations"]).map { SessionSummary($0, profile: fallbackProfile) }.filter { !$0.id.isEmpty }
-        }
+        return try await array(Self.sessionsPath(profile: profile, limit: limit), keys: ["sessions"]).map { SessionSummary($0, profile: fallbackProfile) }.filter { !$0.id.isEmpty }
     }
 
     func searchSessions(_ query: String, profile: String? = nil) async throws -> [SessionSummary] {
-        var path = "/api/studio/search/sessions?q=\(query.urlEncoded)&limit=100"
+        var path = "/api/studio/sessions/search?q=\(query.urlEncoded)&limit=100"
         if let profile = profile?.nilIfEmpty { path += "&profile=\(profile.urlEncoded)" }
         return try await array(path, keys: ["results"]).map { SessionSummary($0, profile: profile ?? "") }
     }
@@ -232,7 +277,7 @@ final class APIClient: @unchecked Sendable {
     func workspaceFolders() async throws -> [String] { let root = try await object("/api/studio/workspace/folders"); return root.array("folders").compactMap { ($0 as? String) ?? ($0 as? JSON)?.string("path") } }
 
     func conversationHistory(sessionID: String) async throws -> (messages: [Message], contextTokens: Int?) {
-        let path = "/api/hermes/sessions/conversations/\(sessionID.urlEncoded)/messages?humanOnly=true"
+        let path = "/api/studio/sessions/conversations/\(sessionID.urlEncoded)/messages?humanOnly=true"
         let root = try await object(path)
         let messages = root.objects("messages").map(Message.init)
         let raw = root["contextTokens"] ?? root["context_tokens"] ?? root["tokenCount"] ?? root["token_count"]
@@ -252,7 +297,7 @@ final class APIClient: @unchecked Sendable {
             URLQueryItem(name: "model", value: model.nilIfEmpty),
         ].filter { $0.value != nil }
         let query = components.percentEncodedQuery ?? "profile=\(profile.urlEncoded)"
-        let root = try await object("/api/hermes/sessions/context-length?\(query)", profile: profile)
+        let root = try await object("/api/studio/sessions/context-length?\(query)", profile: profile)
         let length = root["context_length"] == nil ? root.int("contextLength") : root.int("context_length")
         guard length > 0 else { throw HermesError.malformedResponse }
         return length
@@ -260,9 +305,7 @@ final class APIClient: @unchecked Sendable {
 
     func usageStats(days: Int) async throws -> UsageStats {
         let safeDays = min(365, max(1, days))
-        let root: JSON
-        do { root = try await object("/api/studio/usage/stats?days=\(safeDays)") }
-        catch { root = try await object("/api/hermes/usage/stats?days=\(safeDays)") }
+        let root = try await object("/api/studio/usage/stats?days=\(safeDays)")
         let models = root.objects("model_usage").enumerated().map { index, item in
             let name = item.string("model", "name").nilIfEmpty ?? "Unknown"
             return UsageBreakdown(
@@ -288,7 +331,12 @@ final class APIClient: @unchecked Sendable {
     func copyStudioFile(_ path: String, to newPath: String, profile: String) async throws { _ = try await object("/api/studio/files/copy", method: "POST", body: ["srcPath": path, "destPath": newPath, "profile": profile]) }
     func deleteStudioFile(_ path: String, recursive: Bool, profile: String) async throws { _ = try await object("/api/studio/files/delete", method: "DELETE", body: ["path": path, "recursive": recursive, "profile": profile]) }
     func uploadStudioFile(data: Data, name: String, mime: String, path: String, profile: String) async throws { _ = try await multipart("/api/studio/files/upload?path=\(path.urlEncoded)&profile=\(profile.urlEncoded)", data: data, name: name, mime: mime, field: "file", profile: profile) }
-    func studioFileURL(_ path: String, profile: String) -> URL? { try? url("/api/studio/files/download?path=\(path.urlEncoded)&profile=\(profile.urlEncoded)&token=\(token.urlEncoded)") }
+    /// Downloads a workspace file through `/api/studio/files/download` with the
+    /// bearer token in the header and returns the local copy.
+    func downloadStudioFile(_ path: String, profile: String) async throws -> URL {
+        let name = URL(fileURLWithPath: path).lastPathComponent.nilIfEmpty ?? "file"
+        return try await downloadFile(path: path, name: name, profile: profile)
+    }
     func logFiles() async throws -> [StudioLogFile] { try await array("/api/studio/logs", keys: ["files"]).map(StudioLogFile.init) }
     func logEntries(_ name: String, text: String = "", level: String = "") async throws -> [StudioLogEntry] { var path = "/api/studio/logs/\(name.urlEncoded)?lines=1000"; if !text.isEmpty { path += "&text=\(text.urlEncoded)" }; if !level.isEmpty { path += "&level=\(level.urlEncoded)" }; return try await array(path, keys: ["entries"]).map(StudioLogEntry.init) }
     func appRelay(_ action: String = "status", method: String = "GET", body: JSON? = nil) async throws -> AppRelayInfo { AppRelayInfo(try await object("/api/app-relay/\(action)", method: method, body: body).object("relay")) }
@@ -307,7 +355,7 @@ final class APIClient: @unchecked Sendable {
     func submitProviderAuth(_ provider: String, sessionID: String, code: String) async throws -> JSON { try await object("/api/hermes/auth/\(provider.urlEncoded)/submit/\(sessionID.urlEncoded)", method: "POST", body: ["code": code]) }
 
     func runtimePerformance() async throws -> RuntimePerformance {
-        let root = try await object("/api/hermes/performance/runtime")
+        let root = try await object("/api/studio/performance/runtime")
         let system = root.object("system"), bridge = root.object("bridge"), sessions = root.object("sessions")
         let workers = bridge.objects("workers")
         return RuntimePerformance(
@@ -322,7 +370,7 @@ final class APIClient: @unchecked Sendable {
     func deleteSession(_ id: String) async throws { _ = try await object("/api/studio/sessions/\(id.urlEncoded)", method: "DELETE") }
     func setSessionModel(_ id: String, model: String, provider: String?) async throws {
         var body: JSON = ["model": model]; if let provider, !provider.isEmpty { body["provider"] = provider }
-        _ = try await object("/api/hermes/sessions/\(id.urlEncoded)/model", method: "POST", body: body)
+        _ = try await object("/api/studio/sessions/\(id.urlEncoded)/model", method: "POST", body: body)
     }
 
     func models(profile: String) async throws -> [ModelOption] {
@@ -357,19 +405,19 @@ final class APIClient: @unchecked Sendable {
     func deleteProfile(_ name: String) async throws { _ = try await object("/api/hermes/profiles/\(name.urlEncoded)", method: "DELETE") }
     func restartGateway(profile: String) async throws { _ = try await object("/api/hermes/profiles/\(profile.urlEncoded)/gateway/restart", method: "POST") }
 
-    func rooms() async throws -> [Room] { try await array("/api/hermes/group-chat/rooms", keys: ["rooms"]).map(Room.init).filter { !$0.id.isEmpty } }
+    func rooms() async throws -> [Room] { try await array("/api/studio/group-chat/rooms", keys: ["rooms"]).map(Room.init).filter { !$0.id.isEmpty } }
     func room(_ id: String) async throws -> (Room, [RoomMessage]) {
-        let root = try await object("/api/hermes/group-chat/rooms/\(id.urlEncoded)?limit=80&offset=0")
+        let root = try await object("/api/studio/group-chat/rooms/\(id.urlEncoded)?limit=80&offset=0")
         let roomJSON = root.object("room").isEmpty ? root : root.object("room")
         return (Room(roomJSON), root.objects("messages").map(RoomMessage.init))
     }
     func createRoom(name: String, inviteCode: String, agents: [String]) async throws -> Room {
         let body: JSON = ["name": name, "inviteCode": inviteCode, "agents": agents.map { ["profile": $0] }]
-        let root = try await object("/api/hermes/group-chat/rooms", method: "POST", body: body)
+        let root = try await object("/api/studio/group-chat/rooms", method: "POST", body: body)
         return Room(root.object("room"))
     }
-    func deleteRoom(_ id: String) async throws { _ = try await object("/api/hermes/group-chat/rooms/\(id.urlEncoded)", method: "DELETE") }
-    func addRoomAgent(_ id: String, profile: String) async throws { _ = try await object("/api/hermes/group-chat/rooms/\(id.urlEncoded)/agents", method: "POST", body: ["profile": profile]) }
+    func deleteRoom(_ id: String) async throws { _ = try await object("/api/studio/group-chat/rooms/\(id.urlEncoded)", method: "DELETE") }
+    func addRoomAgent(_ id: String, profile: String) async throws { _ = try await object("/api/studio/group-chat/rooms/\(id.urlEncoded)/agents", method: "POST", body: ["profile": profile]) }
 
     func boards() async throws -> [KanbanBoard] {
         var rows = try await array("/api/hermes/kanban/boards", keys: ["boards"])
@@ -422,13 +470,11 @@ final class APIClient: @unchecked Sendable {
     func reassignKanban(board: String, id: String, profile: String, reclaim: Bool = true) async throws { _ = try await object("/api/hermes/kanban/\(id.urlEncoded)/reassign?board=\(board.urlEncoded)", method: "POST", body: ["profile": profile, "reclaim": reclaim]) }
     func kanbanLog(board: String, id: String) async throws -> JSON { try await object("/api/hermes/kanban/\(id.urlEncoded)/log?board=\(board.urlEncoded)&tail=400") }
     func kanbanAttachments(board: String, id: String) async throws -> [JSON] { try await array("/api/hermes/kanban/\(id.urlEncoded)/attachments?board=\(board.urlEncoded)", keys: ["attachments"]) }
-    func kanbanAttachmentURL(board: String, taskID: String, attachmentID: Int) -> URL? {
-        var components = URLComponents(string: baseURL + "/api/hermes/kanban/\(taskID.urlEncoded)/attachments/\(attachmentID)?board=\(board.urlEncoded)")
-        if !token.isEmpty {
-            let existingItems = components?.queryItems ?? []
-            components?.queryItems = existingItems + [URLQueryItem(name: "token", value: token)]
-        }
-        return components?.url
+    /// Downloads a Kanban attachment with the bearer token in the header and
+    /// returns the local copy.
+    func downloadKanbanAttachment(board: String, taskID: String, attachmentID: Int, name: String) async throws -> URL {
+        let data = try await rawData("/api/hermes/kanban/\(taskID.urlEncoded)/attachments/\(attachmentID)?board=\(board.urlEncoded)")
+        return try Self.writeTemporaryFile(data, name: name.nilIfEmpty ?? "attachment-\(attachmentID)")
     }
 
     func cronJobs(profile: String) async throws -> [CronJob] {
@@ -552,37 +598,50 @@ final class APIClient: @unchecked Sendable {
         return Upload(name: item.string("name", "filename").nilIfEmpty ?? name, path: item.string("path", "filePath", "url"), mime: item.string("mime", "media_type", "type").nilIfEmpty ?? mime)
     }
 
-    func transcribe(data: Data, name: String, mime: String, profile: String) async throws -> String {
-        let settings = try await object("/api/hermes/stt/settings?profile=\(profile.urlEncoded)", profile: profile)
-        let provider = settings.string("activeProvider")
-        guard !provider.isEmpty, provider != "browser" else {
-            throw HermesError.server(String(localized: "Configure a server-backed speech recognition provider in Studio first"))
-        }
-        let result = try await multipart(
-            "/api/hermes/stt/transcribe?profile=\(profile.urlEncoded)",
-            data: data,
-            name: name,
-            mime: mime,
-            field: "audio",
-            fields: ["provider": provider],
-            profile: profile
+    /// `GET /api/studio/stt/profile-status` → `{ configured, activeProvider, reason }`.
+    func sttProfileStatus(profile: String) async throws -> SttProfileStatus {
+        SttProfileStatus(try await object("/api/studio/stt/profile-status?profile=\(profile.urlEncoded)", profile: profile))
+    }
+
+    /// Multipart fields sent with every server transcription request.
+    static func sttFormFields(provider: String, language: String?) -> [String: String] {
+        var fields = ["provider": provider]
+        if let language = language?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty { fields["language"] = language }
+        return fields
+    }
+
+    /// `POST /api/studio/stt/transcribe` (multipart/form-data: `provider`,
+    /// optional `language`, file part `audio` as `voice.wav`, `audio/wav`).
+    /// Response `{ text, provider, model, language?, durationMs }`; a 400 with
+    /// `code: "no_speech_detected"` becomes a readable error.
+    func transcribe(wav data: Data, provider: String, language: String?, profile: String) async throws -> Transcription {
+        let request = try multipartRequest(
+            "/api/studio/stt/transcribe?profile=\(profile.urlEncoded)",
+            data: data, name: "voice.wav", mime: "audio/wav", field: "audio",
+            fields: Self.sttFormFields(provider: provider, language: language), profile: profile
         )
-        return result.string("text", "transcript")
+        let (responseData, http) = try await send(request)
+        guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 400, Self.errorCode(responseData) == "no_speech_detected" {
+                throw HermesError.server(String(localized: "No speech was detected. Try again closer to the microphone."))
+            }
+            throw HermesError.http(http.statusCode, Self.errorDetail(responseData))
+        }
+        guard let json = try JSONSerialization.jsonObject(with: responseData) as? JSON else { throw HermesError.malformedResponse }
+        let result = Transcription(json)
+        guard !result.text.isEmpty else { throw HermesError.server(String(localized: "The server returned an empty transcription")) }
+        return result
     }
 
     func synthesize(text: String, profile: String) async throws -> Data {
-        var request = URLRequest(url: try url("/api/hermes/tts/synthesize"))
+        var request = URLRequest(url: try url("/api/studio/tts/synthesize"))
         request.httpMethod = "POST"
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         // Let Studio negotiate the active provider's native audio format.
         request.setValue("audio/*", forHTTPHeaderField: "Accept")
         request.setValue(profile, forHTTPHeaderField: "X-Hermes-Profile")
-        if !token.isEmpty { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         request.httpBody = try JSONSerialization.data(withJSONObject: ["text": text, "options": [:]])
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw HermesError.http((response as? HTTPURLResponse)?.statusCode ?? -1, Self.errorDetail(data))
-        }
+        let (data, http) = try await checkedSend(request)
         guard !data.isEmpty else { throw HermesError.malformedResponse }
         let contentType = http.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
         if contentType.contains("json") || data.first == Character("{").asciiValue {
@@ -603,11 +662,11 @@ final class APIClient: @unchecked Sendable {
         if let reasoningEffort, !reasoningEffort.isEmpty { body["reasoning_effort"] = reasoningEffort }
         if let model, !model.isEmpty { body["model"] = model }
         if let provider, !provider.isEmpty { body["provider"] = provider }
-        let result = try await object("/api/chat-run/runs", method: "POST", body: body, profile: profile)
+        let result = try await object("/api/studio/chat-run/runs", method: "POST", body: body, profile: profile)
         return (result.string("output", "message", "text"), result.string("reasoning", "thinking"))
     }
 
-    private func multipart(_ path: String, data: Data, name: String, mime: String, field: String, fields: [String: String] = [:], profile: String?) async throws -> JSON {
+    private func multipartRequest(_ path: String, data: Data, name: String, mime: String, field: String, fields: [String: String] = [:], profile: String?) throws -> URLRequest {
         let boundary = "HermesBoundary\(UUID().uuidString)"
         var body = Data()
         for (key, value) in fields {
@@ -622,34 +681,111 @@ final class APIClient: @unchecked Sendable {
         var request = URLRequest(url: try url(path)); request.httpMethod = "POST"; request.httpBody = body
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if !token.isEmpty { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let profile { request.setValue(profile, forHTTPHeaderField: "X-Hermes-Profile") }
-        let (responseData, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-            throw HermesError.http(code, Self.errorDetail(responseData))
-        }
+        return request
+    }
+
+    private func multipart(_ path: String, data: Data, name: String, mime: String, field: String, fields: [String: String] = [:], profile: String?) async throws -> JSON {
+        let request = try multipartRequest(path, data: data, name: name, mime: mime, field: field, fields: fields, profile: profile)
+        let (responseData, _) = try await checkedSend(request)
         guard let json = try JSONSerialization.jsonObject(with: responseData) as? JSON else { throw HermesError.malformedResponse }
         return json
     }
 
-    private func rawData(_ path: String) async throws -> Data { var request = URLRequest(url: try url(path)); if !token.isEmpty { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }; let (data, response) = try await session.data(for: request); guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw HermesError.http((response as? HTTPURLResponse)?.statusCode ?? -1, Self.errorDetail(data)) }; return data }
+    private func rawData(_ path: String) async throws -> Data {
+        let (data, _) = try await checkedSend(URLRequest(url: try url(path)))
+        return data
+    }
 
-    func downloadURL(path: String, name: String, profile: String) -> URL? {
-        var components = URLComponents(string: baseURL + "/api/hermes/download")
-        components?.queryItems = [URLQueryItem(name: "path", value: path), URLQueryItem(name: "name", value: name), URLQueryItem(name: "profile", value: profile), URLQueryItem(name: "token", value: token)]
-        return components?.url
+    /// Request for `/api/studio/files/download`. The bearer token travels in
+    /// the `Authorization` header only — never in the query string.
+    func downloadRequest(path: String, name: String, profile: String) throws -> URLRequest {
+        var components = URLComponents(string: baseURL + "/api/studio/files/download")
+        components?.queryItems = [URLQueryItem(name: "path", value: path), URLQueryItem(name: "name", value: name), URLQueryItem(name: "profile", value: profile)]
+        guard let url = components?.url else { throw HermesError.invalidServer }
+        var request = URLRequest(url: url)
+        if !token.isEmpty { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        return request
+    }
+
+    /// Downloads an agent file and returns a local copy in the temporary
+    /// directory, ready for Quick Look or sharing.
+    func downloadFile(path: String, name: String, profile: String) async throws -> URL {
+        let (data, _) = try await checkedSend(try downloadRequest(path: path, name: name, profile: profile))
+        return try Self.writeTemporaryFile(data, name: name)
+    }
+
+    static func writeTemporaryFile(_ data: Data, name: String) throws -> URL {
+        let safeName = name.replacingOccurrences(of: "/", with: "-").nilIfEmpty ?? "file"
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("downloads-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let destination = folder.appendingPathComponent(safeName)
+        try data.write(to: destination, options: .atomic)
+        return destination
     }
 
     func logoData() async -> Data? {
         guard let url = try? url("/logo.png") else { return nil }
-        var request = URLRequest(url: url); if !token.isEmpty { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
-        return try? await session.data(for: request).0
+        guard let result = try? await send(URLRequest(url: url)), (200..<300).contains(result.1.statusCode) else { return nil }
+        return result.0
     }
 
     private static func errorDetail(_ data: Data) -> String {
         if let json = try? JSONSerialization.jsonObject(with: data) as? JSON { return json.string("error", "message", "detail") }
         return String(data: data, encoding: .utf8)?.prefix(300).description ?? ""
+    }
+
+    private static func errorCode(_ data: Data) -> String {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? JSON else { return "" }
+        return json.string("code")
+    }
+}
+
+/// `GET /api/studio/stt/profile-status`.
+struct SttProfileStatus: Equatable {
+    let configured: Bool
+    let activeProvider: String
+    let reason: String
+
+    init(_ json: JSON) {
+        configured = json.bool("configured")
+        activeProvider = json.string("activeProvider", "active_provider")
+        reason = json.string("reason")
+    }
+
+    /// Human-readable explanation when the server cannot transcribe.
+    var message: String {
+        switch reason {
+        case "active_stt_provider_missing":
+            return String(localized: "No speech provider is active on the Core Hub server. Choose one under Studio → Voice.")
+        case "browser_stt_not_available_for_mcu":
+            return String(localized: "The server's active speech provider is the browser, which apps cannot use. Choose a server provider under Studio → Voice.")
+        case "active_stt_provider_unsupported":
+            return String(localized: "The server's active speech provider is not supported for uploads. Choose another provider under Studio → Voice.")
+        case "local_stt_model_unavailable":
+            return String(localized: "The server's local speech model is not downloaded yet. Download it under Studio → Voice.")
+        case "active_stt_provider_secret_missing":
+            return String(localized: "The server's speech provider has no API key. Add it under Studio → Voice.")
+        default:
+            return String(localized: "Speech transcription is not configured on the Core Hub server.")
+        }
+    }
+}
+
+/// `POST /api/studio/stt/transcribe` response.
+struct Transcription: Equatable {
+    let text: String
+    let provider: String
+    let model: String
+    let language: String
+    let durationMs: Int
+
+    init(_ json: JSON) {
+        text = json.string("text", "transcript").trimmingCharacters(in: .whitespacesAndNewlines)
+        provider = json.string("provider")
+        model = json.string("model")
+        language = json.string("language")
+        durationMs = json.int("durationMs")
     }
 }
 

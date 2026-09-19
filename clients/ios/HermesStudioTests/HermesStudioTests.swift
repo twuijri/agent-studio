@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import HermesStudio
 
@@ -135,19 +136,25 @@ final class HermesStudioTests: XCTestCase {
         XCTAssertNil(message.sentAt)
     }
 
-    func testDownloadURLCarriesProfileAndToken() throws {
+    func testDownloadRequestKeepsTokenOutOfTheURL() throws {
         let client = APIClient(baseURL: "https://studio.example", token: "secret")
-        let url = client.downloadURL(path: "/workspace/file.pdf", name: "file.pdf", profile: "main")
-        let components = URLComponents(url: try XCTUnwrap(url), resolvingAgainstBaseURL: false)
+        let request = try client.downloadRequest(path: "/workspace/file.pdf", name: "file.pdf", profile: "main")
+        let url = try XCTUnwrap(request.url)
+        XCTAssertEqual(url.path, "/api/studio/files/download")
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let items = Dictionary(uniqueKeysWithValues: try XCTUnwrap(components?.queryItems).map { ($0.name, $0.value ?? "") })
         XCTAssertEqual(items["profile"], "main")
-        XCTAssertEqual(items["token"], "secret")
+        XCTAssertEqual(items["path"], "/workspace/file.pdf")
+        XCTAssertEqual(items["name"], "file.pdf")
+        XCTAssertNil(items["token"])
+        XCTAssertFalse(url.absoluteString.contains("secret"))
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer secret")
     }
 
-    func testSessionsDefaultToAllProfiles() {
-        XCTAssertEqual(APIClient.sessionsPath(profile: nil), "/api/hermes/sessions?limit=80")
-        XCTAssertEqual(APIClient.sessionsPath(profile: ""), "/api/hermes/sessions?limit=80")
-        XCTAssertEqual(APIClient.sessionsPath(profile: "manager"), "/api/hermes/sessions?profile=manager&limit=80")
+    func testSessionsUseCanonicalStudioPath() {
+        XCTAssertEqual(APIClient.sessionsPath(profile: nil), "/api/studio/sessions?limit=80")
+        XCTAssertEqual(APIClient.sessionsPath(profile: ""), "/api/studio/sessions?limit=80")
+        XCTAssertEqual(APIClient.sessionsPath(profile: "manager"), "/api/studio/sessions?limit=80&profile=manager")
     }
 
     func testSessionPreservesCanonicalAgentFamily() {
@@ -240,5 +247,124 @@ final class HermesStudioTests: XCTestCase {
 
     func testEnglishMarkdownKeepsLeftToRightDirection() {
         XCTAssertEqual(MarkdownText.layoutDirection(for: "1. **First task**"), .leftToRight)
+    }
+
+    // MARK: - M1: QR pairing and app-token refresh
+
+    func testRefreshPolicyRefreshesWhenLessThanSevenDaysRemain() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let day: TimeInterval = 24 * 60 * 60
+        XCTAssertTrue(AppTokenRefreshPolicy.shouldRefresh(expiresAt: now.addingTimeInterval(6 * day), lastRefresh: now.addingTimeInterval(-60), now: now))
+        XCTAssertTrue(AppTokenRefreshPolicy.shouldRefresh(expiresAt: now.addingTimeInterval(-60), lastRefresh: now.addingTimeInterval(-60), now: now))
+        XCTAssertFalse(AppTokenRefreshPolicy.shouldRefresh(expiresAt: now.addingTimeInterval(8 * day), lastRefresh: now.addingTimeInterval(-60), now: now))
+    }
+
+    func testRefreshPolicyRefreshesWhenLastRefreshIsOlderThanOneDay() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let hour: TimeInterval = 60 * 60
+        let farExpiry = now.addingTimeInterval(30 * 24 * hour)
+        XCTAssertTrue(AppTokenRefreshPolicy.shouldRefresh(expiresAt: farExpiry, lastRefresh: now.addingTimeInterval(-25 * hour), now: now))
+        XCTAssertFalse(AppTokenRefreshPolicy.shouldRefresh(expiresAt: farExpiry, lastRefresh: now.addingTimeInterval(-23 * hour), now: now))
+        XCTAssertTrue(AppTokenRefreshPolicy.shouldRefresh(expiresAt: farExpiry, lastRefresh: now.addingTimeInterval(hour), now: now), "a future last-refresh means the clock moved; refresh")
+    }
+
+    func testRefreshPolicyRefreshesWhenExpiryOrLastRefreshIsUnknown() {
+        let now = Date()
+        XCTAssertTrue(AppTokenRefreshPolicy.shouldRefresh(expiresAt: nil, lastRefresh: now, now: now))
+        XCTAssertTrue(AppTokenRefreshPolicy.shouldRefresh(expiresAt: now.addingTimeInterval(30 * 24 * 3600), lastRefresh: nil, now: now))
+    }
+
+    func testPairingQRParsesCanonicalPayload() throws {
+        let payload = #"{"type":"hermes-studio.app-connection","version":1,"connection_type":"lan","backend_url":"http://192.168.1.20:3000/","machine_id":"hwui_abc","authorization_code":"c29tZS1jb2Rl","expires_at":1800000600}"#
+        let qr = try AppConnectionQR.parse(payload)
+        XCTAssertEqual(qr.backendURL, "http://192.168.1.20:3000")
+        XCTAssertEqual(qr.machineID, "hwui_abc")
+        XCTAssertEqual(qr.authorizationCode, "c29tZS1jb2Rl")
+        XCTAssertEqual(qr.connectionType, "lan")
+        XCTAssertEqual(try XCTUnwrap(qr.expiresAt).timeIntervalSince1970, 1_800_000_600, accuracy: 0.001)
+        XCTAssertFalse(qr.isExpired(now: Date(timeIntervalSince1970: 1_800_000_000)))
+        XCTAssertTrue(qr.isExpired(now: Date(timeIntervalSince1970: 1_800_000_601)))
+    }
+
+    func testPairingQRRejectsForeignAndIncompletePayloads() {
+        XCTAssertThrowsError(try AppConnectionQR.parse("https://example.com/not-json"))
+        XCTAssertThrowsError(try AppConnectionQR.parse(#"{"type":"other","backend_url":"http://h:1","authorization_code":"x"}"#)) { error in
+            XCTAssertEqual(error as? AppConnectionQR.ParseError, .wrongType("other"))
+        }
+        XCTAssertThrowsError(try AppConnectionQR.parse(#"{"type":"hermes-studio.app-connection","backend_url":"http://h:1"}"#)) { error in
+            XCTAssertEqual(error as? AppConnectionQR.ParseError, .missingField("authorization_code"))
+        }
+        XCTAssertThrowsError(try AppConnectionQR.parse(#"{"type":"hermes-studio.app-connection","backend_url":"ftp://h","authorization_code":"x"}"#)) { error in
+            XCTAssertEqual(error as? AppConnectionQR.ParseError, .invalidURL("ftp://h"))
+        }
+    }
+
+    func testAppAuthResponseReadsTokenAndConnection() throws {
+        let response = try AppAuthResponse(["token": "jwt", "userId": 7, "profiles": ["main", "ops"], "appConnection": ["id": 12, "device_code": "dev", "token_expires_at": 1_800_000_000]])
+        XCTAssertEqual(response.token, "jwt")
+        XCTAssertEqual(response.userID, 7)
+        XCTAssertEqual(response.profiles, ["main", "ops"])
+        XCTAssertEqual(response.connectionID, 12)
+        XCTAssertEqual(try XCTUnwrap(response.tokenExpiresAt).timeIntervalSince1970, 1_800_000_000, accuracy: 0.001)
+        XCTAssertThrowsError(try AppAuthResponse(["userId": 7]))
+    }
+
+    func testEpochDateAcceptsSecondsAndMilliseconds() {
+        XCTAssertEqual(EpochDate.date(1_800_000_000)?.timeIntervalSince1970, 1_800_000_000)
+        XCTAssertEqual(EpochDate.date(1_800_000_000_000)?.timeIntervalSince1970, 1_800_000_000)
+        XCTAssertEqual(EpochDate.date("1800000000")?.timeIntervalSince1970, 1_800_000_000)
+        XCTAssertNil(EpochDate.date(nil))
+        XCTAssertNil(EpochDate.date(0))
+    }
+
+    func testAppSessionRecordRoundTripsThroughJSON() throws {
+        let record = AppSessionRecord(token: "jwt", tokenExpiresAt: Date(timeIntervalSince1970: 1_800_000_000), connectionID: 3, deviceCode: "dev", lastRefresh: Date(timeIntervalSince1970: 1_799_000_000))
+        let data = try JSONEncoder().encode(record)
+        XCTAssertEqual(try JSONDecoder().decode(AppSessionRecord.self, from: data), record)
+        XCTAssertTrue(record.needsRefresh(now: Date(timeIntervalSince1970: 1_799_600_000)))
+        XCTAssertFalse(record.needsRefresh(now: Date(timeIntervalSince1970: 1_799_010_000)))
+    }
+
+    @MainActor func testPairingErrorMessagesDistinguishServerStatusCodes() {
+        let messages = [400, 401, 403, 409, 410].map { AppStore.pairingErrorMessage(HermesError.http($0, "")) }
+        XCTAssertEqual(Set(messages).count, messages.count, "every pairing failure needs its own explanation")
+        XCTAssertEqual(AppStore.pairingErrorMessage(HermesError.http(500, "boom")), "HTTP 500: boom")
+    }
+
+    // MARK: - M1: server speech contract
+
+    func testSttProfileStatusParsesServerFields() {
+        let status = SttProfileStatus(["configured": false, "activeProvider": "browser", "reason": "browser_stt_not_available_for_mcu"])
+        XCTAssertFalse(status.configured)
+        XCTAssertEqual(status.activeProvider, "browser")
+        XCTAssertEqual(status.reason, "browser_stt_not_available_for_mcu")
+        XCTAssertFalse(status.message.isEmpty)
+        let ready = SttProfileStatus(["configured": true, "activeProvider": "openai", "reason": NSNull()])
+        XCTAssertTrue(ready.configured)
+        XCTAssertEqual(ready.activeProvider, "openai")
+    }
+
+    func testTranscriptionParsesServerResponse() {
+        let result = Transcription(["text": " hello there ", "provider": "openai", "model": "whisper-1", "language": "en", "durationMs": 1234])
+        XCTAssertEqual(result.text, "hello there")
+        XCTAssertEqual(result.provider, "openai")
+        XCTAssertEqual(result.model, "whisper-1")
+        XCTAssertEqual(result.language, "en")
+        XCTAssertEqual(result.durationMs, 1234)
+    }
+
+    func testSttFormFieldsAlwaysCarryProviderAndOptionalLanguage() {
+        XCTAssertEqual(APIClient.sttFormFields(provider: "openai", language: nil), ["provider": "openai"])
+        XCTAssertEqual(APIClient.sttFormFields(provider: "openai", language: " "), ["provider": "openai"])
+        XCTAssertEqual(APIClient.sttFormFields(provider: "local", language: "ar"), ["provider": "local", "language": "ar"])
+    }
+
+    @MainActor func testVoiceRecorderUsesSixteenKilohertzMonoPCM() {
+        let settings = VoiceRecorder.wavSettings
+        XCTAssertEqual(settings[AVFormatIDKey] as? Int, Int(kAudioFormatLinearPCM))
+        XCTAssertEqual(settings[AVSampleRateKey] as? Double, 16_000)
+        XCTAssertEqual(settings[AVNumberOfChannelsKey] as? Int, 1)
+        XCTAssertEqual(settings[AVLinearPCMBitDepthKey] as? Int, 16)
+        XCTAssertEqual(settings[AVLinearPCMIsFloatKey] as? Bool, false)
     }
 }
