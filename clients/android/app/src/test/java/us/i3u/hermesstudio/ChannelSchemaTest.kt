@@ -42,21 +42,18 @@ class ChannelSchemaTest {
         assertTrue(channelSpec("qqbot").fields.any { it.path == "extra.markdown_support" })
     }
 
+    /**
+     * M2: the root sections (Chat, Group Chat, Workflow, History) share the
+     * drawer shell and open it from a hamburger; nested pages carry a back
+     * affordance and never mount a bottom tab bar.
+     */
     @Test
-    fun allNestedAndroidPagesKeepTheRootTabsLikeIos() {
-        val files = listOf(
-            "MainActivity.kt",
-            "AgentToolScreens.kt",
-            "CronJobs.kt",
-            "KanbanScreens.kt",
-        ).associateWith { name ->
-            File("src/main/java/us/i3u/hermesstudio/$name").readText()
-        }
+    fun nestedAndroidPagesLeaveTheDrawerToTheRootSections() {
+        val files = listOf("MainActivity.kt", "AgentToolScreens.kt", "CronJobs.kt", "KanbanScreens.kt", "StudioOperationsScreens.kt", "ui/chat/ConversationScreen.kt", "ui/sessions/HistoryScreen.kt")
+            .associateWith { File("src/main/java/us/i3u/hermesstudio/$it").readText() }
         val nestedScreens = listOf(
             "RoomScreen" to "MainActivity.kt",
             "ProfilesScreen" to "MainActivity.kt",
-            "SettingsScreen" to "MainActivity.kt",
-            "MoreSettingsScreen" to "MainActivity.kt",
             "SettingsGroupScreen" to "MainActivity.kt",
             "ChannelsScreen" to "MainActivity.kt",
             "ChannelScreen" to "MainActivity.kt",
@@ -73,9 +70,17 @@ class ChannelSchemaTest {
         )
         nestedScreens.forEach { (screen, file) ->
             val body = files.getValue(file).substringAfter("fun $screen").substringBefore("\n@OptIn", missingDelimiterValue = files.getValue(file).substringAfter("fun $screen"))
-            assertTrue("$screen lost its persistent root tabs", body.contains("bottomBar = { StudioTabs(state, viewModel) }"))
+            assertFalse("$screen must not mount a bottom tab bar", body.contains("StudioTabs("))
         }
-        val conversation = files.getValue("MainActivity.kt").substringAfter("private fun ConversationScreen").substringBefore("private fun MessageBubble")
-        assertFalse("Remote conversation must hide root tabs for reading space", conversation.contains("bottomBar = { StudioTabs(state, viewModel) }"))
+        listOf(
+            "MainActivity.kt" to "fun GroupsScreen",
+            "StudioOperationsScreens.kt" to "fun WorkflowsScreen",
+            "ui/chat/ConversationScreen.kt" to "fun ChatHeader",
+            "ui/sessions/HistoryScreen.kt" to "fun HistoryScreen",
+        ).forEach { (file, screen) ->
+            val body = files.getValue(file).substringAfter(screen)
+            assertTrue("$screen must open the drawer from a hamburger", body.contains("MenuButton(onMenu)"))
+        }
     }
+
 }

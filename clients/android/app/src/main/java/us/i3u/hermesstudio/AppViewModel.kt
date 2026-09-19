@@ -21,20 +21,28 @@ import kotlinx.coroutines.withContext
 
 enum class Screen {
     Loading, Onboarding, Login, Chats, Groups, AgentHub, Conversation, Room, Profiles,
-    Settings, MoreSettings, SettingsGroup, Channels, Channel, CronJobs, CronJob, CronHistory,
+    Settings, SettingsPage, SettingsGroup, History, Channels, Channel, CronJobs, CronJob, CronHistory,
     Kanban, KanbanTask, Skills, Skill, Plugins, Mcp, Pets, Insights, AgentRuntimes, Workflows, GlobalAgent, EkkoHub, Files, Logs, Connections, Journey, Webhooks, RuntimeVersions, Appearance,
 }
 
 /** Settings is a short list of these; each opens its own screen. */
 enum class SettingsGroup {
-    Account, Server, Users, Profile, Models, Agent, Memory, Compression, Sessions,
+    Account, Server, Users, Webhooks, Profile, Models, Agent, Memory, Compression, Sessions,
     Privacy, Proxy, Display, Device, About,
 }
 
-/** The app's three root destinations. Agent tools live outside Settings. */
-enum class Tab { Chats, Groups, Agent }
+/** The four-segment conversation switch in the drawer, like the web's PageSidebarNav. */
+enum class Tab { Chat, Group, Workflow, History }
 
-private fun Screen.isRootDestination() = this in setOf(Screen.Chats, Screen.Groups, Screen.AgentHub, Screen.Login, Screen.Onboarding)
+/** The screen a segment lands on; Chat keeps the open conversation when there is one. */
+private fun Tab.rootScreen(openSession: SessionSummary? = null) = when (this) {
+    Tab.Chat -> if (openSession != null) Screen.Conversation else Screen.Chats
+    Tab.Group -> Screen.Groups
+    Tab.Workflow -> Screen.Workflows
+    Tab.History -> Screen.History
+}
+
+private fun Screen.isRootDestination() = this in setOf(Screen.Chats, Screen.Groups, Screen.Workflows, Screen.History, Screen.Login, Screen.Onboarding)
 private fun Screen.isTransientDestination() = this == Screen.Loading
 
 private data class SessionBootstrap(
@@ -43,6 +51,8 @@ private data class SessionBootstrap(
     val sessions: List<SessionSummary>,
     /** A non-fatal problem met while restoring, shown as a notice once signed in. */
     val warning: String? = null,
+    /** `webui_version` from /health, when the server reports one. */
+    val version: String? = null,
 )
 
 private data class AccountSettingsData(
@@ -88,7 +98,7 @@ data class PendingRunAction(
 
 data class UiState(
     val screen: Screen = Screen.Login,
-    val tab: Tab = Tab.Chats,
+    val tab: Tab = Tab.Chat,
     val baseUrl: String = "",
     val busy: Boolean = false,
     val error: String? = null,
@@ -197,6 +207,16 @@ data class UiState(
     val sessionCategories: List<SessionCategory> = emptyList(),
     val sessionSearchResults: List<SessionSummary>? = null,
     val sessionLimit: Int = 80,
+    /** Device-side session pins for the active profile (the web keeps them in localStorage). */
+    val pinnedSessionIds: Set<String> = emptySet(),
+    /** Size of the RECENT group, 1–100. */
+    val recentCount: Int = 10,
+    /** Sessions whose run completed while another screen was open. */
+    val unreadSessionIds: Set<String> = emptySet(),
+    /** `webui_version` from /health, printed as "Core Hub v…" in the drawer footer. */
+    val serverVersion: String? = null,
+    /** False after a request failed to reach the server; true after any success. */
+    val connected: Boolean = true,
     val workflows: List<StudioWorkflow> = emptyList(),
     val workflowRuns: Map<String, List<StudioWorkflowRun>> = emptyMap(),
     val workflowSchedules: Map<String, List<WorkflowSchedule>> = emptyMap(),
@@ -242,6 +262,9 @@ data class WeixinQrUi(
     val id: String = "",
     val url: String = "",
 )
+
+/** Super-admin gates the Agent Manager, Performance, Profiles and the admin settings tabs. */
+val UiState.isSuperAdmin: Boolean get() = currentUser?.role == "super_admin"
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -326,9 +349,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             group.update(store.baseUrl, store.token)
             val warning = refreshAppTokenIfDue()
             val user = api.currentUser()
-            SessionBootstrap(user, api.profiles(), api.sessions(null), warning)
+            SessionBootstrap(user, api.profiles(), api.sessions(null), warning, runCatching { api.serverVersion() }.getOrNull())
         },
-        onSuccess = { (user, profiles, sessions, warning) ->
+        onSuccess = { bootstrap ->
+            val (user, profiles, sessions, warning) = bootstrap
             _state.update {
                 it.copy(
                     screen = Screen.Chats,
@@ -341,6 +365,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     notice = warning,
                 )
             }
+            applySessionPrefs(bootstrap.version)
             syncBranding()
         },
         onFailure = { failure ->
@@ -393,7 +418,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 chat.update(normalized, token)
                 group.update(normalized, token)
                 val user = api.currentUser()
-                SessionBootstrap(user, api.profiles(), api.sessions(null))
+                SessionBootstrap(user, api.profiles(), api.sessions(null), version = runCatching { api.serverVersion() }.getOrNull())
             },
             onSuccess = { bootstrap -> enterSignedIn(normalized, bootstrap) },
         )
@@ -434,7 +459,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 chat.update(payload.backendUrl, result.token)
                 group.update(payload.backendUrl, result.token)
                 val user = api.currentUser()
-                SessionBootstrap(user, api.profiles(), api.sessions(null))
+                SessionBootstrap(user, api.profiles(), api.sessions(null), version = runCatching { api.serverVersion() }.getOrNull())
             },
             onSuccess = { bootstrap -> enterSignedIn(payload.backendUrl, bootstrap) },
         )
@@ -463,6 +488,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 notice = warning,
             )
         }
+        applySessionPrefs(bootstrap.version)
         syncBranding()
     }
 
@@ -537,6 +563,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Device-side session preferences for the active profile, plus the server version. */
+    private fun applySessionPrefs(version: String?) {
+        _state.update {
+            it.copy(
+                pinnedSessionIds = store.pinnedSessions(it.activeProfile.ifBlank { "default" }),
+                recentCount = store.recentCount,
+                serverVersion = version ?: it.serverVersion,
+                connected = true,
+            )
+        }
+    }
+
+    /** Pins are a device preference per profile, exactly like the web sidebar. */
+    fun togglePinnedSession(session: SessionSummary) {
+        val profile = _state.value.activeProfile.ifBlank { "default" }
+        val next = _state.value.pinnedSessionIds.toMutableSet().apply { if (!add(session.id)) remove(session.id) }
+        store.setPinnedSessions(profile, next)
+        _state.update { it.copy(pinnedSessionIds = next) }
+    }
+
+    /** RECENT group size (1–100), from the gear on the group header. */
+    fun setRecentCount(count: Int) {
+        store.recentCount = count
+        _state.update { it.copy(recentCount = store.recentCount) }
+    }
+
     /** Pulls the Studio logo from the connected server for the launch screen. */
     private fun syncBranding(force: Boolean = false) {
         viewModelScope.launch {
@@ -546,25 +598,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── lists ─────────────────────────────────────────────────────────────
 
+    /** The drawer's conversation switch: Chat, Group Chat, Workflow, History. */
     fun showTab(tab: Tab) {
-        if (_state.value.screen == Screen.Conversation) cancelActiveRun(abort = false)
+        if (_state.value.screen == Screen.Conversation && tab != Tab.Chat) cancelActiveRun(abort = false)
         navigationHistory.clear()
         _state.update { it.copy(tab = tab, error = null) }
         when (tab) {
-            Tab.Chats -> {
-                _state.update { it.copy(screen = Screen.Chats) }
+            Tab.Chat -> {
+                _state.update { it.copy(screen = Tab.Chat.rootScreen(it.openSession)) }
                 if (_state.value.sessions.isEmpty()) refreshSessions()
             }
-            Tab.Groups -> {
+            Tab.Group -> {
                 _state.update { it.copy(screen = Screen.Groups) }
                 if (_state.value.rooms.isEmpty()) refreshRooms()
             }
-            Tab.Agent -> {
-                _state.update { it.copy(screen = Screen.AgentHub) }
-                refreshServerConfig()
-                if (_state.value.cronJobs.isEmpty()) refreshCronJobs()
+            Tab.Workflow -> openWorkflows()
+            Tab.History -> {
+                _state.update { it.copy(screen = Screen.History) }
+                refreshSessions()
+                loadSessionCategories()
             }
         }
+    }
+
+    /** Agent Manager (super-admin): every agent tool in one place. */
+    fun openAgentManager() {
+        _state.update { it.copy(screen = Screen.AgentHub, error = null, notice = null) }
+        refreshServerConfig()
+        if (_state.value.cronJobs.isEmpty()) refreshCronJobs()
     }
 
     fun refreshSessions() {
@@ -574,12 +635,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { api.sessions(profile, _state.value.sessionLimit) } }
                 .onSuccess { sessions ->
-                    _state.update { it.copy(sessions = sessions, refreshingSessions = false) }
+                    _state.update { it.copy(sessions = sessions, refreshingSessions = false, connected = true) }
                 }
                 .onFailure { failure ->
                     _state.update {
                         it.copy(
                             refreshingSessions = false,
+                            connected = failure !is java.io.IOException,
                             error = failure.readableMessage(localized),
                         )
                     }
@@ -806,7 +868,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 activeProfile = name,
                 screen = Screen.Chats,
-                tab = Tab.Chats,
+                tab = Tab.Chat,
                 openSession = null,
                 lines = emptyList(),
                 attachments = emptyList(),
@@ -820,6 +882,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 autoStart = null,
             )
         }
+        applySessionPrefs(null)
     }
 
     // ── conversation ──────────────────────────────────────────────────────
@@ -836,6 +899,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 screen = Screen.Conversation,
                 openSession = session,
+                unreadSessionIds = it.unreadSessionIds - session.id,
                 sessionModel = session.model,
                 sessionProvider = session.provider,
                 contextTokens = 0,
@@ -1439,7 +1503,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (activeRunSessionId != sessionId) return
         activeRunSessionId = null
         runJob = null
-        _state.update { it.copy(sending = false, activity = null) }
+        _state.update {
+            // A reply that landed while another screen was open earns the
+            // unread dot in the session list, as in the web sidebar.
+            val away = it.screen != Screen.Conversation || it.openSession?.id != sessionId
+            it.copy(
+                sending = false,
+                activity = null,
+                unreadSessionIds = if (away) it.unreadSessionIds + sessionId else it.unreadSessionIds,
+            )
+        }
     }
 
     private class SocketUnavailable(message: String) : Exception(message)
@@ -2463,7 +2536,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 openGroup = group,
                 toolReturnScreen = when (it.screen) {
                     Screen.AgentHub -> Screen.AgentHub
-                    Screen.MoreSettings -> Screen.MoreSettings
+                    Screen.SettingsPage -> Screen.SettingsPage
                     else -> Screen.Settings
                 },
                 error = null,
@@ -2475,6 +2548,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 loadingModelProviders = group == SettingsGroup.Models,
             )
         }
+        loadSettingsGroup(group)
+    }
+
+    /** The tabbed Settings page (web tab order); [group] is the tab shown first. */
+    fun openSettingsPage(group: SettingsGroup = SettingsGroup.Account) {
+        _state.update { it.copy(screen = Screen.SettingsPage, error = null, notice = null) }
+        selectSettingsTab(group)
+    }
+
+    /** Switches the Settings page tab in place and loads what that tab needs. */
+    fun selectSettingsTab(group: SettingsGroup) {
+        _state.update {
+            it.copy(
+                openGroup = group,
+                error = null,
+                loadingAgentSettings = group == SettingsGroup.Agent,
+                loadingStudioSettings = group in STUDIO_CONFIG_GROUPS,
+                loadingAccountSettings = group == SettingsGroup.Account,
+                loadingManagedUsers = group == SettingsGroup.Users,
+                loadingModelProviders = group == SettingsGroup.Models,
+            )
+        }
+        loadSettingsGroup(group)
+    }
+
+    private fun loadSettingsGroup(group: SettingsGroup) {
         if (group == SettingsGroup.Agent) loadAgentSettings()
         if (group == SettingsGroup.Profile) loadModels()
         if (group in STUDIO_CONFIG_GROUPS) loadStudioSettings()
@@ -2769,7 +2868,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 screen = Screen.CronJobs,
                 toolReturnScreen = when (it.screen) {
                     Screen.AgentHub -> Screen.AgentHub
-                    Screen.MoreSettings -> Screen.MoreSettings
+                    Screen.SettingsPage -> Screen.SettingsPage
                     else -> Screen.Settings
                 },
                 error = null,
@@ -3030,7 +3129,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 screen = Screen.Channels,
                 toolReturnScreen = when (it.screen) {
                     Screen.AgentHub -> Screen.AgentHub
-                    Screen.MoreSettings -> Screen.MoreSettings
+                    Screen.SettingsPage -> Screen.SettingsPage
                     else -> Screen.Settings
                 },
                 error = null,
@@ -3049,14 +3148,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openProfiles() {
         _state.update { state ->
             val parent = when (state.screen) {
-                Screen.Chats, Screen.Groups, Screen.AgentHub,
-                Screen.Settings, Screen.SettingsGroup, Screen.MoreSettings,
+                Screen.Chats, Screen.Conversation, Screen.Groups, Screen.Workflows, Screen.History, Screen.AgentHub,
+                Screen.Settings, Screen.SettingsGroup, Screen.SettingsPage,
                 -> state.screen
-                else -> when (state.tab) {
-                    Tab.Groups -> Screen.Groups
-                    Tab.Agent -> Screen.AgentHub
-                    Tab.Chats -> Screen.Chats
-                }
+                else -> state.tab.rootScreen(state.openSession)
             }
             state.copy(
                 screen = Screen.Profiles,
@@ -3065,10 +3160,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 notice = null,
             )
         }
-    }
-
-    fun openMoreSettings() {
-        _state.update { it.copy(screen = Screen.MoreSettings, error = null, notice = null, openGroup = null) }
     }
 
     fun openChannel(platform: String) {
@@ -3353,21 +3444,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 Screen.CronJob, Screen.CronHistory -> Screen.CronJobs
                 Screen.KanbanTask -> Screen.Kanban
                 Screen.Skill -> Screen.Skills
-                Screen.Kanban, Screen.Skills, Screen.Plugins, Screen.Mcp, Screen.Pets, Screen.Insights, Screen.AgentRuntimes, Screen.Workflows, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files, Screen.Logs, Screen.Connections, Screen.Journey, Screen.Webhooks, Screen.RuntimeVersions, Screen.Appearance -> Screen.AgentHub
+                Screen.Kanban, Screen.Skills, Screen.Plugins, Screen.Mcp, Screen.AgentRuntimes, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files, Screen.Connections, Screen.Webhooks, Screen.RuntimeVersions -> Screen.AgentHub
+                Screen.Pets, Screen.Insights, Screen.Logs, Screen.Journey, Screen.Appearance, Screen.SettingsPage -> Screen.Settings
                 Screen.Channels, Screen.SettingsGroup, Screen.CronJobs -> state.toolReturnScreen
                 Screen.Profiles -> state.profilesReturnScreen
-                Screen.MoreSettings -> Screen.Settings
-                else -> when (state.tab) {
-                    Tab.Groups -> Screen.Groups
-                    Tab.Agent -> Screen.AgentHub
-                    Tab.Chats -> Screen.Chats
-                }
+                else -> state.tab.rootScreen(state.openSession.takeUnless { state.screen == Screen.Conversation })
             }
             consumingBackNavigation = true
             state.copy(
                 screen = target,
                 error = null,
                 openSession = state.openSession.takeUnless { state.screen == Screen.Conversation },
+                lines = if (state.screen == Screen.Conversation) emptyList() else state.lines,
                 openRoom = state.openRoom.takeUnless { state.screen == Screen.Room },
                 attachments = if (state.screen == Screen.Conversation) emptyList() else state.attachments,
                 sessionModel = state.sessionModel.takeUnless { state.screen == Screen.Conversation },
@@ -3460,11 +3548,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { work() } }
                 .onSuccess {
-                    _state.update { state -> state.copy(busy = false) }
+                    _state.update { state -> state.copy(busy = false, connected = true) }
                     onSuccess(it)
                 }
                 .onFailure { failure ->
-                    _state.update { state -> state.copy(busy = false) }
+                    // Only a transport failure means "disconnected"; an HTTP
+                    // error proves the server answered.
+                    _state.update { state -> state.copy(busy = false, connected = failure !is java.io.IOException) }
                     if (onFailure != null) onFailure(failure)
                     else _state.update { state -> state.copy(error = failure.readableMessage(localized)) }
                 }

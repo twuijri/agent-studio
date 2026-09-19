@@ -184,8 +184,11 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import us.i3u.hermesstudio.ui.sessions.formatStamp
-import us.i3u.hermesstudio.ui.theme.CoreHubTheme
+import us.i3u.hermesstudio.ui.chat.*
+import us.i3u.hermesstudio.ui.navigation.*
+import us.i3u.hermesstudio.ui.sessions.*
+import us.i3u.hermesstudio.ui.settings.*
+import us.i3u.hermesstudio.ui.theme.*
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import androidx.lifecycle.Lifecycle
@@ -273,14 +276,15 @@ private fun App(viewModel: AppViewModel = viewModel()) {
 private fun AppContent(state: UiState, viewModel: AppViewModel) {
 
     // The system back gesture belongs to the app while there is somewhere to go
-    // back to. Only the two root lists let it fall through and close the app.
+    // back to. Only the Chat section lets it fall through and close the app.
     when (state.screen) {
-        Screen.Conversation, Screen.Room, Screen.Profiles, Screen.Settings,
-        Screen.MoreSettings, Screen.SettingsGroup, Screen.Channels, Screen.Channel, Screen.CronJobs,
-        Screen.CronJob, Screen.CronHistory, Screen.Kanban, Screen.KanbanTask, Screen.Skills,
-        Screen.Skill, Screen.Plugins, Screen.Mcp, Screen.Pets, Screen.Insights, Screen.AgentRuntimes, Screen.Workflows, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files, Screen.Logs, Screen.Connections, Screen.Journey, Screen.Webhooks, Screen.RuntimeVersions, Screen.Appearance,
+        Screen.Conversation, Screen.Room, Screen.Profiles, Screen.Settings, Screen.SettingsPage,
+        Screen.SettingsGroup, Screen.Channels, Screen.Channel, Screen.CronJobs, Screen.CronJob, Screen.CronHistory,
+        Screen.Kanban, Screen.KanbanTask, Screen.Skills, Screen.Skill, Screen.Plugins, Screen.Mcp, Screen.Pets,
+        Screen.Insights, Screen.AgentRuntimes, Screen.AgentHub, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files,
+        Screen.Logs, Screen.Connections, Screen.Journey, Screen.Webhooks, Screen.RuntimeVersions, Screen.Appearance,
         -> BackHandler { viewModel.back() }
-        Screen.Groups, Screen.AgentHub -> BackHandler { viewModel.showTab(Tab.Chats) }
+        Screen.Groups, Screen.Workflows, Screen.History -> BackHandler { viewModel.showTab(Tab.Chat) }
         else -> Unit
     }
 
@@ -296,8 +300,8 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
             languageAction = { LanguageAction(state, viewModel) },
             onDone = { viewModel.finishOnboarding() },
         )
-        Screen.Settings -> SettingsScreen(state, viewModel)
-        Screen.MoreSettings -> MoreSettingsScreen(state, viewModel)
+        Screen.Settings -> SettingsDrawerScreen(state, viewModel)
+        Screen.SettingsPage -> SettingsPageScreen(state, viewModel)
         Screen.SettingsGroup -> SettingsGroupScreen(state, viewModel)
         Screen.Channels -> ChannelsScreen(state, viewModel)
         Screen.Channel -> ChannelScreen(state, viewModel)
@@ -313,7 +317,6 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
         Screen.Pets -> PetsScreen(state, viewModel)
         Screen.Insights -> InsightsScreen(state, viewModel)
         Screen.AgentRuntimes -> AgentRuntimeScreen(state, viewModel)
-        Screen.Workflows -> WorkflowsScreen(state, viewModel)
         Screen.GlobalAgent -> GlobalAgentScreen(state, viewModel)
         Screen.EkkoHub -> EkkoHubScreen(state, viewModel)
         Screen.Files -> FilesScreen(state, viewModel)
@@ -324,10 +327,12 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
         Screen.RuntimeVersions -> RuntimeVersionsScreen(state, viewModel)
         Screen.Appearance -> AppearanceScreen(state, viewModel)
         Screen.Login -> LoginScreen(state, viewModel)
-        Screen.Chats -> ChatsScreen(state, viewModel)
-        Screen.Groups -> GroupsScreen(state, viewModel)
+        // The four sections of the conversation switch share the drawer shell.
+        Screen.Chats, Screen.Conversation -> HomeShell(state, viewModel) { openDrawer -> ConversationScreen(state, viewModel, onMenu = openDrawer) }
+        Screen.Groups -> HomeShell(state, viewModel) { openDrawer -> GroupsScreen(state, viewModel, onMenu = openDrawer) }
+        Screen.Workflows -> HomeShell(state, viewModel) { openDrawer -> WorkflowsScreen(state, viewModel, onMenu = openDrawer) }
+        Screen.History -> HomeShell(state, viewModel) { openDrawer -> HistoryScreen(state, viewModel, onMenu = openDrawer) }
         Screen.AgentHub -> AgentHubScreen(state, viewModel)
-        Screen.Conversation -> ConversationScreen(state, viewModel)
         Screen.Room -> RoomScreen(state, viewModel)
         Screen.Profiles -> ProfilesScreen(state, viewModel)
     }
@@ -439,274 +444,11 @@ private fun LoginScreen(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-// ── conversation list ────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
-@Composable
-private fun ChatsScreen(state: UiState, viewModel: AppViewModel) {
-    var manage by remember { mutableStateOf<SessionSummary?>(null) }
-    var rename by remember { mutableStateOf<SessionSummary?>(null) }
-    var confirmDelete by remember { mutableStateOf<SessionSummary?>(null) }
-    var query by rememberSaveable { mutableStateOf("") }
-    var newCategory by remember { mutableStateOf(false) }
-    var editCategory by remember { mutableStateOf<SessionCategory?>(null) }
-    var deleteCategory by remember { mutableStateOf<SessionCategory?>(null) }
-    var workspaceFor by remember { mutableStateOf<SessionSummary?>(null) }
-    var deleteVisible by remember { mutableStateOf(false) }
-    val visibleSessions = remember(state.sessions, state.sessionSearchResults, query) {
-        val clean = query.trim()
-        if (clean.isBlank()) state.sessions else state.sessionSearchResults.orEmpty()
-    }
-    LaunchedEffect(query) { viewModel.searchSessions(query) }
-    LaunchedEffect(Unit) { viewModel.loadSessionCategories() }
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = state.refreshingSessions,
-        onRefresh = viewModel::refreshSessions,
-    )
-
-    manage?.let { session ->
-        ModalBottomSheet(
-            onDismissRequest = { manage = null },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            SheetTitle(session.title)
-            ManageSheet(
-                onRename = {
-                    manage = null
-                    rename = session
-                },
-                onDelete = {
-                    manage = null
-                    confirmDelete = session
-                },
-            )
-            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { viewModel.archiveSession(session); manage = null }) {
-                Text(stringResource(if (session.archived) R.string.session_unarchive else R.string.session_archive), Modifier.fillMaxWidth())
-            }
-            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { viewModel.exportSession(session); manage = null }) { Text(stringResource(R.string.session_export), Modifier.fillMaxWidth()) }
-            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { workspaceFor = session; manage = null }) { Text(stringResource(R.string.session_workspace), Modifier.fillMaxWidth()) }
-            state.sessionCategories.forEach { category ->
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) { TextButton(modifier = Modifier.weight(1f), onClick = { viewModel.setSessionCategory(session, category.id); manage = null }) { Text(stringResource(R.string.session_move_category, category.name), Modifier.fillMaxWidth()) }; TextButton(onClick = { editCategory = category; manage = null }) { Text(stringResource(R.string.action_edit)) }; TextButton(onClick = { deleteCategory = category; manage = null }) { Text(stringResource(R.string.action_delete)) } }
-            }
-            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { manage = null; newCategory = true }) {
-                Text(stringResource(R.string.session_new_category), Modifier.fillMaxWidth())
-            }
-        }
-    }
-    if (newCategory) TextPromptDialog(
-        title = stringResource(R.string.session_new_category), initial = "", hint = stringResource(R.string.session_category_name), action = stringResource(R.string.action_create),
-        onConfirm = { viewModel.createSessionCategory(it); newCategory = false }, onDismiss = { newCategory = false },
-    )
-    editCategory?.let { category -> TextPromptDialog(title = stringResource(R.string.session_category_edit), initial = category.name, hint = category.name, action = stringResource(R.string.action_save), onConfirm = { viewModel.renameSessionCategory(category, it); editCategory = null }, onDismiss = { editCategory = null }) }
-    deleteCategory?.let { category -> ConfirmDialog(title = stringResource(R.string.action_delete), body = category.name, action = stringResource(R.string.action_delete), onConfirm = { viewModel.deleteSessionCategory(category); deleteCategory = null }, onDismiss = { deleteCategory = null }) }
-    if (deleteVisible) ConfirmDialog(title = stringResource(R.string.session_batch_delete), body = stringResource(R.string.session_batch_delete_body, visibleSessions.size), action = stringResource(R.string.action_delete), onConfirm = { viewModel.batchDeleteVisibleSessions(); deleteVisible = false }, onDismiss = { deleteVisible = false })
-    workspaceFor?.let { session -> TextPromptDialog(title = stringResource(R.string.session_workspace), initial = session.workspace.orEmpty(), hint = "/workspace", action = stringResource(R.string.action_save), onConfirm = { viewModel.setSessionWorkspace(session, it); workspaceFor = null }, onDismiss = { workspaceFor = null }) }
-    rename?.let { session ->
-        TextPromptDialog(
-            title = stringResource(R.string.chats_rename_title),
-            initial = session.title,
-            hint = session.title,
-            action = stringResource(R.string.action_rename),
-            onConfirm = { viewModel.renameSession(session, it) },
-            onDismiss = { rename = null },
-        )
-    }
-    confirmDelete?.let { session ->
-        ConfirmDialog(
-            title = stringResource(R.string.chats_delete_title),
-            body = stringResource(R.string.chats_delete_body),
-            action = stringResource(R.string.action_delete),
-            onConfirm = { viewModel.deleteSession(session) },
-            onDismiss = { confirmDelete = null },
-        )
-    }
-
-    Scaffold(
-        topBar = {
-            StudioLargeTopBar(
-                title = stringResource(R.string.chats_title),
-                navigationIcon = {
-                    IconButton(onClick = { viewModel.openProfiles() }) {
-                        ProfileAvatar(
-                            name = state.activeProfile.ifBlank { "default" },
-                            spec = state.avatarOf(state.activeProfile),
-                            size = 34.dp,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { deleteVisible = true }, enabled = visibleSessions.isNotEmpty()) { Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.session_batch_delete)) }
-                    IconButton(
-                        onClick = { viewModel.refreshSessions() },
-                        enabled = !state.refreshingSessions,
-                    ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh), tint = MaterialTheme.colorScheme.primary)
-                    }
-                    IconButton(onClick = { viewModel.startNewConversation() }) {
-                        Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.action_new_chat), tint = MaterialTheme.colorScheme.primary)
-                    }
-                },
-            )
-        },
-        bottomBar = { StudioTabs(state, viewModel) },
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .pullRefresh(pullRefreshState),
-        ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = StudioHorizontalPadding, end = StudioHorizontalPadding, top = 8.dp, bottom = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                item { ProfileFilterRow(state, viewModel) }
-                item {
-                    StudioSearchField(
-                        value = query,
-                        onValueChange = { query = it },
-                        placeholder = stringResource(R.string.action_search),
-                    )
-                }
-                if (state.busy) item { LoadingRow() }
-                state.error?.let { message -> item { ErrorNote(message) { viewModel.dismissError() } } }
-                if (!state.busy && visibleSessions.isEmpty()) {
-                    item { EmptyNote(stringResource(R.string.chats_empty)) }
-                } else if (visibleSessions.isNotEmpty()) {
-                    item {
-                        StudioGroupedCard {
-                            visibleSessions.forEachIndexed { index, session ->
-                                SessionRow(
-                                    session = session,
-                                    avatar = state.avatarOf(session.profile),
-                                    onClick = { viewModel.openSession(session) },
-                                    onLongClick = { manage = session },
-                                )
-                                if (index != visibleSessions.lastIndex) StudioCardDivider(startIndent = 76)
-                            }
-                        }
-                    }
-                    if (query.isBlank()) item { TextButton(onClick = viewModel::loadMoreSessions, Modifier.fillMaxWidth()) { Text(stringResource(R.string.load_more)) } }
-                }
-            }
-            PullRefreshIndicator(
-                refreshing = state.refreshingSessions,
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter),
-                backgroundColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary,
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun SessionRow(
-    session: SessionSummary,
-    avatar: AvatarSpec?,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 14.dp, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ProfileAvatar(
-            name = session.profile.orEmpty().ifBlank { "default" },
-            spec = avatar,
-            size = 48.dp,
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = session.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = formatStamp(session.updatedAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                text = listOfNotNull(session.agentId ?: session.source.takeIf { it != "cli" }, session.profile, session.model).joinToString(" · "),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-        )
-    }
-}
-
-/** The avatar Studio shows for a profile, or null when it is not loaded yet. */
-private fun UiState.avatarOf(profile: String?): AvatarSpec? {
-    val name = profile?.ifBlank { null } ?: activeProfile
-    return profiles.firstOrNull { it.name == name }?.avatar
-}
-
-@Composable
-private fun ProfileFilterRow(state: UiState, viewModel: AppViewModel) {
-    var open by remember { mutableStateOf(false) }
-    val label = state.profileFilter.ifBlank { stringResource(R.string.chats_all_profiles) }
-
-    Box {
-        StudioGroupedCard {
-            Row(
-                modifier = Modifier.fillMaxWidth().clickable { open = true }.padding(horizontal = 16.dp, vertical = 15.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(12.dp))
-                Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(5.dp))
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.weight(1f))
-                Text(
-                    "${state.sessions.size} ${stringResource(R.string.chats_section)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.chats_all_profiles)) },
-                onClick = {
-                    open = false
-                    viewModel.setProfileFilter("")
-                },
-            )
-            state.profiles.forEach { profile ->
-                DropdownMenuItem(
-                    text = { Text(profile.name) },
-                    onClick = {
-                        open = false
-                        viewModel.setProfileFilter(profile.name)
-                    },
-                )
-            }
-        }
-    }
-}
-
 // ── group rooms ──────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun GroupsScreen(state: UiState, viewModel: AppViewModel) {
+private fun GroupsScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Unit) {
     var creating by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<Room?>(null) }
 
@@ -731,6 +473,7 @@ private fun GroupsScreen(state: UiState, viewModel: AppViewModel) {
         topBar = {
             StudioLargeTopBar(
                 title = stringResource(R.string.groups_title),
+                navigationIcon = { MenuButton(onMenu) },
                 actions = {
                     IconButton(onClick = { viewModel.refreshRooms() }) {
                         Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh), tint = MaterialTheme.colorScheme.primary)
@@ -741,7 +484,6 @@ private fun GroupsScreen(state: UiState, viewModel: AppViewModel) {
                 },
             )
         },
-        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -886,7 +628,6 @@ private fun RoomScreen(state: UiState, viewModel: AppViewModel) {
                 onBack = { viewModel.back() },
             )
         },
-        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).imePadding()) {
             if (state.loadingHistory) LoadingRow()
@@ -971,645 +712,6 @@ private fun RoomScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
     }
-}
-
-// ── conversation ─────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, ExperimentalFoundationApi::class)
-@Composable
-private fun ConversationScreen(state: UiState, viewModel: AppViewModel) {
-    var draft by rememberSaveable { mutableStateOf("") }
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboardManager.current
-    var actionLine by remember { mutableStateOf<ChatLine?>(null) }
-    var replyingTo by remember { mutableStateOf<ChatLine?>(null) }
-    val conversationKey = state.openSession?.id ?: "new"
-    var reachedInitialBottom by remember(conversationKey) { mutableStateOf(false) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var clarification by rememberSaveable(state.pendingRunAction?.id) { mutableStateOf("") }
-
-    state.pendingRunAction?.let { action ->
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text(stringResource(if (action.kind == RequiredAction.Approval) R.string.run_approval_title else R.string.run_clarification_title)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(action.prompt.ifBlank { stringResource(if (action.kind == RequiredAction.Approval) R.string.run_requires_approval else R.string.run_requires_clarification) })
-                    if (action.kind == RequiredAction.Approval && action.options.count { it != "deny" } > 1) {
-                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            action.options.filter { it != "deny" }.forEach { choice ->
-                                AssistChip(
-                                    onClick = { viewModel.resolveRunAction(choice) },
-                                    label = { Text(stringResource(when (choice) {
-                                        "session" -> R.string.approval_session
-                                        "always" -> R.string.approval_always
-                                        else -> R.string.approval_once
-                                    })) },
-                                )
-                            }
-                        }
-                    }
-                    if (action.kind == RequiredAction.Clarification) {
-                        if (action.options.isNotEmpty()) {
-                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                action.options.forEach { choice ->
-                                    AssistChip(onClick = { clarification = choice }, label = { Text(choice) })
-                                }
-                            }
-                        }
-                        OutlinedTextField(
-                            value = clarification,
-                            onValueChange = { clarification = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text(stringResource(R.string.run_clarification_answer)) },
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = action.kind == RequiredAction.Approval || clarification.isNotBlank(),
-                    onClick = { viewModel.resolveRunAction(if (action.kind == RequiredAction.Approval) action.options.firstOrNull() ?: "once" else clarification.trim()) },
-                ) { Text(stringResource(if (action.kind == RequiredAction.Approval) R.string.action_approve else R.string.action_send)) }
-            },
-            dismissButton = if (action.kind == RequiredAction.Approval) {
-                { TextButton(onClick = { viewModel.resolveRunAction(action.options.firstOrNull { it == "deny" } ?: "deny") }) { Text(stringResource(R.string.action_reject)) } }
-            } else null,
-        )
-    }
-
-    // A run continues in Studio after the mobile stream is detached. Reload
-    // the server history whenever the app returns to the foreground so a reply
-    // completed while the user was away is shown immediately.
-    DisposableEffect(lifecycleOwner, conversationKey) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && state.openSession != null) {
-                viewModel.refreshConversation()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    LaunchedEffect(conversationKey, state.loadingHistory, state.lines.size) {
-        if (!state.loadingHistory && state.lines.isNotEmpty()) {
-            val last = state.lines.lastIndex
-            if (!reachedInitialBottom) {
-                // A huge offset is intentionally clamped by LazyColumn to the
-                // real end, including when the final message is taller than the
-                // viewport. Animation from the first message made old chats
-                // appear to open at the top.
-                listState.scrollToItem(last, Int.MAX_VALUE / 2)
-                reachedInitialBottom = true
-            } else {
-                listState.animateScrollToItem(last, Int.MAX_VALUE / 2)
-            }
-        }
-    }
-
-    val profile = state.openSession?.profile ?: state.activeProfile
-    val avatar = state.avatarOf(profile)
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = state.loadingHistory,
-        onRefresh = { viewModel.refreshConversation() },
-    )
-    actionLine?.let { line ->
-        ModalBottomSheet(
-            onDismissRequest = { actionLine = null },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            SheetTitle(stringResource(R.string.message_actions))
-            TextButton(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                onClick = {
-                    clipboard.setText(AnnotatedString(line.text))
-                    actionLine = null
-                },
-            ) { Text(stringResource(R.string.message_copy), modifier = Modifier.fillMaxWidth()) }
-            TextButton(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                onClick = { replyingTo = line; actionLine = null },
-            ) { Text(stringResource(R.string.message_reply), modifier = Modifier.fillMaxWidth()) }
-            TextButton(
-                enabled = !state.sending,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                onClick = { actionLine = null; viewModel.send("/fork") },
-            ) { Text(stringResource(R.string.message_fork), modifier = Modifier.fillMaxWidth()) }
-            Spacer(Modifier.height(18.dp))
-        }
-    }
-    Scaffold(
-        // The composer applies the IME inset itself. Scaffold's default system
-        // bottom inset would otherwise be added above the keyboard as a second,
-        // empty navigation-bar-sized strip.
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            ConversationTopBar(state, profile, avatar, viewModel)
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .imePadding(),
-        ) {
-            Box(
-                modifier = Modifier.weight(1f).fillMaxWidth().pullRefresh(pullRefreshState),
-            ) {
-                if (state.lines.isEmpty() && !state.loadingHistory) {
-                    Text(
-                        stringResource(
-                            R.string.conversation_empty,
-                            profile.ifBlank { stringResource(R.string.conversation_your_agent) },
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                } else {
-                LazyColumn(
-                    state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(state.lines) { line ->
-                        MessageBubble(
-                            line = line,
-                            profile = profile.ifBlank { "default" },
-                            avatar = avatar,
-                            onActions = { actionLine = line },
-                            onDownload = { file ->
-                                viewModel.downloadChatFile(file, profile.ifBlank { "default" })
-                            },
-                        )
-                    }
-                }
-                }
-                PullRefreshIndicator(
-                    refreshing = state.loadingHistory,
-                    state = pullRefreshState,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    backgroundColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                )
-                if (reachedInitialBottom && listState.canScrollForward && state.lines.isNotEmpty()) {
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(14.dp)
-                            .size(46.dp)
-                            .clickable {
-                                scope.launch {
-                                    listState.animateScrollToItem(state.lines.lastIndex, Int.MAX_VALUE / 2)
-                                }
-                            },
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        tonalElevation = 5.dp,
-                        shadowElevation = 5.dp,
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Filled.KeyboardArrowDown,
-                                contentDescription = stringResource(R.string.conversation_jump_latest),
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (state.sending && state.lines.none { it.streaming }) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp))
-                    Text(
-                        state.activity?.let { stringResource(R.string.conversation_tool, it) }
-                            ?: stringResource(R.string.conversation_thinking),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-
-            if (state.queuedRuns.isNotEmpty() || state.backgroundAgentRuns.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    state.queuedRuns.forEach { queued ->
-                        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                            Row(Modifier.padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(stringResource(R.string.queued_run_summary, queued.position, queued.preview), maxLines = 1, style = MaterialTheme.typography.labelMedium)
-                                IconButton(onClick = { viewModel.insertQueuedRun(queued.id) }) { Icon(Icons.Filled.KeyboardArrowUp, stringResource(R.string.queued_run_insert)) }
-                                IconButton(onClick = { viewModel.cancelQueuedRun(queued.id) }) { Icon(Icons.Filled.Close, stringResource(R.string.queued_run_cancel)) }
-                            }
-                        }
-                    }
-                    state.backgroundAgentRuns.forEach { agent ->
-                        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                            Text(stringResource(R.string.background_agent_summary, agent.label, agent.status), modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), maxLines = 1, style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
-                }
-            }
-
-            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
-            state.notice?.let { NoticeNote(it) { viewModel.dismissNotice() } }
-
-            replyingTo?.let { quoted ->
-                Surface(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(stringResource(R.string.message_replying), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                            Text(quoted.text, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                        }
-                        IconButton(onClick = { replyingTo = null }) { Icon(Icons.Filled.Close, stringResource(R.string.action_cancel)) }
-                    }
-                }
-            }
-            Composer(
-                state = state,
-                draft = draft,
-                onDraftChange = { draft = it },
-                onSend = {
-                    viewModel.send(replyingTo?.let { quoteForReply(it.text, draft) } ?: draft)
-                    draft = ""
-                    replyingTo = null
-                },
-                viewModel = viewModel,
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ConversationTopBar(state: UiState, profile: String, avatar: AvatarSpec?, viewModel: AppViewModel) {
-    var menuOpen by remember { mutableStateOf(false) }
-    TopAppBar(
-        title = {
-            Surface(
-                shape = RoundedCornerShape(22.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                tonalElevation = 2.dp,
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ProfileAvatar(profile.ifBlank { "default" }, avatar, size = 27.dp)
-                    Column {
-                        Text(state.openSession?.title ?: stringResource(R.string.action_new_chat), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            state.selectedRuntime.name,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        },
-        navigationIcon = {
-            Surface(modifier = Modifier.padding(start = 7.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
-                IconButton(onClick = { viewModel.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) }
-            }
-        },
-        actions = {
-            Box {
-                Surface(modifier = Modifier.padding(end = 7.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
-                    IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.message_actions)) }
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(text = { Text(stringResource(R.string.action_refresh)) }, onClick = { menuOpen = false; viewModel.refreshConversation() })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.action_new_chat)) }, onClick = { menuOpen = false; viewModel.startNewConversation() })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.message_fork)) }, enabled = !state.sending, onClick = { menuOpen = false; viewModel.send("/fork") })
-                }
-            }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-    )
-}
-
-@Composable
-private fun MessageBubble(
-    line: ChatLine,
-    profile: String? = null,
-    avatar: AvatarSpec? = null,
-    onActions: (() -> Unit)? = null,
-    onDownload: ((ChatFileLink) -> Unit)? = null,
-) {
-    val parsed = remember(line.text, onDownload != null) {
-        if (onDownload == null) ParsedChatMessage(line.text, emptyList()) else parseChatMessage(line.text)
-    }
-    val alignment = if (line.fromUser) Alignment.CenterEnd else Alignment.CenterStart
-    val hasThinking = !line.fromUser && (
-        line.streaming || line.reasoning?.isNotBlank() == true || line.tools.isNotEmpty()
-    )
-    val wide = !line.fromUser || hasThinking || parsed.files.isNotEmpty()
-    val container = when {
-        line.isError -> MaterialTheme.colorScheme.errorContainer
-        line.fromUser -> MaterialTheme.colorScheme.surfaceVariant
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
-        Row(
-            modifier = if (wide) Modifier.fillMaxWidth() else Modifier,
-            verticalAlignment = if (wide) Alignment.Top else Alignment.Bottom,
-        ) {
-            // The agent's picture rides with its own replies, the way Studio
-            // shows it in the transcript.
-            if (!line.fromUser && !profile.isNullOrBlank()) {
-                ProfileAvatar(profile, avatar, size = 26.dp)
-                Spacer(Modifier.width(8.dp))
-            }
-            Card(
-                modifier = (if (wide) Modifier.weight(1f) else Modifier).combinedClickable(
-                    enabled = onActions != null,
-                    onClick = { onActions?.invoke() },
-                    onLongClick = { onActions?.invoke() },
-                ),
-                shape = RoundedCornerShape(10.dp),
-                colors = CardDefaults.cardColors(containerColor = container),
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    line.sender?.let {
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (hasThinking) ThinkingTimeline(line)
-                    if (parsed.text.isNotBlank()) {
-                        if (line.fromUser) Text(text = parsed.text) else ChatMarkdownText(text = parsed.text)
-                    }
-                    parsed.files.forEach { file ->
-                        ChatFileCard(file = file, onDownload = { onDownload?.invoke(file) })
-                    }
-                    val stamp = formatStamp(line.timestamp)
-                    if (stamp.isNotBlank()) {
-                        Text(
-                            stamp,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun quoteForReply(quoted: String, reply: String): String {
-    val excerpt = quoted.trim().lineSequence().take(8).joinToString("\n") { "> $it" }
-    return listOf(excerpt, reply.trim()).filter { it.isNotBlank() }.joinToString("\n\n")
-}
-
-@Composable
-private fun ChatFileCard(file: ChatFileLink, onDownload: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onDownload),
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(10.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
-        ) {
-            Icon(
-                Icons.AutoMirrored.Filled.InsertDriveFile,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    file.label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (file.fileName != file.label) {
-                    Text(
-                        file.fileName,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            textDirection = TextDirection.Ltr,
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            IconButton(onClick = onDownload) {
-                Icon(
-                    Icons.Filled.Download,
-                    contentDescription = stringResource(R.string.download_action),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ThinkingTimeline(line: ChatLine) {
-    var expandedOverride by rememberSaveable(line.startedAtMillis) { mutableStateOf<Boolean?>(null) }
-    val hasDetails = line.tools.isNotEmpty() || !line.reasoning.isNullOrBlank()
-    val expanded = expandedOverride ?: line.streaming
-    val nowMillis = timelineNow(line)
-    val elapsed = line.startedAtMillis?.let { formatElapsed(nowMillis - it) }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (hasDetails) Modifier.clickable { expandedOverride = !expanded }
-                    else Modifier,
-                )
-                .padding(vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            if (line.streaming) {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-            } else {
-                Icon(
-                    Icons.Filled.Psychology,
-                    contentDescription = null,
-                    modifier = Modifier.size(17.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                stringResource(R.string.thinking_title),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            elapsed?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        textDirection = TextDirection.Ltr,
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            if (hasDetails) {
-                Icon(
-                    if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                    contentDescription = stringResource(
-                        if (expanded) R.string.thinking_collapse else R.string.thinking_expand,
-                    ),
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        if (expanded) {
-            Column(
-                modifier = Modifier.padding(top = 7.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                line.tools.forEach { tool -> ToolStepRow(tool, nowMillis) }
-                line.reasoning?.takeIf { it.isNotBlank() }?.let { reasoning ->
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface,
-                        shape = RoundedCornerShape(9.dp),
-                    ) {
-                        Text(
-                            reasoning,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ToolStepRow(tool: ChatToolStep, nowMillis: Long) {
-    val seconds = tool.durationSeconds ?: if (tool.status == ToolRunStatus.Running) {
-        (nowMillis - tool.startedAtMillis).coerceAtLeast(0) / 1000.0
-    } else {
-        null
-    }
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(9.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                Icons.Filled.Build,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    tool.name,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        textDirection = TextDirection.Ltr,
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                tool.detail?.takeIf { it.isNotBlank() }?.let { detail ->
-                    Text(
-                        detail,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            textDirection = TextDirection.Ltr,
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            seconds?.let {
-                Text(
-                    formatToolDuration(it),
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        textDirection = TextDirection.Ltr,
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            when (tool.status) {
-                ToolRunStatus.Running -> CircularProgressIndicator(
-                    modifier = Modifier.size(15.dp),
-                    strokeWidth = 2.dp,
-                )
-                ToolRunStatus.Done -> Icon(
-                    Icons.Filled.Check,
-                    contentDescription = stringResource(R.string.tool_status_done),
-                    modifier = Modifier.size(17.dp),
-                    tint = androidx.compose.ui.graphics.Color(0xFF67C650),
-                )
-                ToolRunStatus.Error -> Icon(
-                    Icons.Filled.Close,
-                    contentDescription = stringResource(R.string.tool_status_failed),
-                    modifier = Modifier.size(17.dp),
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun timelineNow(line: ChatLine): Long {
-    var now by remember(line.startedAtMillis, line.finishedAtMillis) {
-        mutableLongStateOf(line.finishedAtMillis ?: System.currentTimeMillis())
-    }
-    LaunchedEffect(line.streaming, line.finishedAtMillis) {
-        if (!line.streaming) {
-            now = line.finishedAtMillis ?: System.currentTimeMillis()
-            return@LaunchedEffect
-        }
-        while (true) {
-            now = System.currentTimeMillis()
-            delay(1_000)
-        }
-    }
-    return line.finishedAtMillis ?: now
-}
-
-private fun formatElapsed(milliseconds: Long): String {
-    val totalSeconds = (milliseconds.coerceAtLeast(0) / 1000).toInt()
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return if (minutes == 0) "${seconds}s" else "${minutes}m${seconds.toString().padStart(2, '0')}s"
-}
-
-private fun formatToolDuration(seconds: Double): String = when {
-    seconds < 10 -> String.format(Locale.US, "%.1fs", seconds)
-    seconds < 60 -> "${seconds.toInt()}s"
-    else -> "${(seconds / 60).toInt()}m${(seconds.toInt() % 60).toString().padStart(2, '0')}s"
 }
 
 // ── profiles ─────────────────────────────────────────────────────────────
@@ -1711,7 +813,6 @@ private fun ProfilesScreen(state: UiState, viewModel: AppViewModel) {
                 },
             )
         },
-        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -1782,666 +883,6 @@ private fun ProfilesScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
     }
-}
-
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
-@Composable
-private fun Composer(
-    state: UiState,
-    draft: String,
-    onDraftChange: (String) -> Unit,
-    onSend: () -> Unit,
-    viewModel: AppViewModel,
-) {
-    val context = LocalContext.current
-    var sheet by remember { mutableStateOf<ComposerSheet?>(null) }
-    var captureUri by remember { mutableStateOf<Uri?>(null) }
-    var fieldFocused by remember { mutableStateOf(false) }
-    var composerExpanded by rememberSaveable { mutableStateOf(false) }
-
-    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { readAndAttach(context, it, viewModel) }
-    }
-    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { readAndAttach(context, it, viewModel) }
-    }
-    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
-        val uri = captureUri
-        captureUri = null
-        if (saved && uri != null) readAndAttach(context, uri, viewModel, fallbackName = "photo.jpg")
-    }
-    val askCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) {
-            val uri = newCaptureUri(context)
-            captureUri = uri
-            takePhoto.launch(uri)
-        }
-    }
-    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) viewModel.startVoiceInput() else viewModel.reportMicrophoneDenied()
-    }
-    // The field keeps its own selection so dictation can land at the caret and
-    // an interim hypothesis can be replaced in place while the user speaks.
-    var field by remember { mutableStateOf(TextFieldValue(draft, TextRange(draft.length))) }
-    LaunchedEffect(draft) {
-        if (field.text != draft) field = TextFieldValue(draft, TextRange(draft.length))
-    }
-    var voiceAnchor by remember { mutableStateOf<Int?>(null) }
-    var voiceLength by remember { mutableStateOf(0) }
-    LaunchedEffect(state.voiceSegment) {
-        val segment = state.voiceSegment ?: return@LaunchedEffect
-        val anchor = voiceAnchor ?: field.selection.end.coerceIn(0, field.text.length)
-        val edit = applyVoiceSegment(field.text, anchor, voiceLength, segment.text, segment.kind)
-        field = TextFieldValue(edit.text, TextRange(edit.caret))
-        onDraftChange(edit.text)
-        if (segment.kind == VoiceSegmentKind.Partial) {
-            voiceAnchor = anchor
-            voiceLength = edit.segmentLength
-        } else {
-            voiceAnchor = null
-            voiceLength = 0
-        }
-        viewModel.consumeVoiceSegment(segment.serial)
-    }
-    LaunchedEffect(state.voice) {
-        // A take that ended without a final segment leaves nothing to replace.
-        if (state.voice != VoiceStatus.Listening) {
-            voiceAnchor = null
-            voiceLength = 0
-        }
-    }
-
-    when (sheet) {
-        ComposerSheet.Options -> ModalBottomSheet(
-            onDismissRequest = { sheet = null },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            OptionsSheet(
-                state = state,
-                onCamera = {
-                    sheet = null
-                    askCamera.launch(Manifest.permission.CAMERA)
-                },
-                onGallery = {
-                    sheet = null
-                    pickImage.launch("image/*")
-                },
-                onDocument = {
-                    sheet = null
-                    pickFile.launch("*/*")
-                },
-                onModel = {
-                    viewModel.loadModels()
-                    sheet = ComposerSheet.Model
-                },
-                onReasoning = { sheet = ComposerSheet.Reasoning },
-            )
-        }
-
-        ComposerSheet.Model -> ModalBottomSheet(
-            onDismissRequest = { sheet = null },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            PickerSheet(
-                title = stringResource(R.string.sheet_model),
-                loading = state.loadingModels,
-                rows = state.models.map { option ->
-                    PickerRow(
-                        label = option.id,
-                        detail = option.provider,
-                        selected = option.id == state.sessionModel,
-                    ) {
-                        viewModel.selectModel(option)
-                        sheet = null
-                    }
-                },
-            )
-        }
-
-        ComposerSheet.Reasoning -> ModalBottomSheet(
-            onDismissRequest = { sheet = null },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            PickerSheet(
-                title = stringResource(R.string.sheet_reasoning),
-                loading = false,
-                rows = REASONING_LEVELS.map { (value, label) ->
-                    PickerRow(
-                        label = stringResource(label),
-                        detail = if (value.isBlank()) stringResource(R.string.reasoning_use_profile) else null,
-                        selected = value == state.reasoningEffort,
-                    ) {
-                        viewModel.setReasoningEffort(value)
-                        sheet = null
-                    }
-                },
-            )
-        }
-
-        null -> Unit
-    }
-
-    if (!composerExpanded && draft.isBlank() && state.attachments.isEmpty() && state.voice == VoiceStatus.Idle) {
-        Surface(
-            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            tonalElevation = 3.dp,
-            shadowElevation = 3.dp,
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                IconButton(onClick = { composerExpanded = true }, modifier = Modifier.size(42.dp)) {
-                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.composer_expand))
-                }
-                Text(
-                    stringResource(R.string.composer_hint),
-                    modifier = Modifier.weight(1f).clickable { composerExpanded = true }.padding(vertical = 10.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                ComposerActionButton(state, draft, onSend, viewModel) {
-                    askMic.launch(Manifest.permission.RECORD_AUDIO)
-                }
-            }
-        }
-        return
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 7.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 3.dp,
-        shadowElevation = 3.dp,
-    ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
-        if (state.attachments.isNotEmpty() || state.attaching) {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                state.attachments.forEach { file ->
-                    AssistChip(
-                        onClick = { viewModel.removeAttachment(file) },
-                        label = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        trailingIcon = { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_remove)) },
-                    )
-                }
-                if (state.attaching) AssistChip(onClick = {}, label = { Text(stringResource(R.string.composer_uploading)) })
-            }
-        }
-
-        if (state.voice != VoiceStatus.Idle) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                when (state.voice) {
-                    VoiceStatus.Listening -> {
-                        Icon(
-                            Icons.Filled.Mic,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            stringResource(if (state.voiceViaServer) R.string.composer_recording else R.string.composer_listening),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = { viewModel.cancelVoiceInput() }) { Text(stringResource(R.string.action_cancel)) }
-                    }
-                    VoiceStatus.Transcribing -> {
-                        CircularProgressIndicator(modifier = Modifier.size(14.dp))
-                        Text(
-                            stringResource(R.string.composer_transcribing),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    VoiceStatus.Error -> {
-                        Icon(
-                            Icons.Filled.ErrorOutline,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            state.error ?: stringResource(R.string.composer_voice_failed),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = { viewModel.resetVoice() }) { Text(stringResource(R.string.action_dismiss)) }
-                    }
-                    VoiceStatus.Idle -> Unit
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
-        ) {
-            OutlinedTextField(
-                value = field,
-                onValueChange = { value ->
-                    field = value
-                    if (value.text != draft) onDraftChange(value.text)
-                },
-                placeholder = { Text(stringResource(R.string.composer_hint)) },
-                modifier = Modifier.fillMaxWidth().onFocusChanged {
-                    if (fieldFocused && !it.isFocused && draft.isBlank() && state.attachments.isEmpty()) {
-                        composerExpanded = false
-                    }
-                    fieldFocused = it.isFocused
-                },
-                maxLines = 5,
-                shape = RoundedCornerShape(10.dp),
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Surface(
-                modifier = Modifier.size(40.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                IconButton(onClick = { sheet = ComposerSheet.Options }, enabled = !state.sending) {
-                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.composer_more))
-                }
-            }
-            Row(
-                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                ToolbarChip(
-                    icon = Icons.Filled.Person,
-                    label = state.openSession?.profile ?: state.activeProfile.ifBlank { "default" },
-                    onClick = {},
-                )
-                ToolbarChip(
-                    icon = Icons.Filled.Psychology,
-                    label = reasoningLabel(state.reasoningEffort),
-                ) { sheet = ComposerSheet.Reasoning }
-                ToolbarChip(
-                    icon = Icons.Filled.ModelTraining,
-                    label = state.sessionModel ?: stringResource(R.string.sheet_model),
-                ) {
-                    viewModel.loadModels()
-                    sheet = ComposerSheet.Model
-                }
-                if (state.speaking) {
-                    AssistChip(
-                        onClick = { viewModel.stopSpeaking() },
-                        label = { Text(stringResource(R.string.voice_stop_reply)) },
-                        leadingIcon = { Icon(Icons.Filled.Stop, null, Modifier.size(15.dp)) },
-                    )
-                }
-                ContextUsage(state)
-            }
-            ComposerActionButton(state, draft, onSend, viewModel) {
-                askMic.launch(Manifest.permission.RECORD_AUDIO)
-            }
-        }
-    }
-    }
-}
-
-@Composable
-private fun ContextUsage(state: UiState) {
-    val ratio = if (state.contextWindow > 0) {
-        (state.contextTokens.toFloat() / state.contextWindow.toFloat()).coerceIn(0f, 1f)
-    } else 0f
-    val color = when {
-        ratio > .8f -> MaterialTheme.colorScheme.error
-        ratio > .6f -> Color(0xFFD59A2D)
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    Column(modifier = Modifier.widthIn(min = 84.dp, max = 122.dp)) {
-        Text(
-            if (state.loadingContext) stringResource(R.string.context_loading)
-            else if (state.contextWindow > 0) stringResource(
-                R.string.context_usage,
-                compactNumber(state.contextTokens),
-                compactNumber(state.contextWindow),
-            ) else stringResource(R.string.context_unknown),
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            maxLines = 1,
-        )
-        LinearProgressIndicator(
-            progress = { ratio },
-            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(99.dp)),
-            color = color,
-            trackColor = MaterialTheme.colorScheme.outlineVariant,
-        )
-    }
-}
-
-private fun compactNumber(value: Long): String = when {
-    value >= 1_000_000 -> "%.1fM".format(Locale.US, value / 1_000_000.0)
-    value >= 1_000 -> "%.1fK".format(Locale.US, value / 1_000.0)
-    else -> value.toString()
-}.replace(".0", "")
-
-private enum class ComposerSheet { Options, Model, Reasoning }
-
-private val REASONING_LEVELS = listOf(
-    "" to R.string.reasoning_default,
-    "low" to R.string.reasoning_low,
-    "medium" to R.string.reasoning_medium,
-    "high" to R.string.reasoning_high,
-    "xhigh" to R.string.reasoning_extra_high,
-)
-
-private val VOICE_INPUT_MODES = listOf(
-    Store.VOICE_INPUT_DEVICE to R.string.voice_input_device,
-    Store.VOICE_INPUT_SERVER to R.string.voice_input_server,
-)
-
-@Composable
-private fun voiceInputLabel(mode: String): String = stringResource(
-    VOICE_INPUT_MODES.firstOrNull { it.first == mode }?.second ?: R.string.voice_input_device,
-)
-
-private val APPEARANCE_LEVELS = listOf(
-    "system" to R.string.appearance_system,
-    "light" to R.string.appearance_light,
-    "dark" to R.string.appearance_dark,
-)
-
-@Composable
-private fun reasoningLabel(effort: String): String = stringResource(
-    REASONING_LEVELS.firstOrNull { it.first == effort }?.second ?: R.string.reasoning_default,
-)
-
-@Composable
-private fun appearanceLabel(appearance: String): String = stringResource(
-    APPEARANCE_LEVELS.firstOrNull { it.first == appearance }?.second ?: R.string.appearance_system,
-)
-
-private const val PHONE_REPOSITORY_URL = "https://github.com/twuijri/hermes-studio-mobile"
-private const val STUDIO_REPOSITORY_URL = "https://github.com/EKKOLearnAI/hermes-studio"
-
-@Composable
-private fun ComposerActionButton(
-    state: UiState,
-    draft: String,
-    onSend: () -> Unit,
-    viewModel: AppViewModel,
-    onRecord: () -> Unit,
-) {
-    val hasPayload = draft.isNotBlank() || state.attachments.isNotEmpty()
-    val listening = state.voice == VoiceStatus.Listening
-    val active = hasPayload || listening || state.sending
-    val background = if (active) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val tint = if (active) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(background),
-        contentAlignment = Alignment.Center,
-    ) {
-        when {
-            listening -> IconButton(onClick = { viewModel.stopVoiceInput() }) {
-                Icon(
-                    Icons.Filled.Stop,
-                    contentDescription = stringResource(if (state.voiceViaServer) R.string.composer_stop else R.string.composer_stop_listening),
-                    tint = tint,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            state.voice == VoiceStatus.Transcribing -> CircularProgressIndicator(
-                modifier = Modifier.size(20.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            state.sending -> IconButton(onClick = { viewModel.stopRun() }) {
-                Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.conversation_stop), tint = tint, modifier = Modifier.size(20.dp))
-            }
-            hasPayload -> IconButton(onClick = onSend) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.composer_send), tint = tint, modifier = Modifier.size(20.dp))
-            }
-            else -> IconButton(onClick = onRecord) {
-                Icon(
-                    Icons.Filled.Mic,
-                    contentDescription = stringResource(R.string.composer_record),
-                    tint = if (state.voice == VoiceStatus.Error) MaterialTheme.colorScheme.error else tint,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ToolbarChip(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(15.dp),
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 150.dp),
-        )
-        Text("⌄", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-/** The "+" sheet: attachments first, then the per-conversation controls. */
-@Composable
-private fun OptionsSheet(
-    state: UiState,
-    onCamera: () -> Unit,
-    onGallery: () -> Unit,
-    onDocument: () -> Unit,
-    onModel: () -> Unit,
-    onReasoning: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 28.dp)) {
-        SheetTitle(stringResource(R.string.sheet_add))
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            AttachOption(Icons.Filled.PhotoCamera, stringResource(R.string.sheet_camera), onCamera)
-            AttachOption(Icons.Filled.Image, stringResource(R.string.sheet_gallery), onGallery)
-            AttachOption(Icons.AutoMirrored.Filled.InsertDriveFile, stringResource(R.string.sheet_file), onDocument)
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-        SheetTitle(stringResource(R.string.sheet_conversation))
-        SheetRow(
-            icon = Icons.Filled.ModelTraining,
-            label = stringResource(R.string.sheet_model),
-            detail = state.sessionModel ?: stringResource(R.string.sheet_profile_default),
-            onClick = onModel,
-        )
-        SheetRow(
-            icon = Icons.Filled.Psychology,
-            label = stringResource(R.string.sheet_reasoning),
-            detail = reasoningLabel(state.reasoningEffort),
-            onClick = onReasoning,
-        )
-    }
-}
-
-private data class PickerRow(
-    val label: String,
-    val detail: String?,
-    val selected: Boolean,
-    val onClick: () -> Unit,
-)
-
-@Composable
-private fun PickerSheet(title: String, loading: Boolean, rows: List<PickerRow>) {
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 28.dp)) {
-        SheetTitle(title)
-        if (loading) LoadingRow()
-        if (!loading && rows.isEmpty()) {
-            Text(
-                stringResource(R.string.sheet_empty),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-            )
-        }
-        rows.forEach { row ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = row.onClick)
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(row.label, style = MaterialTheme.typography.bodyLarge)
-                    row.detail?.let {
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                if (row.selected) {
-                    Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.action_selected))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SheetTitle(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-    )
-}
-
-@Composable
-private fun SheetRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    detail: String,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                detail,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun AttachOption(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(54.dp)
-                .clip(RoundedCornerShape(27.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.onSurface)
-        }
-        Text(label, style = MaterialTheme.typography.labelMedium)
-    }
-}
-
-/** Cache-backed target for a camera capture, shared through the FileProvider. */
-private fun newCaptureUri(context: Context): Uri {
-    val dir = File(context.cacheDir, "captures").apply { mkdirs() }
-    val file = File(dir, "capture-${System.currentTimeMillis()}.jpg")
-    return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-}
-
-/** Reads a picked document through the content resolver and hands it to the upload. */
-private fun readAndAttach(
-    context: Context,
-    uri: Uri,
-    viewModel: AppViewModel,
-    fallbackName: String? = null,
-) {
-    val resolver = context.contentResolver
-    val mime = resolver.getType(uri) ?: if (fallbackName?.endsWith(".jpg") == true) "image/jpeg" else "application/octet-stream"
-    var name = fallbackName ?: "attachment"
-    runCatching {
-        resolver.query(uri, null, null, null, null)?.use { cursor ->
-            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (index >= 0 && cursor.moveToFirst()) name = cursor.getString(index) ?: name
-        }
-    }
-    val bytes = runCatching { resolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-    if (bytes == null || bytes.isEmpty()) return
-    viewModel.attach(bytes, name, mime)
 }
 
 private enum class ConfirmAction { SignOut, RestartGateway }
@@ -2541,7 +982,7 @@ internal fun ConfirmDialog(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LanguageSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit) {
+internal fun LanguageSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val activity = context as? Activity
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
@@ -2565,7 +1006,7 @@ private fun LanguageSheet(state: UiState, viewModel: AppViewModel, onDismiss: ()
 }
 
 @Composable
-private fun LanguageAction(state: UiState, viewModel: AppViewModel) {
+internal fun LanguageAction(state: UiState, viewModel: AppViewModel) {
     var open by remember { mutableStateOf(false) }
     val context = LocalContext.current
     if (open) LanguageSheet(state, viewModel) { open = false }
@@ -2586,7 +1027,10 @@ private fun LanguageAction(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-/** Agent work gets a first-class home instead of masquerading as app settings. */
+/**
+ * Agent Manager: the super-admin's home for every agent tool (the web's
+ * hermes.agentManager route), reached from the drawer rail.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AgentHubScreen(state: UiState, viewModel: AppViewModel) {
@@ -2599,10 +1043,10 @@ private fun AgentHubScreen(state: UiState, viewModel: AppViewModel) {
     Scaffold(
         topBar = {
             StudioLargeTopBar(
-                title = stringResource(R.string.agent_hub_title),
+                title = stringResource(R.string.nav_agent_manager),
                 navigationIcon = {
-                    IconButton(onClick = { viewModel.openProfiles() }) {
-                        ProfileAvatar(profileName, profile?.avatar, size = 34.dp)
+                    IconButton(onClick = { viewModel.back() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 actions = {
@@ -2616,7 +1060,6 @@ private fun AgentHubScreen(state: UiState, viewModel: AppViewModel) {
                 },
             )
         },
-        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -2682,7 +1125,7 @@ private fun AgentHubScreen(state: UiState, viewModel: AppViewModel) {
                         color = Color(0xFF35B7DB),
                         title = stringResource(R.string.workflows_title),
                         subtitle = stringResource(R.string.workflows_hub_note),
-                        onClick = { viewModel.openWorkflows() },
+                        onClick = { viewModel.showTab(Tab.Workflow) },
                     )
                     StudioCardDivider()
                     StudioDestinationRow(
@@ -2780,368 +1223,18 @@ private fun AgentHubScreen(state: UiState, viewModel: AppViewModel) {
                     StudioDestinationRow(Icons.Filled.ModelTraining, Color(0xFF39C6A3), stringResource(R.string.settings_group_models), stringResource(R.string.settings_group_models_note), { viewModel.openSettingsGroup(SettingsGroup.Models) })
                 }
             }
-        }
-    }
-}
 
-/** App settings stay intentionally small; Studio's long list has one doorway. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SettingsScreen(state: UiState, viewModel: AppViewModel) {
-    val context = LocalContext.current
-    val activity = context as? Activity
-    val accountName = state.account.orEmpty().ifBlank { stringResource(R.string.settings_account_unknown) }
-    val language = APP_LANGUAGES.firstOrNull { it.tag == state.language } ?: APP_LANGUAGES.first()
-    var appearanceSheet by remember { mutableStateOf(false) }
-    var languageSheet by remember { mutableStateOf(false) }
-    var reasoningSheet by remember { mutableStateOf(false) }
-    var voiceSheet by remember { mutableStateOf(false) }
-    var confirmSignOut by remember { mutableStateOf(false) }
-
-    if (voiceSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { voiceSheet = false },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            PickerSheet(
-                title = stringResource(R.string.settings_voice_input),
-                loading = false,
-                rows = VOICE_INPUT_MODES.map { (value, label) ->
-                    PickerRow(
-                        label = stringResource(label),
-                        detail = stringResource(if (value == Store.VOICE_INPUT_SERVER) R.string.voice_input_server_note else R.string.voice_input_device_note),
-                        selected = state.voiceInput == value,
-                    ) {
-                        voiceSheet = false
-                        viewModel.setVoiceInput(value)
-                    }
-                },
-            )
-        }
-    }
-
-    if (appearanceSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { appearanceSheet = false },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            PickerSheet(
-                title = stringResource(R.string.settings_appearance),
-                loading = false,
-                rows = APPEARANCE_LEVELS.map { (value, label) ->
-                    PickerRow(
-                        label = stringResource(label),
-                        detail = null,
-                        selected = state.appearance == value,
-                    ) {
-                        appearanceSheet = false
-                        viewModel.setAppearance(value)
-                        activity?.recreate()
-                    }
-                },
-            )
-        }
-    }
-    if (languageSheet) LanguageSheet(state, viewModel) { languageSheet = false }
-    if (reasoningSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { reasoningSheet = false },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            PickerSheet(
-                title = stringResource(R.string.settings_reasoning),
-                loading = false,
-                rows = REASONING_LEVELS.map { (value, label) ->
-                    PickerRow(
-                        label = stringResource(label),
-                        detail = if (value.isBlank()) stringResource(R.string.reasoning_use_profile) else null,
-                        selected = state.reasoningEffort == value,
-                    ) {
-                        reasoningSheet = false
-                        viewModel.setReasoningEffort(value)
-                    }
-                },
-            )
-        }
-    }
-    if (confirmSignOut) {
-        ConfirmDialog(
-            title = stringResource(R.string.confirm_sign_out_title),
-            body = stringResource(R.string.confirm_sign_out_body),
-            action = stringResource(R.string.action_sign_out),
-            onConfirm = { viewModel.signOut() },
-            onDismiss = { confirmSignOut = false },
-        )
-    }
-
-    Scaffold(
-        topBar = {
-            StudioLargeTopBar(
-                title = stringResource(R.string.settings_title),
-                navigationIcon = {
-                    IconButton(onClick = { viewModel.back() }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back),
-                        )
-                    }
-                },
-            )
-        },
-        bottomBar = { StudioTabs(state, viewModel) },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(
-                start = StudioHorizontalPadding,
-                end = StudioHorizontalPadding,
-                top = 8.dp,
-                bottom = 28.dp,
-            ),
-        ) {
-            state.error?.let { message -> item { ErrorNote(message) { viewModel.dismissError() } } }
-            state.notice?.let { message -> item { NoticeNote(message) { viewModel.dismissNotice() } } }
-
-            item {
-                StudioGroupedCard {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { viewModel.openSettingsGroup(SettingsGroup.Account) }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ProfileAvatar(accountName, state.accountAvatar, size = 50.dp)
-                        Spacer(Modifier.width(13.dp))
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(accountName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                state.currentUser?.role?.let {
-                                    stringResource(if (it == "super_admin") R.string.users_super_admin else R.string.users_admin)
-                                }.orEmpty(),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    StudioCardDivider()
-                    StudioDestinationRow(
-                        icon = Icons.Filled.Person,
-                        color = Color(0xFF4D8DFF),
-                        title = stringResource(R.string.action_profiles),
-                        subtitle = state.activeProfile,
-                        onClick = { viewModel.openProfiles() },
-                    )
-                    StudioCardDivider()
-                    StudioDestinationRow(
-                        icon = Icons.Filled.Dns,
-                        color = Color(0xFF35C878),
-                        title = stringResource(R.string.settings_studio_connection),
-                        subtitle = state.baseUrl,
-                        onClick = { viewModel.openSettingsGroup(SettingsGroup.Server) },
-                    )
-                }
-            }
-
-            item { StudioSectionTitle(stringResource(R.string.settings_category_app)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(
-                        icon = Icons.Filled.DisplaySettings,
-                        color = Color(0xFF6F72E8),
-                        title = stringResource(R.string.settings_appearance),
-                        subtitle = appearanceLabel(state.appearance),
-                        onClick = { appearanceSheet = true },
-                    )
-                    StudioCardDivider()
-                    StudioDestinationRow(
-                        icon = Icons.Filled.Language,
-                        color = Color(0xFF18B9C7),
-                        title = stringResource(R.string.settings_language),
-                        subtitle = AppLocale.labelFor(context, language),
-                        onClick = { languageSheet = true },
-                    )
-                    StudioCardDivider()
-                    StudioDestinationRow(
-                        icon = Icons.Filled.Psychology,
-                        color = Color(0xFFD62AE8),
-                        title = stringResource(R.string.settings_reasoning),
-                        subtitle = reasoningLabel(state.reasoningEffort),
-                        onClick = { reasoningSheet = true },
-                    )
-                }
-            }
-
-            item { StudioSectionTitle(stringResource(R.string.settings_section_voice)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(
-                        icon = Icons.Filled.Mic,
-                        color = Color(0xFFE85262),
-                        title = stringResource(R.string.settings_voice_input),
-                        subtitle = voiceInputLabel(state.voiceInput),
-                        onClick = { voiceSheet = true },
-                    )
-                }
-            }
-            item {
-                Text(
-                    stringResource(R.string.settings_voice_input_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-                )
-            }
-
-            item { Spacer(Modifier.height(16.dp)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(
-                        icon = Icons.Filled.Tune,
-                        color = Color(0xFFFF9F43),
-                        title = stringResource(R.string.more_settings_title),
-                        subtitle = stringResource(R.string.more_settings_note),
-                        onClick = { viewModel.openMoreSettings() },
-                    )
-                }
-            }
-            item {
-                Text(
-                    stringResource(R.string.more_settings_footer),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-                )
-            }
-
-            item { StudioSectionTitle(stringResource(R.string.settings_section_about)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(
-                        icon = Icons.Filled.PhoneAndroid,
-                        color = Color(0xFF7A5CFF),
-                        title = stringResource(R.string.settings_phone_name),
-                        trailing = {
-                            Text(
-                                BuildConfig.VERSION_NAME,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                        },
-                    )
-                    StudioCardDivider()
-                    StudioDestinationRow(
-                        icon = painterResource(R.drawable.ic_github),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        title = stringResource(R.string.settings_phone_github),
-                        onClick = {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PHONE_REPOSITORY_URL)))
-                        },
-                        trailing = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
-                    )
-                    StudioCardDivider()
-                    StudioDestinationRow(
-                        icon = painterResource(R.drawable.ic_github),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        title = stringResource(R.string.settings_studio_github),
-                        onClick = {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(STUDIO_REPOSITORY_URL)))
-                        },
-                        trailing = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
-                    )
-                }
-            }
-
-            item { Spacer(Modifier.height(20.dp)) }
-            item {
-                StudioGroupedCard {
-                    TextButton(
-                        onClick = { confirmSignOut = true },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.action_sign_out), style = MaterialTheme.typography.titleMedium)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** The non-agent Studio settings, grouped behind one clearly named entry. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun MoreSettingsScreen(state: UiState, viewModel: AppViewModel) {
-    Scaffold(
-        topBar = {
-            StudioTopBar(
-                title = stringResource(R.string.more_settings_title),
-                subtitle = stringResource(R.string.more_settings_subtitle),
-                onBack = { viewModel.back() },
-            )
-        },
-        bottomBar = { StudioTabs(state, viewModel) },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(
-                start = StudioHorizontalPadding,
-                end = StudioHorizontalPadding,
-                top = 8.dp,
-                bottom = 28.dp,
-            ),
-        ) {
-            state.error?.let { message -> item { ErrorNote(message) { viewModel.dismissError() } } }
-            state.notice?.let { message -> item { NoticeNote(message) { viewModel.dismissNotice() } } }
-
-            item { StudioSectionTitle(stringResource(R.string.more_settings_agent)) }
+            // The agent-side configuration that used to hide behind "More settings".
+            item { StudioSectionTitle(stringResource(R.string.agent_hub_configuration)) }
             item {
                 StudioGroupedCard {
                     StudioDestinationRow(Icons.Filled.Tune, Color(0xFF7A5CFF), stringResource(R.string.settings_group_agent), stringResource(R.string.settings_group_agent_note), { viewModel.openSettingsGroup(SettingsGroup.Agent) })
                     StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.Memory, Color(0xFFFFB547), stringResource(R.string.settings_group_memory), stringResource(R.string.settings_group_memory_note), { viewModel.openSettingsGroup(SettingsGroup.Memory) })
+                    StudioDestinationRow(Icons.Filled.History, Color(0xFF6F72E8), stringResource(R.string.settings_group_sessions), stringResource(R.string.settings_group_sessions_note), { viewModel.openSettingsGroup(SettingsGroup.Sessions) })
                     StudioCardDivider()
                     StudioDestinationRow(Icons.Filled.Compress, Color(0xFFFF9F43), stringResource(R.string.settings_group_compression), stringResource(R.string.settings_group_compression_note), { viewModel.openSettingsGroup(SettingsGroup.Compression) })
                     StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.ModelTraining, Color(0xFF39C6A3), stringResource(R.string.settings_group_models), stringResource(R.string.settings_group_models_note), { viewModel.openSettingsGroup(SettingsGroup.Models) })
-                }
-            }
-
-            item { StudioSectionTitle(stringResource(R.string.more_settings_conversation)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(Icons.Filled.DisplaySettings, Color(0xFFFF6584), stringResource(R.string.settings_group_display), stringResource(R.string.settings_group_display_note), { viewModel.openSettingsGroup(SettingsGroup.Display) })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.History, Color(0xFF6F72E8), stringResource(R.string.settings_group_sessions), stringResource(R.string.settings_group_sessions_note), { viewModel.openSettingsGroup(SettingsGroup.Sessions) })
-                }
-            }
-
-            item { StudioSectionTitle(stringResource(R.string.more_settings_network_privacy)) }
-            item {
-                StudioGroupedCard {
-                    StudioDestinationRow(Icons.Filled.VpnLock, Color(0xFF18B9C7), stringResource(R.string.settings_group_proxy), stringResource(R.string.settings_group_proxy_note), { viewModel.openSettingsGroup(SettingsGroup.Proxy) })
-                    StudioCardDivider()
-                    StudioDestinationRow(Icons.Filled.PrivacyTip, Color(0xFFE85262), stringResource(R.string.settings_group_privacy), stringResource(R.string.settings_group_privacy_note), { viewModel.openSettingsGroup(SettingsGroup.Privacy) })
-                }
-            }
-
-            if (state.currentUser?.role == "super_admin") {
-                item { StudioSectionTitle(stringResource(R.string.more_settings_management)) }
-                item {
-                    StudioGroupedCard {
-                        StudioDestinationRow(
-                            icon = Icons.Filled.Group,
-                            color = Color(0xFF35B7DB),
-                            title = stringResource(R.string.settings_group_users),
-                            subtitle = stringResource(R.string.settings_group_users_note),
-                            onClick = { viewModel.openSettingsGroup(SettingsGroup.Users) },
-                        )
-                    }
+                    StudioDestinationRow(Icons.Filled.Person, Color(0xFF4D8DFF), stringResource(R.string.action_profiles), state.activeProfile, { viewModel.openProfiles() })
                 }
             }
         }
@@ -3166,7 +1259,6 @@ private fun InsightsScreen(state: UiState, viewModel: AppViewModel) {
                 },
             )
         },
-        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -3256,6 +1348,7 @@ private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
             SettingsGroup.Account -> R.string.settings_account
             SettingsGroup.Server -> R.string.settings_group_server
             SettingsGroup.Users -> R.string.settings_group_users
+            SettingsGroup.Webhooks -> R.string.settings_tab_webhooks
             SettingsGroup.Profile -> R.string.settings_group_profile
             SettingsGroup.Models -> R.string.settings_group_models
             SettingsGroup.Agent -> R.string.settings_group_agent
@@ -3272,7 +1365,6 @@ private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
 
     Scaffold(
         topBar = { StudioTopBar(title = title, onBack = { viewModel.back() }) },
-        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -3294,6 +1386,7 @@ private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
                     SettingsGroup.Account -> AccountSettings(state, viewModel)
                     SettingsGroup.Server -> ServerSettings(state, viewModel)
                     SettingsGroup.Users -> ManagedUsersSettings(state, viewModel)
+                    SettingsGroup.Webhooks -> WebhooksSettingsBody(state, viewModel)
                     SettingsGroup.Profile -> ProfileSettings(state, viewModel)
                     SettingsGroup.Models -> ModelProvidersSettings(state, viewModel)
                     SettingsGroup.Agent -> AgentSettings(state, viewModel)
@@ -3304,7 +1397,7 @@ private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
                     SettingsGroup.Proxy -> ProxyStudioSettings(state, viewModel)
                     SettingsGroup.Display -> DisplayStudioSettings(state, viewModel)
                     SettingsGroup.Device -> DeviceSettings(state, viewModel)
-                    SettingsGroup.About -> AboutSettings()
+                    SettingsGroup.About -> AboutSettings(state)
                 }
             }
         }
@@ -3312,7 +1405,7 @@ private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
 }
 
 @Composable
-private fun ServerSettings(state: UiState, viewModel: AppViewModel) {
+internal fun ServerSettings(state: UiState, viewModel: AppViewModel) {
     SettingsRow(
         icon = Icons.Filled.Dns,
         label = stringResource(R.string.settings_address),
@@ -3321,7 +1414,7 @@ private fun ServerSettings(state: UiState, viewModel: AppViewModel) {
 }
 
 @Composable
-private fun AccountSettings(state: UiState, viewModel: AppViewModel) {
+internal fun AccountSettings(state: UiState, viewModel: AppViewModel) {
     SettingsRow(
         icon = Icons.Filled.Person,
         label = stringResource(R.string.settings_account),
@@ -3604,9 +1697,13 @@ private fun AgentSettings(state: UiState, viewModel: AppViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DeviceSettings(state: UiState, viewModel: AppViewModel) {
+internal fun DeviceSettings(state: UiState, viewModel: AppViewModel) {
     val context = LocalContext.current
+    val activity = context as? Activity
     var languageSheet by remember { mutableStateOf(false) }
+    var appearanceSheet by remember { mutableStateOf(false) }
+    var reasoningSheet by remember { mutableStateOf(false) }
+    var voiceSheet by remember { mutableStateOf(false) }
     val language = APP_LANGUAGES.firstOrNull { it.tag == state.language } ?: APP_LANGUAGES.first()
 
     val pickLogo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -3618,12 +1715,93 @@ private fun DeviceSettings(state: UiState, viewModel: AppViewModel) {
     }
 
     if (languageSheet) LanguageSheet(state, viewModel) { languageSheet = false }
+    if (appearanceSheet) {
+        ModalBottomSheet(onDismissRequest = { appearanceSheet = false }, sheetState = rememberModalBottomSheetState()) {
+            PickerSheet(
+                title = stringResource(R.string.settings_appearance),
+                loading = false,
+                rows = APPEARANCE_LEVELS.map { (value, label) ->
+                    PickerRow(label = stringResource(label), detail = null, selected = state.appearance == value) {
+                        appearanceSheet = false
+                        viewModel.setAppearance(value)
+                        activity?.recreate()
+                    }
+                },
+            )
+        }
+    }
+    if (reasoningSheet) {
+        ModalBottomSheet(onDismissRequest = { reasoningSheet = false }, sheetState = rememberModalBottomSheetState()) {
+            PickerSheet(
+                title = stringResource(R.string.settings_reasoning),
+                loading = false,
+                rows = REASONING_LEVELS.map { (value, label) ->
+                    PickerRow(
+                        label = stringResource(label),
+                        detail = if (value.isBlank()) stringResource(R.string.reasoning_use_profile) else null,
+                        selected = state.reasoningEffort == value,
+                    ) {
+                        reasoningSheet = false
+                        viewModel.setReasoningEffort(value)
+                    }
+                },
+            )
+        }
+    }
+    if (voiceSheet) {
+        ModalBottomSheet(onDismissRequest = { voiceSheet = false }, sheetState = rememberModalBottomSheetState()) {
+            PickerSheet(
+                title = stringResource(R.string.settings_voice_input),
+                loading = false,
+                rows = VOICE_INPUT_MODES.map { (value, label) ->
+                    PickerRow(
+                        label = stringResource(label),
+                        detail = stringResource(if (value == Store.VOICE_INPUT_SERVER) R.string.voice_input_server_note else R.string.voice_input_device_note),
+                        selected = state.voiceInput == value,
+                    ) {
+                        voiceSheet = false
+                        viewModel.setVoiceInput(value)
+                    }
+                },
+            )
+        }
+    }
 
+    SettingsRow(
+        icon = Icons.Filled.DisplaySettings,
+        label = stringResource(R.string.settings_appearance),
+        value = appearanceLabel(state.appearance),
+        onClick = { appearanceSheet = true },
+    )
     SettingsRow(
         icon = Icons.Filled.Language,
         label = stringResource(R.string.settings_language),
         value = AppLocale.labelFor(context, language),
         onClick = { languageSheet = true },
+    )
+    SettingsRow(
+        icon = Icons.Filled.Psychology,
+        label = stringResource(R.string.settings_reasoning),
+        value = reasoningLabel(state.reasoningEffort),
+        onClick = { reasoningSheet = true },
+    )
+    Text(
+        stringResource(R.string.settings_reasoning_note),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+    )
+    SettingsRow(
+        icon = Icons.Filled.Mic,
+        label = stringResource(R.string.settings_voice_input),
+        value = voiceInputLabel(state.voiceInput),
+        onClick = { voiceSheet = true },
+    )
+    Text(
+        stringResource(R.string.settings_voice_input_note),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
     )
     LogoRow(
         value = stringResource(
@@ -3649,25 +1827,37 @@ private fun DeviceSettings(state: UiState, viewModel: AppViewModel) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
     )
-    SettingsRow(
-        icon = Icons.Filled.Psychology,
-        label = stringResource(R.string.settings_reasoning),
-        value = reasoningLabel(state.reasoningEffort),
-    )
-    Text(
-        stringResource(R.string.settings_reasoning_note),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-    )
 }
 
 @Composable
-private fun AboutSettings() {
+internal fun AboutSettings(state: UiState) {
+    val context = LocalContext.current
+    SettingsRow(
+        icon = Icons.Filled.PhoneAndroid,
+        label = stringResource(R.string.settings_phone_name),
+        value = BuildConfig.VERSION_NAME,
+    )
     SettingsRow(
         icon = Icons.Filled.Info,
         label = stringResource(R.string.settings_version),
-        value = BuildConfig.VERSION_NAME,
+        value = stringResource(R.string.footer_version, state.serverVersion ?: BuildConfig.VERSION_NAME),
+    )
+    SettingsRow(
+        icon = Icons.Filled.Dns,
+        label = stringResource(R.string.settings_address),
+        value = state.baseUrl.ifBlank { stringResource(R.string.settings_address_missing) },
+    )
+    SettingsRow(
+        icon = painterResource(R.drawable.ic_github),
+        label = stringResource(R.string.settings_phone_github),
+        value = PHONE_REPOSITORY_URL,
+        onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PHONE_REPOSITORY_URL))) },
+    )
+    SettingsRow(
+        icon = painterResource(R.drawable.ic_github),
+        label = stringResource(R.string.settings_studio_github),
+        value = STUDIO_REPOSITORY_URL,
+        onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(STUDIO_REPOSITORY_URL))) },
     )
     Text(
         stringResource(R.string.settings_about_note),
@@ -3698,7 +1888,6 @@ private fun ChannelsScreen(state: UiState, viewModel: AppViewModel) {
                 onBack = { viewModel.back() },
             )
         },
-        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -3840,7 +2029,6 @@ private fun ChannelScreen(state: UiState, viewModel: AppViewModel) {
                 },
             )
         },
-        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -4166,50 +2354,6 @@ internal fun StudioTopBar(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
     )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-internal fun StudioTabs(state: UiState, viewModel: AppViewModel) {
-    // Keeping the navigation bar in Scaffold while the IME covers it reserves
-    // a full invisible bar between the composer and keyboard. Material apps
-    // hide bottom navigation during text entry, then restore it with the IME.
-    if (WindowInsets.isImeVisible) return
-
-    val colors = NavigationBarItemDefaults.colors(
-        selectedIconColor = MaterialTheme.colorScheme.primary,
-        selectedTextColor = MaterialTheme.colorScheme.primary,
-        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 0.dp,
-    ) {
-        NavigationBarItem(
-            selected = state.tab == Tab.Chats,
-            onClick = { viewModel.showTab(Tab.Chats) },
-            icon = { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null) },
-            label = { Text(stringResource(R.string.chats_tab)) },
-            colors = colors,
-        )
-        NavigationBarItem(
-            selected = state.tab == Tab.Groups,
-            onClick = { viewModel.showTab(Tab.Groups) },
-            icon = { Icon(Icons.Filled.Group, contentDescription = null) },
-            label = { Text(stringResource(R.string.groups_tab)) },
-            colors = colors,
-        )
-        NavigationBarItem(
-            selected = state.tab == Tab.Agent,
-            onClick = { viewModel.showTab(Tab.Agent) },
-            icon = { Icon(Icons.Filled.AutoAwesome, contentDescription = null) },
-            label = { Text(stringResource(R.string.agent_hub_tab)) },
-            colors = colors,
-        )
-    }
 }
 
 @Composable

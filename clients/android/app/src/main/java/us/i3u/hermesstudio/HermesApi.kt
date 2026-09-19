@@ -177,6 +177,13 @@ class HermesApi(
     }
 
     /** GET /api/auth/me — full account metadata used by Settings. */
+    /**
+     * GET /health → `webui_version`: the Core Hub version the web sidebar prints
+     * as "Core Hub v{version}". Null when the server does not report one.
+     */
+    fun serverVersion(): String? =
+        call("/health").optString("webui_version").takeIf { it.isNotBlank() }
+
     fun currentUser(): CurrentUser {
         val result = call("/api/auth/me")
         val user = result.optJSONObject("user") ?: result

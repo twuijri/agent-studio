@@ -46,7 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WorkflowsScreen(state: UiState, viewModel: AppViewModel) {
+fun WorkflowsScreen(state: UiState, viewModel: AppViewModel, onMenu: (() -> Unit)? = null) {
     var inputFor by remember { mutableStateOf<StudioWorkflow?>(null) }
     var runInput by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<StudioWorkflow?>(null) }
@@ -70,7 +70,10 @@ fun WorkflowsScreen(state: UiState, viewModel: AppViewModel) {
     Scaffold(topBar = {
         TopAppBar(
             title = { Text(stringResource(R.string.workflows_title)) },
-            navigationIcon = { IconButton(viewModel::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } },
+            navigationIcon = {
+                if (onMenu != null) us.i3u.hermesstudio.ui.navigation.MenuButton(onMenu)
+                else IconButton(viewModel::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) }
+            },
             actions = { TextButton(onClick = { creating = true }) { Text(stringResource(R.string.action_add)) }; TextButton(onClick = { importer.launch("application/json") }) { Text(stringResource(R.string.files_upload)) }; TextButton(onClick = { deleteAll = true }, enabled = state.workflows.isNotEmpty()) { Text(stringResource(R.string.action_delete)) }; IconButton(viewModel::openWorkflows) { Icon(Icons.Filled.Refresh, stringResource(R.string.action_refresh)) } },
         )
     }) { padding ->

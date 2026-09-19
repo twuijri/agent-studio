@@ -128,7 +128,6 @@ internal fun SkillsScreen(state: UiState, viewModel: AppViewModel) {
                 },
             )
         },
-        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (skills.loading) LoadingRow()
@@ -300,7 +299,6 @@ internal fun SkillScreen(state: UiState, viewModel: AppViewModel) {
                 },
             )
         },
-        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp)) {
             if (state.skillsUi.loading) LoadingRow()
@@ -354,7 +352,6 @@ internal fun PluginsScreen(state: UiState, viewModel: AppViewModel) {
                 },
             )
         },
-        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (ui.loading) LoadingRow()
@@ -461,7 +458,6 @@ internal fun McpScreen(state: UiState, viewModel: AppViewModel) {
                 },
             )
         },
-        bottomBar = { StudioTabs(state, viewModel) },
         floatingActionButton = {
             androidx.compose.material3.FloatingActionButton(onClick = { adding = true }) {
                 Icon(Icons.Filled.Add, stringResource(R.string.mcp_add))
@@ -631,7 +627,6 @@ internal fun PetsScreen(state: UiState, viewModel: AppViewModel) {
                 },
             )
         },
-        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (ui.loading) LoadingRow()

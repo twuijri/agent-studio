@@ -837,4 +837,51 @@
     <string name="error_speech_language">التعرف على الكلام لا يدعم لغة التطبيق على هذا الجهاز</string>
     <string name="error_speech_generic">فشل التعرف على الكلام (الرمز %1$d)</string>
     <string name="error_microphone_detail">تعذّر تشغيل المايكروفون: %1$s</string>
+
+    <!-- التنقل: شريط الدرج، مبدّل المحادثة، تذييل الدرج -->
+    <string name="nav_menu">فتح القائمة</string>
+    <string name="nav_search">بحث</string>
+    <string name="nav_device_connections">ترابط الأجهزة</string>
+    <string name="nav_agent_manager">إدارة الوكلاء</string>
+    <string name="nav_models">النماذج</string>
+    <string name="segment_chat">محادثة</string>
+    <string name="segment_group_chat">محادثة جماعية</string>
+    <string name="segment_workflow">مسار العمل</string>
+    <string name="segment_history">السجل</string>
+    <string name="drawer_profile">البروفايل</string>
+    <string name="drawer_model">النموذج</string>
+    <string name="drawer_back_to_chat">رجوع</string>
+    <string name="footer_version">Core Hub v%1$s</string>
+
+    <!-- قائمة الجلسات -->
+    <string name="sessions_recent">الأحدث</string>
+    <string name="sessions_pinned">المثبّتة</string>
+    <string name="sessions_uncategorized">غير مصنّف</string>
+    <string name="sessions_recent_count">عدد الجلسات الأحدث المعروضة</string>
+    <string name="sessions_recent_count_hint">بين 1 و100</string>
+    <string name="session_pin">تثبيت</string>
+    <string name="session_unpin">إلغاء التثبيت</string>
+    <string name="session_category">التصنيف</string>
+
+    <!-- درج الإعدادات وتبويبات صفحة الإعدادات -->
+    <string name="settings_entry_logs">السجلات</string>
+    <string name="settings_entry_usage">الاستخدام</string>
+    <string name="settings_entry_performance">الأداء</string>
+    <string name="settings_entry_skills_usage">استخدام المهارات</string>
+    <string name="settings_entry_theme">المظهر</string>
+    <string name="settings_entry_pets">الحيوانات الأليفة</string>
+    <string name="settings_entry_profiles">البروفايلات</string>
+    <string name="settings_entry_settings">الإعدادات</string>
+    <string name="settings_tab_current_account">الحساب الحالي</string>
+    <string name="settings_tab_account_management">إدارة الحسابات</string>
+    <string name="settings_tab_webhooks">خطافات الويب</string>
+    <string name="settings_tab_display">العرض</string>
+    <string name="settings_tab_proxy">البروكسي</string>
+    <string name="settings_tab_compression">الضغط</string>
+    <string name="settings_tab_privacy">الخصوصية</string>
+    <string name="settings_tab_models">النماذج</string>
+    <string name="settings_tab_device">هذا الجهاز</string>
+    <string name="settings_tab_about">حول</string>
+    <string name="webhooks_open">فتح خطافات الويب</string>
+    <string name="webhooks_count">%1$d نقطة نهاية</string>
 </resources>

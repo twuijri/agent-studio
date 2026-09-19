@@ -109,6 +109,22 @@ class Store(context: Context) {
         get() = prefs.getString(KEY_REASONING, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_REASONING, value).apply()
 
+    /**
+     * Session pins, per profile, like the web's `hermes_session_pins_v1_<profile>`
+     * localStorage key: a device-side preference, never sent to the server.
+     */
+    fun pinnedSessions(profile: String): Set<String> =
+        prefs.getStringSet("$KEY_PINS_PREFIX$profile", emptySet()).orEmpty().toSet()
+
+    fun setPinnedSessions(profile: String, ids: Set<String>) {
+        prefs.edit().putStringSet("$KEY_PINS_PREFIX$profile", ids.toSet()).apply()
+    }
+
+    /** How many sessions the RECENT group shows (1–100, default 10), like the web. */
+    var recentCount: Int
+        get() = prefs.getInt(KEY_RECENT_COUNT, 10).coerceIn(1, 100)
+        set(value) = prefs.edit().putInt(KEY_RECENT_COUNT, value.coerceIn(1, 100)).apply()
+
     fun clearCredentials() {
         prefs.edit()
             .remove(KEY_TOKEN)
@@ -140,5 +156,7 @@ class Store(context: Context) {
         private const val KEY_ONBOARDED = "onboarded"
         private const val KEY_LANGUAGE = "language"
         private const val KEY_APPEARANCE = "appearance"
+        private const val KEY_PINS_PREFIX = "session_pins_"
+        private const val KEY_RECENT_COUNT = "recent_session_count"
     }
 }

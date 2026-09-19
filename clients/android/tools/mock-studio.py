@@ -194,6 +194,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(LOGO)
         elif path == '/api/auth/me': self.send({"user": USERS[0]})
+        elif path == '/health': self.send({"status": "ok", "webui_version": "1.0.2-mock"})
         elif path == '/api/auth/avatar': self.send({"avatar": json.dumps(ACCOUNT_AVATAR)})
         elif path == '/api/auth/users': self.send({"users": USERS, "profiles": [p["name"] for p in PROFILES]})
         elif path == '/api/auth/locked-ips': self.send({"locks": LOCKS})
