@@ -26,33 +26,34 @@ struct AppMark: View {
     }
 }
 
+/// The phone's `ProfileAvatar.vue`: a stored image avatar when the profile has
+/// one, otherwise the generated `boring-avatars` **beam** seeded exactly like
+/// the web (`avatar.seed` first, then the display name, then `default`).
 struct ProfileAvatar: View {
     let name: String
     var avatar: AvatarSpec?
     var size: CGFloat = 42
     @ObservedObject private var cache = AvatarImageCache.shared
 
+    var seed: String { BoringAvatar.seed(avatarSeed: avatar?.seed, name: name) }
+
+    private var usesImage: Bool { avatar?.type == "image" && avatar?.dataURL != nil }
+
     var body: some View {
         Group {
-            if let image = cache.image(for: name) {
+            if usesImage, let image = cache.image(for: name) {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
-                ZStack {
-                    CoreHubTokens.Palette.accent
-                    Text(initials).font(.system(size: size * 0.38, weight: .semibold, design: .rounded)).foregroundStyle(CoreHubTokens.Palette.textOnAccent)
-                }
+                BeamAvatarView(seed: seed, size: size)
             }
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
         .overlay(Circle().stroke(Color.white.opacity(0.14), lineWidth: 1))
         .task(id: avatarFingerprint(profile: name, avatar: avatar)) {
+            guard usesImage else { return }
             await cache.ensure(profile: name, avatar: avatar)
         }
-    }
-
-    private var initials: String {
-        name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased().nilIfEmpty ?? "C"
     }
 }
 

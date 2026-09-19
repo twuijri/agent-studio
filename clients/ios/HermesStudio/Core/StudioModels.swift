@@ -247,8 +247,15 @@ enum WorkflowGraph {
 
 // MARK: - Models catalog
 
-/// `GET /api/hermes/available-models` — provider groups with the Web-UI-only
-/// aliases, visibility rules and custom models the Models tab edits.
+/// `GET /api/hermes/available-models?profile=…` — the same payload the web's
+/// models store reads.
+///
+/// `groups` are the providers this profile actually has credentials for and is
+/// what the Models screen lists, exactly like `useModelsStore().providers`.
+/// `allProviders` is the full preset catalogue the server always returns; the
+/// web only consults it to restore hidden models, so it is kept apart here
+/// instead of being merged into the visible list. `moa` is a virtual Hermes
+/// routing provider and is filtered out, as in the web store.
 struct ModelCatalog: Equatable {
     struct Group: Identifiable, Equatable {
         let id: String
@@ -260,6 +267,12 @@ struct ModelCatalog: Equatable {
         let builtin: Bool
         let editable: Bool
         let refreshable: Bool
+        let restoreAvailable: Bool
+        let refreshReason: String
+        let apiMode: String
+        /// `custom_providers` / `providers` for config-backed pools, else "".
+        let providerSource: String
+        let providerKey: String
         let catalogStatus: String
 
         init(_ json: JSON) {
@@ -273,13 +286,30 @@ struct ModelCatalog: Equatable {
             builtin = json.bool("builtin")
             editable = json["provider_editable"] == nil ? true : json.bool("provider_editable")
             refreshable = json.bool("model_refreshable")
+            restoreAvailable = json.bool("model_restore_available")
+            refreshReason = json.string("model_refresh_reason")
+            apiMode = json.string("api_mode")
+            providerSource = json.string("provider_source")
+            providerKey = json.string("provider_key")
             catalogStatus = json.string("catalog_status")
         }
+
+        /// `provider.provider.startsWith('custom:')` in `ProviderCard.vue`.
+        var isCustomKey: Bool { id.hasPrefix("custom:") }
+        /// The web's `isCustom`: the "Custom" badge.
+        var isCustom: Bool { !builtin && isCustomKey }
+        /// The web's `isConfigBackedProvider`: deleting removes the pool
+        /// itself; otherwise the destructive action only clears credentials.
+        var isConfigBacked: Bool { isCustomKey || (!builtin && !providerSource.isEmpty) }
     }
 
     let defaultModel: String
     let defaultProvider: String
+    /// Providers configured for this profile — what the screen lists.
     let groups: [Group]
+    /// The server's full preset catalogue, used only to widen a provider's
+    /// model list when its own `available_models` is empty.
+    let presets: [Group]
     /// provider → model → alias
     let aliases: [String: [String: String]]
     /// provider → (mode, models)
@@ -289,10 +319,8 @@ struct ModelCatalog: Equatable {
     init(_ json: JSON) {
         defaultModel = json.string("default")
         defaultProvider = json.string("default_provider")
-        let listed = json.objects("groups") + json.objects("allProviders")
-        var unique: [Group] = []
-        for group in listed.map(Group.init) where !group.id.isEmpty && !unique.contains(where: { $0.id == group.id }) { unique.append(group) }
-        groups = unique
+        groups = Self.unique(json.objects("groups"))
+        presets = Self.unique(json.objects("allProviders"))
         var aliasMap: [String: [String: String]] = [:]
         for (provider, raw) in json.object("model_aliases") {
             guard let table = raw as? JSON else { continue }
@@ -312,6 +340,14 @@ struct ModelCatalog: Equatable {
         customModels = custom
     }
 
+    private static func unique(_ raw: [JSON]) -> [Group] {
+        var result: [Group] = []
+        for group in raw.map(Group.init) where !group.id.isEmpty && group.id != "moa" {
+            if !result.contains(where: { $0.id == group.id }) { result.append(group) }
+        }
+        return result
+    }
+
     static func == (lhs: ModelCatalog, rhs: ModelCatalog) -> Bool {
         lhs.defaultModel == rhs.defaultModel && lhs.defaultProvider == rhs.defaultProvider && lhs.groups == rhs.groups
             && lhs.aliases == rhs.aliases && lhs.customModels == rhs.customModels
@@ -325,11 +361,26 @@ struct ModelCatalog: Equatable {
         return rule.models.contains(model)
     }
     func isCustom(provider: String, model: String) -> Bool { customModels[provider]?.contains(model) == true }
-    /// The full list the visibility editor shows: catalog + custom models.
+    func isDefault(provider: String, model: String) -> Bool {
+        provider == defaultProvider && model == defaultModel
+    }
+    /// The full list the visibility editor shows, mirroring `ProviderCard`'s
+    /// `allModels`: the provider's own catalogue, widened by the preset entry
+    /// when the provider reported none, plus the profile's custom models.
     func allModels(of group: Group) -> [String] {
         var result = group.availableModels
+        if result.isEmpty, let preset = presets.first(where: { $0.id == group.id }) {
+            result = preset.models
+        }
         for model in customModels[group.id] ?? [] where !result.contains(model) { result.append(model) }
         return result
+    }
+    /// `12` normally, `8/12` once a visibility rule hides some, like the
+    /// web's `visibleCountLabel`.
+    func modelCountLabel(of group: Group) -> String {
+        let total = allModels(of: group).count
+        guard visibility[group.id]?.mode == "include" else { return "\(total)" }
+        return "\(group.models.count)/\(total)"
     }
 }
 

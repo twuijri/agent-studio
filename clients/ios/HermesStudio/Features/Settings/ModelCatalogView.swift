@@ -1,92 +1,10 @@
 import SwiftUI
 
-/// The Models tab: the default model, the provider pools (API key, base URL,
-/// name, custom pools) and, per provider, the model aliases, the visibility
-/// rule, the custom models and the context limits.
-struct ModelCatalogView: View {
-    @EnvironmentObject private var store: AppStore
-    @State private var catalog: ModelCatalog?
-    @State private var loading = true
-    @State private var defaultState: SaveState = .idle
-    @State private var addingProvider = false
-
-    var body: some View {
-        List {
-            defaultSection
-            providersSection
-        }
-        .listStyle(.insetGrouped)
-        .navigationTitle("Models")
-        .navigationBarTitleDisplayMode(.inline)
-        .overlay { if loading && catalog == nil { ProgressView() } }
-        .refreshable { await load() }
-        .task(id: store.selectedProfile) { await load() }
-        .sheet(isPresented: $addingProvider) { CustomProviderView { await load() } }
-    }
-
-    private var defaultSection: some View {
-        Section {
-            Picker("Default model", selection: Binding(get: { catalog?.defaultModel ?? "" }, set: { value in Task { await setDefault(value) } })) {
-                Text("Profile default").tag("")
-                ForEach(allModels) { entry in
-                    Text(entry.label).tag(entry.model)
-                }
-            }
-            SaveStateLabel(state: defaultState)
-        } header: { Text("Default model") } footer: { Text("Saved for the profile \(store.selectedProfile).") }
-    }
-
-    private var providersSection: some View {
-        Section {
-            ForEach(catalog?.groups ?? []) { group in
-                NavigationLink { ProviderCatalogView(group: group, catalog: catalog) { await load() } } label: { providerRow(group) }
-            }
-            Button { addingProvider = true } label: { Label("Add a provider pool", systemImage: "plus.circle") }
-        } header: { Text("Providers") } footer: { Text("Keys are stored by Core Hub; the app never keeps them on the device.") }
-    }
-
-    private func providerRow(_ group: ModelCatalog.Group) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(group.label).font(CoreHubTokens.Typography.sessionTitleFont)
-                TechnicalText(text: group.baseURL.nilIfEmpty ?? group.id)
-            }
-            Spacer(minLength: 0)
-            Text("\(group.availableModels.count) models").font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textMuted)
-            Circle().fill(group.apiKeyConfigured ? CoreHubTokens.Palette.success : CoreHubTokens.Palette.textMuted).frame(width: 7, height: 7)
-        }
-    }
-
-    /// Every visible model of every provider, labelled with its alias.
-    private var allModels: [CatalogModelRow] {
-        guard let catalog else { return [] }
-        var rows: [CatalogModelRow] = []
-        for group in catalog.groups {
-            for model in catalog.allModels(of: group) where catalog.isVisible(provider: group.id, model: model) {
-                rows.append(CatalogModelRow(id: "\(group.id)|\(model)", model: model, label: catalog.displayName(provider: group.id, model: model)))
-            }
-        }
-        return rows
-    }
-
-    private func load() async {
-        loading = true
-        catalog = (await store.attempt({ try await store.api.modelCatalog(profile: store.selectedProfile) })) ?? catalog
-        loading = false
-    }
-
-    private func setDefault(_ model: String) async {
-        defaultState = .saving
-        let provider = catalog?.groups.first { catalog?.allModels(of: $0).contains(model) == true }?.id
-        do {
-            try await store.api.setDefaultModel(profile: store.selectedProfile, model: model, provider: provider)
-            defaultState = .saved
-            await load()
-        } catch {
-            defaultState = .failed(error.localizedDescription)
-        }
-    }
-}
+// The Models screen itself now lives in `Features/Models/ModelsHomeView.swift`
+// and mirrors the web's ProvidersPanel: providers, and under each the models
+// it offers. What stays here is the per-provider editor it pushes to — the
+// counterpart of the web's ProviderEditorModal, alias modal and visibility
+// modal — plus the custom-provider form.
 
 /// One provider pool: credentials, the visibility rule, per-model aliases,
 /// custom models and context limits.
@@ -105,15 +23,18 @@ struct ProviderCatalogView: View {
     @State private var visible: Set<String> = []
     @State private var newModel = ""
     @State private var editingModel: String?
+    @State private var catalogueBusy = ""
+    @State private var catalogueNote = ""
 
     private var models: [String] { catalog?.allModels(of: group) ?? group.availableModels }
 
     var body: some View {
         List {
             credentialsSection
+            catalogueSection
             visibilitySection
             modelsSection
-            if !group.builtin { removeSection }
+            removeSection
         }
         .listStyle(.insetGrouped)
         .navigationTitle(group.label)
@@ -191,9 +112,46 @@ struct ProviderCatalogView: View {
         }
     }
 
+    /// The web card's catalogue actions: test the connection, re-read the
+    /// provider's `/models` list, and put back a list a refresh trimmed.
+    private var catalogueSection: some View {
+        Section {
+            Button { Task { await test() } } label: { catalogueRow("Test connection", "bolt.horizontal", key: "test") }
+                .disabled(!catalogueBusy.isEmpty)
+            if group.refreshable {
+                Button { Task { await refreshModels() } } label: { catalogueRow("Refresh models", "arrow.clockwise", key: "refresh") }
+                    .disabled(!catalogueBusy.isEmpty)
+            }
+            if group.restoreAvailable {
+                Button { Task { await restoreModels() } } label: { catalogueRow("Restore the model list", "arrow.uturn.backward", key: "restore") }
+                    .disabled(!catalogueBusy.isEmpty)
+            }
+        } header: { Text("Catalogue") } footer: {
+            if !catalogueNote.isEmpty { Text(catalogueNote) }
+            else if !group.refreshable && !group.refreshReason.isEmpty { Text(group.refreshReason) }
+            else { Text("Refreshing asks the provider for its current model list.") }
+        }
+    }
+
+    private func catalogueRow(_ title: LocalizedStringKey, _ icon: String, key: String) -> some View {
+        HStack {
+            Label(title, systemImage: icon)
+            Spacer()
+            if catalogueBusy == key { ProgressView().controlSize(.small) }
+        }
+    }
+
+    /// The web distinguishes deleting a config-backed pool from only clearing
+    /// the credentials of a built-in one; so does this.
     private var removeSection: some View {
         Section {
-            Button(role: .destructive) { Task { await removePool() } } label: { Label("Remove this provider pool", systemImage: "trash") }
+            Button(role: .destructive) { Task { await removePool() } } label: {
+                if group.isConfigBacked { Label("Delete this provider", systemImage: "trash") }
+                else { Label("Clear the stored key", systemImage: "trash") }
+            }
+        } footer: {
+            if group.isConfigBacked { Text("The pool is removed from this profile's configuration.") }
+            else { Text("The provider stays listed; only its stored credentials are cleared.") }
         }
     }
 
@@ -236,13 +194,45 @@ struct ProviderCatalogView: View {
         guard await store.attempt({ try await store.api.removeCustomProvider(group.id) }) != nil else { return }
         await reload()
     }
-}
 
-/// One row of the default-model picker.
-struct CatalogModelRow: Identifiable, Equatable {
-    let id: String
-    let model: String
-    let label: String
+    private func test() async {
+        catalogueBusy = "test"
+        defer { catalogueBusy = "" }
+        guard let result = await store.attempt({ try await store.api.testProvider(group.id) }) else { return }
+        catalogueNote = result.bool("success")
+            ? String(localized: "The connection succeeded.")
+            : (result.string("error", "message").nilIfEmpty ?? String(localized: "The connection failed."))
+    }
+
+    private func refreshModels() async {
+        catalogueBusy = "refresh"
+        defer { catalogueBusy = "" }
+        guard var result = await store.attempt({ try await store.api.refreshProviderModels(group.id) }) else { return }
+        // The server asks before applying a list that drops models; the phone
+        // confirms in place rather than opening a second dialog.
+        if result.bool("requires_confirmation") {
+            guard let confirmed = await store.attempt({ try await store.api.refreshProviderModels(group.id, confirm: true) }) else { return }
+            result = confirmed
+        }
+        guard result.bool("applied") else {
+            catalogueNote = String(localized: "The model list could not be refreshed.")
+            return
+        }
+        catalogueNote = String(localized: "The model list now has \(result.strings("models").count) models.")
+        await reload()
+    }
+
+    private func restoreModels() async {
+        catalogueBusy = "restore"
+        defer { catalogueBusy = "" }
+        guard let result = await store.attempt({ try await store.api.restoreProviderModels(group.id) }) else { return }
+        guard result.bool("applied") else {
+            catalogueNote = String(localized: "The model list could not be restored.")
+            return
+        }
+        catalogueNote = String(localized: "The model list now has \(result.strings("models").count) models.")
+        await reload()
+    }
 }
 
 struct ModelEditTarget: Identifiable, Equatable {

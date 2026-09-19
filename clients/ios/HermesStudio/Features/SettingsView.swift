@@ -32,9 +32,8 @@ struct SettingsView: View {
             Section("Compression") { NavigationLink { StudioSectionSettings(section: .compression) } label: { SettingsRow(icon: "arrow.down.right.and.arrow.up.left", color: CoreHubTokens.Palette.warning, title: "Compression") } }
             Section("Privacy") { NavigationLink { StudioSectionSettings(section: .privacy) } label: { SettingsRow(icon: "hand.raised.fill", color: CoreHubTokens.Palette.error, title: "Privacy") } }
             Section("Models") {
-                NavigationLink { ModelCatalogView() } label: { SettingsRow(icon: "cpu.fill", color: CoreHubTokens.Palette.accent, title: "Models and providers") }
-                NavigationLink { ModelsView() } label: { SettingsRow(icon: "checklist", color: CoreHubTokens.Palette.info, title: "Default model") }
-                NavigationLink { ProvidersView() } label: { SettingsRow(icon: "network", color: CoreHubTokens.Palette.info, title: "Provider status") }
+                NavigationLink { ModelsHomeView() } label: { SettingsRow(icon: "cpu.fill", color: CoreHubTokens.Palette.accent, title: "Models and providers") }
+                NavigationLink { ProviderSignInView() } label: { SettingsRow(icon: "person.badge.key.fill", color: CoreHubTokens.Palette.info, title: "Provider sign-in") }
             }
             Section("Voice") {
                 VoiceOutputSettingsRow()

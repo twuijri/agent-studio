@@ -2,7 +2,6 @@ import CryptoKit
 import Foundation
 import SwiftUI
 import UIKit
-import WebKit
 
 @MainActor
 final class StudioLogoStore: ObservableObject {
@@ -83,17 +82,14 @@ final class AvatarImageCache: ObservableObject {
             return
         }
 
-        let result: UIImage?
+        // Only stored image avatars are cached as bitmaps. A generated avatar
+        // is drawn natively by `BeamAvatarView`, so it never round-trips
+        // through a renderer or the disk.
+        var result: UIImage?
         if avatar?.type == "image", let dataURL = avatar?.dataURL {
             result = await Task.detached(priority: .utility) {
                 AvatarDiskCache.decodeDataURL(dataURL)
             }.value
-        } else if let markup = await Task.detached(priority: .utility, operation: {
-            MultiAvatar.svg(seed: avatar?.seed ?? profile)
-        }).value {
-            result = await SVGSnapshotRenderer.shared.render(markup)
-        } else {
-            result = nil
         }
 
         if let result {
@@ -144,131 +140,6 @@ private enum AvatarDiskCache {
             directory.appendingPathComponent("\(key).png"),
             directory.appendingPathComponent("\(key).stamp")
         )
-    }
-}
-
-enum MultiAvatar {
-    private static let order = ["env", "clo", "head", "mouth", "eyes", "top"]
-
-    static func svg(seed: String) -> String? {
-        guard let url = Bundle.main.url(forResource: "multiavatar", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let source = try? JSONSerialization.jsonObject(with: data) as? JSON,
-              let themes = source["themes"] as? JSON,
-              let parts = source["parts"] as? JSON
-        else { return nil }
-
-        let digits = selectedDigits(seed)
-        var rendered: [String: String] = [:]
-        for (index, part) in order.enumerated() {
-            guard let value = Int(digits.dropFirst(index * 2).prefix(2)) else { return nil }
-            let scaled = Int((0.47 * Double(value)).rounded())
-            let version: String
-            let theme: String
-            if scaled > 31 { version = padded(scaled - 32); theme = "C" }
-            else if scaled > 15 { version = padded(scaled - 16); theme = "B" }
-            else { version = padded(scaled); theme = "A" }
-
-            guard let versionThemes = themes[version] as? JSON,
-                  let selectedTheme = versionThemes[theme] as? JSON,
-                  let colors = selectedTheme[part] as? [String],
-                  let versionParts = parts[version] as? JSON,
-                  let markup = versionParts[part] as? String
-            else { return nil }
-            rendered[part] = painted(markup, colors: colors)
-        }
-
-        return source.string("svgStart")
-            + (rendered["env"] ?? "") + (rendered["head"] ?? "") + (rendered["clo"] ?? "")
-            + (rendered["top"] ?? "") + (rendered["eyes"] ?? "") + (rendered["mouth"] ?? "")
-            + source.string("svgEnd")
-    }
-
-    private static func selectedDigits(_ seed: String) -> String {
-        let digest = SHA256.hash(data: Data(seed.utf8)).map { String(format: "%02x", $0) }.joined()
-        return String((digest.filter(\.isNumber) + String(repeating: "0", count: 12)).prefix(12))
-    }
-
-    private static func padded(_ value: Int) -> String { value < 10 ? "0\(value)" : "\(value)" }
-
-    private static func painted(_ markup: String, colors: [String]) -> String {
-        guard let regex = try? NSRegularExpression(pattern: "#.*?;") else { return markup }
-        let range = NSRange(markup.startIndex..<markup.endIndex, in: markup)
-        let matches = Array(regex.matches(in: markup, range: range).prefix(colors.count))
-        var result = markup
-        for (match, color) in zip(matches, colors).reversed() {
-            guard let swiftRange = Range(match.range, in: result) else { continue }
-            result.replaceSubrange(swiftRange, with: color + ";")
-        }
-        return result
-    }
-}
-
-@MainActor
-private final class SVGSnapshotRenderer {
-    static let shared = SVGSnapshotRenderer()
-    private var jobs: [UUID: SVGRenderJob] = [:]
-
-    func render(_ markup: String, pixels: CGFloat = 288) async -> UIImage? {
-        await withCheckedContinuation { continuation in
-            let id = UUID()
-            let job = SVGRenderJob(markup: markup, pixels: pixels) { [weak self] image in
-                self?.jobs.removeValue(forKey: id)
-                continuation.resume(returning: image)
-            }
-            jobs[id] = job
-            job.start()
-        }
-    }
-}
-
-@MainActor
-private final class SVGRenderJob: NSObject, WKNavigationDelegate {
-    private let markup: String
-    private let webView: WKWebView
-    private var completion: ((UIImage?) -> Void)?
-
-    init(markup: String, pixels: CGFloat, completion: @escaping (UIImage?) -> Void) {
-        self.markup = markup
-        self.completion = completion
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        webView = WKWebView(frame: CGRect(x: 0, y: 0, width: pixels, height: pixels), configuration: configuration)
-        super.init()
-        webView.navigationDelegate = self
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
-        webView.scrollView.isScrollEnabled = false
-    }
-
-    func start() {
-        let html = """
-        <!doctype html><html><head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-        <style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent}svg{display:block;width:100%;height:100%}</style>
-        </head><body>\(markup)</body></html>
-        """
-        webView.loadHTMLString(html, baseURL: nil)
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        DispatchQueue.main.async { [weak self] in self?.snapshot() }
-    }
-
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finish(nil) }
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { finish(nil) }
-
-    private func snapshot() {
-        let configuration = WKSnapshotConfiguration()
-        configuration.rect = webView.bounds
-        webView.takeSnapshot(with: configuration) { [weak self] image, _ in self?.finish(image) }
-    }
-
-    private func finish(_ image: UIImage?) {
-        guard let completion else { return }
-        self.completion = nil
-        completion(image)
     }
 }
 
