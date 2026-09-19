@@ -560,13 +560,19 @@ class HermesApi(
         call("/api/studio/group-chat/rooms/${enc(roomId)}/clear-context", "POST", JSONObject())
     }
 
-    /** GET /api/studio/group-chat/rooms/{id}/summary */
+    /**
+     * GET /api/studio/group-chat/rooms/{id}/summary. The socket snapshot names
+     * the same record `roomSummary`, so either envelope is accepted.
+     */
     fun roomSummary(roomId: String): RoomSummary? =
-        GroupJson.summary(call("/api/studio/group-chat/rooms/${enc(roomId)}/summary").optJSONObject("summary"))
+        GroupJson.summary(summaryEnvelope(call("/api/studio/group-chat/rooms/${enc(roomId)}/summary")))
 
     /** PUT /api/studio/group-chat/rooms/{id}/summary {summary} */
     fun updateRoomSummary(roomId: String, summary: String): RoomSummary? =
-        GroupJson.summary(call("/api/studio/group-chat/rooms/${enc(roomId)}/summary", "PUT", JSONObject().put("summary", summary)).optJSONObject("summary"))
+        GroupJson.summary(summaryEnvelope(call("/api/studio/group-chat/rooms/${enc(roomId)}/summary", "PUT", JSONObject().put("summary", summary))))
+
+    private fun summaryEnvelope(result: JSONObject): JSONObject? =
+        result.optJSONObject("summary") ?: result.optJSONObject("roomSummary")
 
     /** GET /api/studio/group-chat/rooms/{id}/handoffs — chains that stopped and can be continued. */
     fun roomHandoffs(roomId: String): List<HandoffChain> =
