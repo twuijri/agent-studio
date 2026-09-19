@@ -1,207 +1,103 @@
 package us.i3u.hermesstudio.ui.chat
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
-import android.os.Bundle
 import android.provider.OpenableColumns
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Rule
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.TextRange
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.AccountTree
-import androidx.compose.material.icons.filled.Cable
-import androidx.compose.material.icons.filled.Compress
-import androidx.compose.material.icons.filled.DisplaySettings
-import androidx.compose.material.icons.filled.Forum
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.HourglassBottom
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Insights
-import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.ModelTraining
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.PrivacyTip
-import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.VpnLock
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Pets
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.ViewKanban
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.ui.res.painterResource
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import java.io.File
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.style.TextDirection
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
 import java.util.Locale
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import us.i3u.hermesstudio.*
-import us.i3u.hermesstudio.ui.chat.*
-import us.i3u.hermesstudio.ui.navigation.*
-import us.i3u.hermesstudio.ui.sessions.*
-import us.i3u.hermesstudio.ui.settings.*
-import us.i3u.hermesstudio.ui.theme.*
+import us.i3u.hermesstudio.AppViewModel
+import us.i3u.hermesstudio.R
+import us.i3u.hermesstudio.Store
+import us.i3u.hermesstudio.UiState
+import us.i3u.hermesstudio.VoiceSegmentKind
+import us.i3u.hermesstudio.VoiceStatus
+import us.i3u.hermesstudio.applyVoiceSegment
+import us.i3u.hermesstudio.ui.theme.CoreHub
+import us.i3u.hermesstudio.ui.theme.CoreHubIcons
+import us.i3u.hermesstudio.ui.theme.CoreHubTextStyles
+import us.i3u.hermesstudio.ui.theme.CoreHubTokens
 
+/**
+ * The composer per DESIGN-SPEC: a radius-18 card at least 150 dp tall with the
+ * context indicator top-end, a borderless 16 sp textarea (dir=auto, never
+ * auto-focused), attachment chips with upload progress, and the toolbar
+ * [+ attach] [🧠 reasoning] [⚙ settings] [model] … [mic 30] [send 30 / stop].
+ * Below ~380 dp the pill labels collapse to icons.
+ */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun Composer(
@@ -212,10 +108,12 @@ internal fun Composer(
     viewModel: AppViewModel,
 ) {
     val context = LocalContext.current
+    val palette = CoreHub.palette
     var sheet by remember { mutableStateOf<ComposerSheet?>(null) }
     var captureUri by remember { mutableStateOf<Uri?>(null) }
     var fieldFocused by remember { mutableStateOf(false) }
-    var composerExpanded by rememberSaveable { mutableStateOf(false) }
+    var attachMenu by remember { mutableStateOf(false) }
+    var settingsMenu by remember { mutableStateOf(false) }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { readAndAttach(context, it, viewModel) }
@@ -270,45 +168,12 @@ internal fun Composer(
     }
 
     when (sheet) {
-        ComposerSheet.Options -> ModalBottomSheet(
-            onDismissRequest = { sheet = null },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            OptionsSheet(
-                state = state,
-                onCamera = {
-                    sheet = null
-                    askCamera.launch(Manifest.permission.CAMERA)
-                },
-                onGallery = {
-                    sheet = null
-                    pickImage.launch("image/*")
-                },
-                onDocument = {
-                    sheet = null
-                    pickFile.launch("*/*")
-                },
-                onModel = {
-                    viewModel.loadModels()
-                    sheet = ComposerSheet.Model
-                },
-                onReasoning = { sheet = ComposerSheet.Reasoning },
-            )
-        }
-
-        ComposerSheet.Model -> ModalBottomSheet(
-            onDismissRequest = { sheet = null },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
+        ComposerSheet.Model -> ModalBottomSheet(onDismissRequest = { sheet = null }, sheetState = rememberModalBottomSheetState()) {
             PickerSheet(
                 title = stringResource(R.string.sheet_model),
                 loading = state.loadingModels,
                 rows = state.models.map { option ->
-                    PickerRow(
-                        label = option.id,
-                        detail = option.provider,
-                        selected = option.id == state.sessionModel,
-                    ) {
+                    PickerRow(label = option.id, detail = option.provider, selected = option.id == state.sessionModel) {
                         viewModel.selectModel(option)
                         sheet = null
                     }
@@ -316,10 +181,7 @@ internal fun Composer(
             )
         }
 
-        ComposerSheet.Reasoning -> ModalBottomSheet(
-            onDismissRequest = { sheet = null },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
+        ComposerSheet.Reasoning -> ModalBottomSheet(onDismissRequest = { sheet = null }, sheetState = rememberModalBottomSheetState()) {
             PickerSheet(
                 title = stringResource(R.string.sheet_reasoning),
                 loading = false,
@@ -336,214 +198,328 @@ internal fun Composer(
             )
         }
 
-        null -> Unit
-    }
-
-    if (!composerExpanded && draft.isBlank() && state.attachments.isEmpty() && state.voice == VoiceStatus.Idle) {
-        Surface(
-            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
-            shape = RoundedCornerShape(CoreHubTokens.Radius.composer),
-            color = CoreHub.palette.bgComposer,
-            contentColor = CoreHub.palette.textPrimary,
-            tonalElevation = 0.dp,
-            shadowElevation = CoreHubTokens.Shadow.composer,
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                IconButton(onClick = { composerExpanded = true }, modifier = Modifier.size(42.dp)) {
-                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.composer_expand))
-                }
-                Text(
-                    stringResource(R.string.composer_hint),
-                    modifier = Modifier.weight(1f).clickable { composerExpanded = true }.padding(vertical = 10.dp),
-                    style = CoreHubTextStyles.input,
-                    color = CoreHub.palette.textMuted,
-                )
-                ComposerActionButton(state, draft, onSend, viewModel) {
-                    askMic.launch(Manifest.permission.RECORD_AUDIO)
-                }
-            }
-        }
-        return
+        ComposerSheet.Options, null -> Unit
     }
 
     Surface(
         modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 7.dp),
         shape = RoundedCornerShape(CoreHubTokens.Radius.composer),
-        color = CoreHub.palette.bgComposer,
-        contentColor = CoreHub.palette.textPrimary,
+        color = palette.bgComposer,
+        contentColor = palette.textPrimary,
         tonalElevation = 0.dp,
         shadowElevation = if (fieldFocused) CoreHubTokens.Shadow.composerFocused else CoreHubTokens.Shadow.composer,
     ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
-        if (state.attachments.isNotEmpty() || state.attaching) {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().heightIn(min = CoreHubTokens.Metrics.composerMinHeight)) {
+            val compact = maxWidth < 380.dp
+            // Context indicator, top-end, above the textarea (the 22 dp top padding of the spec).
+            Box(modifier = Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 12.dp)) { ContextUsage(state) }
+            // Two blocks with the free space between them, so the toolbar sits on
+            // the card's bottom edge even when the card is at its 150 dp minimum.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = CoreHubTokens.Metrics.composerMinHeight)
+                    .padding(top = 22.dp, start = 12.dp, end = 12.dp, bottom = 9.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                state.attachments.forEach { file ->
-                    AssistChip(
-                        onClick = { viewModel.removeAttachment(file) },
-                        label = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        trailingIcon = { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_remove)) },
-                    )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                if (state.attachments.isNotEmpty() || state.uploads.isNotEmpty()) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        state.uploads.forEach { upload ->
+                            UploadChip(name = upload.name, percent = upload.percent) { viewModel.cancelUpload(upload.id) }
+                        }
+                        state.attachments.forEach { file ->
+                            AttachmentChip(name = file.name) { viewModel.removeAttachment(file) }
+                        }
+                    }
                 }
-                if (state.attaching) AssistChip(onClick = {}, label = { Text(stringResource(R.string.composer_uploading)) })
-            }
-        }
 
-        if (state.voice != VoiceStatus.Idle) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                when (state.voice) {
-                    VoiceStatus.Listening -> {
-                        Icon(
-                            Icons.Filled.Mic,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            stringResource(if (state.voiceViaServer) R.string.composer_recording else R.string.composer_listening),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = { viewModel.cancelVoiceInput() }) { Text(stringResource(R.string.action_cancel)) }
-                    }
-                    VoiceStatus.Transcribing -> {
-                        CircularProgressIndicator(modifier = Modifier.size(14.dp))
-                        Text(
-                            stringResource(R.string.composer_transcribing),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    VoiceStatus.Error -> {
-                        Icon(
-                            Icons.Filled.ErrorOutline,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            state.error ?: stringResource(R.string.composer_voice_failed),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = { viewModel.resetVoice() }) { Text(stringResource(R.string.action_dismiss)) }
-                    }
-                    VoiceStatus.Idle -> Unit
-                }
-            }
-        }
+                if (state.voice != VoiceStatus.Idle) VoiceStatusRow(state, viewModel)
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
-        ) {
-            OutlinedTextField(
-                value = field,
-                onValueChange = { value ->
-                    field = value
-                    if (value.text != draft) onDraftChange(value.text)
-                },
-                placeholder = { Text(stringResource(R.string.composer_hint), style = CoreHubTextStyles.input, color = CoreHub.palette.textMuted) },
-                modifier = Modifier.fillMaxWidth().onFocusChanged {
-                    if (fieldFocused && !it.isFocused && draft.isBlank() && state.attachments.isEmpty()) {
-                        composerExpanded = false
-                    }
-                    fieldFocused = it.isFocused
-                },
-                // Never below 16 sp on phones; dir=auto per DESIGN-SPEC.
-                textStyle = CoreHubTextStyles.input.copy(color = CoreHub.palette.textPrimary, textDirection = TextDirection.Content),
-                maxLines = 5,
-                shape = RoundedCornerShape(CoreHubTokens.Radius.bubble),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = CoreHub.palette.bgInput,
-                    unfocusedContainerColor = CoreHub.palette.bgInput,
-                    focusedBorderColor = CoreHub.palette.accent,
-                    unfocusedBorderColor = CoreHub.palette.inputBorder,
-                    cursorColor = CoreHub.palette.accent,
-                ),
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Surface(
-                modifier = Modifier.size(CoreHubTokens.Metrics.composerButton),
-                shape = CircleShape,
-                color = Color.Transparent,
-                border = androidx.compose.foundation.BorderStroke(1.dp, CoreHub.palette.inputBorder),
-            ) {
-                IconButton(onClick = { sheet = ComposerSheet.Options }, enabled = !state.sending) {
-                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.composer_more), modifier = Modifier.size(18.dp))
-                }
-            }
-            Row(
-                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                ToolbarChip(
-                    icon = Icons.Filled.Person,
-                    label = state.openSession?.profile ?: state.activeProfile.ifBlank { "default" },
-                    onClick = {},
+                BasicTextField(
+                    value = field,
+                    onValueChange = { value ->
+                        field = value
+                        if (value.text != draft) onDraftChange(value.text)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .onFocusChanged { fieldFocused = it.isFocused },
+                    // Never below 16 sp on phones; dir=auto per DESIGN-SPEC.
+                    textStyle = CoreHubTextStyles.input.copy(color = palette.textPrimary, textDirection = TextDirection.Content),
+                    cursorBrush = SolidColor(palette.accent),
+                    maxLines = 6,
+                    decorationBox = { inner ->
+                        Box(modifier = Modifier.padding(vertical = 6.dp)) {
+                            if (field.text.isEmpty()) {
+                                Text(stringResource(R.string.composer_hint), style = CoreHubTextStyles.input, color = palette.textMuted)
+                            }
+                            inner()
+                        }
+                    },
                 )
-                ToolbarChip(
-                    icon = Icons.Filled.Psychology,
-                    label = reasoningLabel(state.reasoningEffort),
-                ) { sheet = ComposerSheet.Reasoning }
-                ToolbarChip(
-                    icon = Icons.Filled.ModelTraining,
-                    label = state.sessionModel ?: stringResource(R.string.sheet_model),
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    viewModel.loadModels()
-                    sheet = ComposerSheet.Model
+                    Box {
+                        RoundToolbarButton(icon = Icons.Filled.Add, label = stringResource(R.string.composer_attach), enabled = !state.sending) { attachMenu = true }
+                        DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.sheet_camera)) },
+                                leadingIcon = { Icon(Icons.Filled.PhotoCamera, null) },
+                                onClick = { attachMenu = false; askCamera.launch(Manifest.permission.CAMERA) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.sheet_gallery)) },
+                                leadingIcon = { Icon(Icons.Filled.Image, null) },
+                                onClick = { attachMenu = false; pickImage.launch("image/*") },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.sheet_file)) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null) },
+                                onClick = { attachMenu = false; pickFile.launch("*/*") },
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        ToolbarChip(
+                            icon = Icons.Filled.Psychology,
+                            label = reasoningLabel(state.reasoningEffort),
+                            compact = compact,
+                            contentDescription = stringResource(R.string.sheet_reasoning),
+                        ) { sheet = ComposerSheet.Reasoning }
+                        Box {
+                            ToolbarChip(
+                                icon = CoreHubIcons.Settings,
+                                label = stringResource(R.string.composer_settings),
+                                compact = compact,
+                                contentDescription = stringResource(R.string.composer_settings),
+                            ) { settingsMenu = true }
+                            DropdownMenu(expanded = settingsMenu, onDismissRequest = { settingsMenu = false }) {
+                                SettingsMenuItem(stringResource(R.string.composer_voice_mode), state.speakReplies) {
+                                    viewModel.setSpeakReplies(!state.speakReplies)
+                                }
+                                SettingsMenuItem(stringResource(R.string.composer_show_tool_calls), state.showToolCalls) {
+                                    viewModel.setShowToolCalls(!state.showToolCalls)
+                                }
+                                SettingsMenuItem(stringResource(R.string.composer_push), state.sessionPushEnabled) {
+                                    settingsMenu = false
+                                    viewModel.togglePushEnabled()
+                                }
+                            }
+                        }
+                        ToolbarChip(
+                            icon = Icons.Filled.ModelTraining,
+                            label = state.sessionModel ?: stringResource(R.string.sheet_model),
+                            compact = compact,
+                            contentDescription = stringResource(R.string.sheet_model),
+                            maxLabelWidth = 190.dp,
+                            ltrLabel = state.sessionModel != null,
+                        ) {
+                            viewModel.loadModels()
+                            sheet = ComposerSheet.Model
+                        }
+                    }
+                    MicButton(state, viewModel) { askMic.launch(Manifest.permission.RECORD_AUDIO) }
+                    ComposerActionButton(state, draft, onSend, viewModel)
                 }
-                if (state.speaking) {
-                    AssistChip(
-                        onClick = { viewModel.stopSpeaking() },
-                        label = { Text(stringResource(R.string.voice_stop_reply)) },
-                        leadingIcon = { Icon(Icons.Filled.Stop, null, Modifier.size(15.dp)) },
-                    )
-                }
-                ContextUsage(state)
-            }
-            ComposerActionButton(state, draft, onSend, viewModel) {
-                askMic.launch(Manifest.permission.RECORD_AUDIO)
             }
         }
-    }
     }
 }
 
 @Composable
-internal fun ContextUsage(state: UiState) {
-    val ratio = if (state.contextWindow > 0) {
-        (state.contextTokens.toFloat() / state.contextWindow.toFloat()).coerceIn(0f, 1f)
-    } else 0f
-    // 11 sp muted; amber above 80 %; bar 42×4 on phones (DESIGN-SPEC context indicator).
-    val color = if (ratio > CoreHubTokens.Metrics.contextWarnRatio) CoreHubTokens.Metrics.contextWarn else CoreHub.palette.textMuted
-    Column(modifier = Modifier.widthIn(min = 84.dp, max = 122.dp)) {
+private fun SettingsMenuItem(label: String, checked: Boolean, onClick: () -> Unit) {
+    val palette = CoreHub.palette
+    DropdownMenuItem(
+        text = { Text(label) },
+        trailingIcon = {
+            if (checked) Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.action_selected), tint = palette.textPrimary, modifier = Modifier.size(16.dp))
+            else Spacer(Modifier.size(16.dp))
+        },
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun VoiceStatusRow(state: UiState, viewModel: AppViewModel) {
+    val palette = CoreHub.palette
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        when (state.voice) {
+            VoiceStatus.Listening -> {
+                Icon(Icons.Filled.Mic, contentDescription = null, tint = palette.accent, modifier = Modifier.size(16.dp))
+                Text(
+                    stringResource(if (state.voiceViaServer) R.string.composer_recording else R.string.composer_listening),
+                    style = CoreHubTextStyles.sessionTitle,
+                    color = palette.accent,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { viewModel.cancelVoiceInput() }) { Text(stringResource(R.string.action_cancel)) }
+            }
+            VoiceStatus.Transcribing -> {
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                Text(stringResource(R.string.composer_transcribing), style = CoreHubTextStyles.sessionTitle, modifier = Modifier.weight(1f))
+            }
+            VoiceStatus.Error -> {
+                Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = palette.error, modifier = Modifier.size(16.dp))
+                Text(
+                    state.error ?: stringResource(R.string.composer_voice_failed),
+                    style = CoreHubTextStyles.sessionTitle,
+                    color = palette.error,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { viewModel.resetVoice() }) { Text(stringResource(R.string.action_dismiss)) }
+            }
+            VoiceStatus.Idle -> Unit
+        }
+    }
+}
+
+/** A file that is still uploading: name, percent, progress bar, cancel ✕. */
+@Composable
+private fun UploadChip(name: String, percent: Int, onCancel: () -> Unit) {
+    val palette = CoreHub.palette
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(CoreHubTokens.Radius.medium))
+            .background(palette.segmentTrack)
+            .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 6.dp)
+            .widthIn(max = 220.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                stringResource(R.string.upload_progress, name, percent),
+                style = CoreHubTextStyles.meta.copy(textDirection = TextDirection.Content),
+                color = palette.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            IconButton(onClick = onCancel, modifier = Modifier.size(22.dp)) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.upload_cancel), tint = palette.textMuted, modifier = Modifier.size(14.dp))
+            }
+        }
+        LinearProgressIndicator(
+            progress = { percent / 100f },
+            modifier = Modifier.fillMaxWidth().height(CoreHubTokens.Metrics.contextBarHeight).clip(RoundedCornerShape(CoreHubTokens.Radius.pill)),
+            color = palette.accent,
+            trackColor = palette.borderLight,
+        )
+    }
+}
+
+@Composable
+private fun AttachmentChip(name: String, onRemove: () -> Unit) {
+    val palette = CoreHub.palette
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(CoreHubTokens.Radius.pill))
+            .background(palette.segmentTrack)
+            .padding(start = 10.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         Text(
-            if (state.loadingContext) stringResource(R.string.context_loading)
-            else if (state.contextWindow > 0) stringResource(
-                R.string.context_usage,
-                compactNumber(state.contextTokens),
-                compactNumber(state.contextWindow),
-            ) else stringResource(R.string.context_unknown),
-            style = CoreHubTextStyles.meta.copy(textDirection = TextDirection.Ltr),
+            name,
+            style = CoreHubTextStyles.sessionTitle.copy(textDirection = TextDirection.Content),
+            color = palette.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 180.dp),
+        )
+        IconButton(onClick = onRemove, modifier = Modifier.size(22.dp)) {
+            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_remove), tint = palette.textMuted, modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+/** 30 dp outlined circle (the "+" button). */
+@Composable
+private fun RoundToolbarButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val palette = CoreHub.palette
+    Box(
+        modifier = Modifier
+            .size(CoreHubTokens.Metrics.composerButton)
+            .clip(CircleShape)
+            .then(Modifier.background(Color.Transparent))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(shape = CircleShape, color = Color.Transparent, border = BorderStroke(1.dp, palette.inputBorder), modifier = Modifier.size(CoreHubTokens.Metrics.composerButton)) {}
+        Icon(icon, contentDescription = label, tint = if (enabled) palette.textSecondary else palette.textMuted, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** The M1 voice input, 30 dp: idle mic / stop while listening / spinner while transcribing. */
+@Composable
+private fun MicButton(state: UiState, viewModel: AppViewModel, onRecord: () -> Unit) {
+    val palette = CoreHub.palette
+    val listening = state.voice == VoiceStatus.Listening
+    Box(
+        modifier = Modifier
+            .size(CoreHubTokens.Metrics.composerButton)
+            .clip(CircleShape)
+            .background(if (listening) palette.accent else Color.Transparent)
+            .clickable(enabled = state.voice != VoiceStatus.Transcribing) {
+                if (listening) viewModel.stopVoiceInput() else onRecord()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        when (state.voice) {
+            VoiceStatus.Transcribing -> CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = palette.textSecondary)
+            VoiceStatus.Listening -> Icon(
+                Icons.Filled.Stop,
+                contentDescription = stringResource(if (state.voiceViaServer) R.string.composer_stop else R.string.composer_stop_listening),
+                tint = palette.textOnAccent,
+                modifier = Modifier.size(18.dp),
+            )
+            else -> Icon(
+                Icons.Filled.Mic,
+                contentDescription = stringResource(R.string.composer_record),
+                tint = if (state.voice == VoiceStatus.Error) palette.error else palette.textSecondary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+/** "45.0k / 256.0k · remaining 211.0k": 11 sp muted, amber above 80 %, bar 42×4. */
+@Composable
+internal fun ContextUsage(state: UiState) {
+    val palette = CoreHub.palette
+    val ratio = contextRatio(state.contextTokens, state.contextWindow)
+    val color = if (ratio > CoreHubTokens.Metrics.contextWarnRatio) CoreHubTokens.Metrics.contextWarn else palette.textMuted
+    Column(horizontalAlignment = Alignment.End) {
+        Text(
+            when {
+                state.loadingContext -> stringResource(R.string.context_loading)
+                state.contextWindow > 0 -> contextIndicatorText(state.contextTokens, state.contextWindow, stringResource(R.string.context_remaining))
+                else -> stringResource(R.string.context_unknown)
+            },
+            style = CoreHubTextStyles.meta.copy(textDirection = TextDirection.Content),
             color = color,
             maxLines = 1,
         )
@@ -551,7 +527,7 @@ internal fun ContextUsage(state: UiState) {
             progress = { ratio },
             modifier = Modifier.width(CoreHubTokens.Metrics.contextBarWidth).height(CoreHubTokens.Metrics.contextBarHeight).clip(RoundedCornerShape(CoreHubTokens.Radius.pill)),
             color = color,
-            trackColor = CoreHub.palette.borderLight,
+            trackColor = palette.borderLight,
         )
     }
 }
@@ -601,125 +577,75 @@ internal fun appearanceLabel(appearance: String): String = stringResource(
 internal const val PHONE_REPOSITORY_URL = "https://github.com/twuijri/hermes-studio-mobile"
 internal const val STUDIO_REPOSITORY_URL = "https://github.com/EKKOLearnAI/hermes-studio"
 
+/** 30 dp accent circle: send when there is a payload, a square stop while streaming. */
 @Composable
 internal fun ComposerActionButton(
     state: UiState,
     draft: String,
     onSend: () -> Unit,
     viewModel: AppViewModel,
-    onRecord: () -> Unit,
 ) {
     val hasPayload = draft.isNotBlank() || state.attachments.isNotEmpty()
-    val listening = state.voice == VoiceStatus.Listening
-    val active = hasPayload || listening || state.sending
     val palette = CoreHub.palette
+    val stopping = state.abortPhase != null
+    val active = hasPayload || state.sending
     val background = if (active) palette.accent else palette.bgSecondary
-    val tint = if (active) palette.textOnAccent else palette.textPrimary
+    val tint = if (active) palette.textOnAccent else palette.textMuted
+    val uploading = state.uploads.isNotEmpty()
 
-    // 30 px circle, accent while there is something to send; a square stop while streaming.
     Box(
         modifier = Modifier
             .size(CoreHubTokens.Metrics.composerButton)
             .clip(CircleShape)
-            .background(background),
+            .background(background)
+            .clickable(enabled = (state.sending && !stopping) || (hasPayload && !uploading)) {
+                if (state.sending) viewModel.stopRun() else onSend()
+            },
         contentAlignment = Alignment.Center,
     ) {
         when {
-            listening -> IconButton(onClick = { viewModel.stopVoiceInput() }) {
-                Icon(
-                    Icons.Filled.Stop,
-                    contentDescription = stringResource(if (state.voiceViaServer) R.string.composer_stop else R.string.composer_stop_listening),
-                    tint = tint,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            state.voice == VoiceStatus.Transcribing -> CircularProgressIndicator(
-                modifier = Modifier.size(20.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary,
+            stopping -> CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = tint)
+            state.sending -> Box(
+                modifier = Modifier.size(12.dp).background(tint, RoundedCornerShape(2.dp)),
             )
-            state.sending -> IconButton(onClick = { viewModel.stopRun() }) {
-                Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.conversation_stop), tint = tint, modifier = Modifier.size(20.dp))
-            }
-            hasPayload -> IconButton(onClick = onSend) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.composer_send), tint = tint, modifier = Modifier.size(20.dp))
-            }
-            else -> IconButton(onClick = onRecord) {
-                Icon(
-                    Icons.Filled.Mic,
-                    contentDescription = stringResource(R.string.composer_record),
-                    tint = if (state.voice == VoiceStatus.Error) MaterialTheme.colorScheme.error else tint,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+            else -> Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.composer_send), tint = tint, modifier = Modifier.size(16.dp))
         }
     }
 }
 
+/** Pill (radius 999) on the segment track; on narrow phones only the icon shows. */
 @Composable
 internal fun ToolbarChip(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
+    compact: Boolean = false,
+    contentDescription: String? = null,
+    maxLabelWidth: androidx.compose.ui.unit.Dp = 150.dp,
+    ltrLabel: Boolean = false,
     onClick: () -> Unit,
 ) {
-    // Pill (radius 999) on the input border colour; labels are capped like the web's model pill.
     val palette = CoreHub.palette
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(CoreHubTokens.Radius.pill))
             .background(palette.segmentTrack)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .padding(horizontal = if (compact) 8.dp else 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = palette.textSecondary, modifier = Modifier.size(14.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium.copy(textDirection = TextDirection.Content),
-            color = palette.textSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 150.dp),
-        )
-        Text("⌄", style = CoreHubTextStyles.meta, color = palette.textMuted)
-    }
-}
-
-/** The "+" sheet: attachments first, then the per-conversation controls. */
-@Composable
-internal fun OptionsSheet(
-    state: UiState,
-    onCamera: () -> Unit,
-    onGallery: () -> Unit,
-    onDocument: () -> Unit,
-    onModel: () -> Unit,
-    onReasoning: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 28.dp)) {
-        SheetTitle(stringResource(R.string.sheet_add))
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            AttachOption(Icons.Filled.PhotoCamera, stringResource(R.string.sheet_camera), onCamera)
-            AttachOption(Icons.Filled.Image, stringResource(R.string.sheet_gallery), onGallery)
-            AttachOption(Icons.AutoMirrored.Filled.InsertDriveFile, stringResource(R.string.sheet_file), onDocument)
+        Icon(icon, contentDescription = contentDescription ?: label, tint = palette.textSecondary, modifier = Modifier.size(14.dp))
+        if (!compact) {
+            Text(
+                label,
+                style = CoreHubTextStyles.sessionTitle.copy(textDirection = if (ltrLabel) TextDirection.Ltr else TextDirection.Content),
+                color = palette.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = maxLabelWidth),
+            )
+            Text("⌄", style = CoreHubTextStyles.meta, color = palette.textMuted)
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-        SheetTitle(stringResource(R.string.sheet_conversation))
-        SheetRow(
-            icon = Icons.Filled.ModelTraining,
-            label = stringResource(R.string.sheet_model),
-            detail = state.sessionModel ?: stringResource(R.string.sheet_profile_default),
-            onClick = onModel,
-        )
-        SheetRow(
-            icon = Icons.Filled.Psychology,
-            label = stringResource(R.string.sheet_reasoning),
-            detail = reasoningLabel(state.reasoningEffort),
-            onClick = onReasoning,
-        )
     }
 }
 
@@ -732,13 +658,18 @@ internal data class PickerRow(
 
 @Composable
 internal fun PickerSheet(title: String, loading: Boolean, rows: List<PickerRow>) {
+    val palette = CoreHub.palette
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 28.dp)) {
         SheetTitle(title)
-        if (loading) LoadingRow()
+        if (loading) {
+            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
+                CircularProgressIndicator(modifier = Modifier.size(22.dp))
+            }
+        }
         if (!loading && rows.isEmpty()) {
             Text(
                 stringResource(R.string.sheet_empty),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = palette.textSecondary,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             )
         }
@@ -751,13 +682,9 @@ internal fun PickerSheet(title: String, loading: Boolean, rows: List<PickerRow>)
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(row.label, style = MaterialTheme.typography.bodyLarge)
+                    Text(row.label, style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Content))
                     row.detail?.let {
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
                     }
                 }
                 if (row.selected) {
@@ -860,7 +787,9 @@ internal fun readAndAttach(
         }
     }
     val bytes = runCatching { resolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-    if (bytes == null || bytes.isEmpty()) return
+    if (bytes == null || bytes.isEmpty()) {
+        viewModel.reportAttachmentUnreadable(name)
+        return
+    }
     viewModel.attach(bytes, name, mime)
 }
-

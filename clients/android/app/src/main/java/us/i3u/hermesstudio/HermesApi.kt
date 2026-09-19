@@ -1680,6 +1680,76 @@ class HermesApi(
         }
     }
 
+    // ── chunked App uploads (/api/studio/app-uploads) ─────────────────────
+
+    /** POST /api/studio/app-uploads — opens a chunked upload; the id is chosen by the phone. */
+    fun openAppUpload(profile: String, id: String, name: String, size: Long): AppUploadSession {
+        val body = JSONObject().put("id", id).put("name", name).put("size", size)
+        val result = call("/api/studio/app-uploads", "POST", body, profile)
+        return AppUploadSession(
+            id = result.optString("id").ifBlank { id },
+            nextOffset = result.optLong("nextOffset", 0L),
+            maxChunkBytes = result.optInt("maxChunkBytes", AppUploads.DEFAULT_CHUNK_BYTES).takeIf { it > 0 }
+                ?: AppUploads.DEFAULT_CHUNK_BYTES,
+        )
+    }
+
+    /** PUT /api/studio/app-uploads/{id}/chunks?offset=N — a raw body of at most 256 KiB. */
+    fun appendAppUploadChunk(profile: String, id: String, offset: Long, bytes: ByteArray): Long {
+        val result = execute {
+            val builder = Request.Builder()
+                .url(url("/api/studio/app-uploads/${enc(id)}/chunks?offset=$offset"))
+                .put(bytes.toRequestBody("application/octet-stream".toMediaType()))
+            if (token.isNotBlank()) builder.header("Authorization", "Bearer $token")
+            if (profile.isNotBlank()) builder.header("X-Hermes-Profile", profile)
+            builder.header("Accept", "application/json")
+            builder.build()
+        }
+        return result.optLong("nextOffset", offset + bytes.size)
+    }
+
+    /** POST /api/studio/app-uploads/{id}/complete — returns the stored file for the content block. */
+    fun completeAppUpload(profile: String, id: String, mime: String, fallbackName: String): Upload {
+        val result = call("/api/studio/app-uploads/${enc(id)}/complete", "POST", JSONObject(), profile)
+        val first = result.optJSONArray("files")?.optJSONObject(0)
+            ?: throw HermesException("Upload returned no file")
+        val path = first.optString("path")
+        if (path.isBlank()) throw HermesException("Upload returned no path")
+        return Upload(name = first.optString("name").ifBlank { fallbackName }, path = path, mime = mime)
+    }
+
+    /** DELETE /api/studio/app-uploads/{id} — drops a cancelled upload. */
+    fun abortAppUpload(profile: String, id: String) {
+        call("/api/studio/app-uploads/${enc(id)}", "DELETE", null, profile)
+    }
+
+    /** POST /api/studio/sessions/{id}/push-enabled — the composer's "Push" toggle. */
+    fun setSessionPushEnabled(sessionId: String, enabled: Boolean) {
+        call("/api/studio/sessions/${enc(sessionId)}/push-enabled", "POST", JSONObject().put("pushEnabled", enabled))
+    }
+
+    /**
+     * The streaming endpoint for inline media players. Unlike [downloadUrl] the
+     * token is NOT placed in the query: players send it as a bearer header via
+     * [mediaHeaders]. The server answers HTTP ranges and marks device files with
+     * `X-Core-Hub-Source: device:<id>`.
+     */
+    fun streamUrl(filePath: String, fileName: String, profile: String?): String {
+        val path = unwrapStudioDownloadPath(filePath)
+        val params = buildList {
+            add("path=${enc(path)}")
+            add("name=${enc(inferDownloadFileName(path, fileName))}")
+            profile?.trim()?.takeIf { it.isNotBlank() }?.let { add("profile=${enc(it)}") }
+        }
+        return url("/api/studio/files/download?${params.joinToString("&")}")
+    }
+
+    /** Request headers for a media player fetching [streamUrl]. */
+    fun mediaHeaders(profile: String?): Map<String, String> = buildMap {
+        if (token.isNotBlank()) put("Authorization", "Bearer $token")
+        profile?.trim()?.takeIf { it.isNotBlank() }?.let { put("X-Hermes-Profile", it) }
+    }
+
     /** POST /upload — stores the file under the profile upload dir and returns its path. */
     fun upload(profile: String, bytes: ByteArray, filename: String, mime: String): Upload {
         val result = multipart("/upload?profile=${enc(profile)}", "files", bytes, filename, mime)

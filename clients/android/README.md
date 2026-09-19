@@ -152,6 +152,42 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   colour, the bundled logo is the in-app mark until the server's is fetched, and the
   coding-agent avatars are bundled
 
+## Changed in M3 (chat parity with the web client)
+
+- **Message rows per the spec**: user bubbles end-aligned at 75 %, assistant rows with
+  the 22 dp avatar and author label at 80 %, system notices with the inline-start
+  warning border, slash-command acknowledgements, error rows, and pulsing dots while a
+  reply has not produced text yet
+- **Tool card and thinking block**: a collapsible "N tools" card (30 dp header, rotating
+  chevron, wrench, up to three tool names, ✓ / ••• / ✕) whose lines open Thinking /
+  Arguments / Result sections from `tool.completed` / `tool.failed` (truncation is
+  labelled); a 💭 Thinking · Observed {duration} · {count} chars block fed by
+  `reasoning.delta`, `thinking.delta` and `reasoning.available`. "Show tool calls" in
+  the composer's ⚙ menu hides the card
+- **Action row under every message**: play/pause voice (server TTS through
+  `POST /api/studio/tts/synthesize`, falling back to Android TextToSpeech when the
+  server cannot), copy, reference (quotes into the composer), fork (`/fork`), time
+- **Composer per the spec**: radius-18 card, 150 dp minimum, context indicator
+  "{used} / {limit} · remaining {rest}" top-end (amber above 80 %), a borderless 16 sp
+  textarea that never auto-focuses, and the toolbar [+ camera / gallery / files]
+  [🧠 reasoning] [⚙ Voice mode · Show tool calls · Push] [model] … [mic] [send / stop].
+  Pill labels collapse to icons on narrow phones. Attachments go through the chunked
+  `POST /api/studio/app-uploads` (256 KiB PUTs, 50 MB max) with a progress chip that can
+  be cancelled; a server without the route falls back to `/upload`
+- **Run interactions inline**: approvals (once / session / always / reject) and
+  clarifications (choices + free text) are cards in the stream, queued messages get
+  run-next / interrupt / cancel, context compression and abort progress show as
+  banners, `run.peer_user_message` turns appear as user rows, and
+  `session.settings.updated` updates the model / reasoning / push pills
+- **Files and media**: video (mp4, webm, mov, m4v) and audio (mp3, wav, ogg, m4a, aac,
+  flac) linked from a reply play inline through the authenticated download route
+  (bearer header, HTTP ranges); other files are download cards; `device://` links carry
+  an "on the device" badge
+- **Mobile consent**: the socket handshake sends `platform=android`; a
+  `location.requested` event opens a consent dialog, then the runtime permission, then
+  the platform `LocationManager` answers `location.respond` (WGS84, accuracy, timestamp).
+  Calendar, reminder and health requests are declined until those integrations exist
+
 ## Project structure
 
 ```
@@ -161,16 +197,21 @@ app/src/main/java/us/i3u/hermesstudio/
                           settings group bodies, channels, shared pieces
   HermesApi.kt            the HTTP contract (/api/studio/*, /api/hermes/*, /health)
   ChatSocket.kt, GroupSocket.kt   Socket.IO /chat-run and /group-chat
+  AppUploads.kt           chunked App upload planning (/api/studio/app-uploads)
+  MobileLocation.kt       location consent → LocationManager → location.respond
   ui/theme/               CoreHubTokens, CoreHubTheme (Material mapping), CoreHubIcons
   ui/navigation/          drawer host + content, HomeShell (hamburger), settings drawer
   ui/sessions/            session grouping, list rows and menus, History, time format,
                           agent avatars
-  ui/chat/                conversation screen, chat header, message bubbles, composer
+  ui/chat/                conversation screen, chat header, message rows (bubbles, tool
+                          card, thinking block, action row, media), run cards
+                          (approvals, queue, banners, location consent), composer,
+                          chat formatters
   ui/settings/            the tabbed Settings page
   AgentToolScreens.kt, CronJobs.kt, KanbanScreens.kt, Studio*Screens.kt   agent tools
 app/src/main/res/         strings (values, values-ar), Core Hub drawables, launcher
 app/src/test/             JVM tests (contract, translations, RTL, navigation structure,
-                          session grouping)
+                          session grouping, chat formatters, chunked uploads, run events)
 tools/mock-studio.py      a REST stand-in for a Core Hub server
 ```
 

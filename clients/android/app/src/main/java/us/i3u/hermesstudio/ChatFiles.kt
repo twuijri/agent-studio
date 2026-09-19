@@ -133,8 +133,11 @@ fun unwrapStudioDownloadPath(value: String): String {
     return if (encoded.isBlank()) decodeUrlPart(value) else decodeUrlPart(encoded)
 }
 
+/** Server-local absolute paths and `device://<id>/<path>` links on a linked device. */
 private fun isStudioLocalFile(path: String): Boolean =
-    path.startsWith('/') || Regex("""^[A-Za-z]:[\\/]""").containsMatchIn(path)
+    path.startsWith('/') ||
+        path.startsWith("device://", ignoreCase = true) ||
+        Regex("""^[A-Za-z]:[\\/]""").containsMatchIn(path)
 
 private fun decodeUrlPart(value: String): String = runCatching {
     URLDecoder.decode(value.replace("+", "%2B"), Charsets.UTF_8.name())

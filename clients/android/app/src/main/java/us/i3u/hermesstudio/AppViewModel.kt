@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -61,6 +62,9 @@ private data class AccountSettingsData(
     val avatar: AvatarSpec,
 )
 
+/** The message row variants of DESIGN-SPEC ("Message row"). */
+enum class ChatLineKind { User, Assistant, System, Command, Error }
+
 data class ChatLine(
     val text: String,
     val fromUser: Boolean,
@@ -76,8 +80,25 @@ data class ChatLine(
     /** Local timing keeps the live Thinking counter moving between events. */
     val startedAtMillis: Long? = null,
     val finishedAtMillis: Long? = null,
+    /** When the first answer text arrived: the end of the observed thinking span. */
+    val thinkingFinishedAtMillis: Long? = null,
     val messageId: String? = null,
-)
+    /** System notices (compression, aborts) and slash-command acknowledgements. */
+    val system: Boolean = false,
+    val command: Boolean = false,
+) {
+    val kind: ChatLineKind
+        get() = when {
+            isError -> ChatLineKind.Error
+            command -> ChatLineKind.Command
+            system -> ChatLineKind.System
+            fromUser -> ChatLineKind.User
+            else -> ChatLineKind.Assistant
+        }
+
+    /** Stable identity for per-message UI state (speech, expanded sections). */
+    val key: String get() = messageId ?: "${startedAtMillis ?: 0}:${timestamp.orEmpty()}:${text.hashCode()}"
+}
 
 data class ChatToolStep(
     val id: String,
@@ -86,6 +107,22 @@ data class ChatToolStep(
     val status: ToolRunStatus,
     val startedAtMillis: Long,
     val durationSeconds: Double? = null,
+    val arguments: String? = null,
+    val output: String? = null,
+    val outputTruncated: Boolean = false,
+    val outputOriginalLength: Long? = null,
+    val reasoning: String? = null,
+) {
+    val hasDetails: Boolean get() = !arguments.isNullOrBlank() || !output.isNullOrBlank() || !reasoning.isNullOrBlank()
+}
+
+/** The banner shown while the server compresses the context, and its outcome. */
+data class CompressionStatus(
+    val running: Boolean,
+    val messageCount: Int?,
+    val beforeTokens: Long?,
+    val afterTokens: Long?,
+    val error: String?,
 )
 
 data class PendingRunAction(
@@ -200,6 +237,21 @@ data class UiState(
     val loadingAgentRuntimes: Boolean = false,
     val selectedRuntime: AgentRuntimeSelection = AgentRuntimeSelection(),
     val pendingRunAction: PendingRunAction? = null,
+    /** Composer ⚙ menu. */
+    val showToolCalls: Boolean = true,
+    val speakReplies: Boolean = false,
+    val sessionPushEnabled: Boolean = false,
+    /** Attachments still going up through `/api/studio/app-uploads`. */
+    val uploads: List<UploadProgress> = emptyList(),
+    val compression: CompressionStatus? = null,
+    /** "started" / "timeout" while an abort is in flight; null otherwise. */
+    val abortPhase: String? = null,
+    /** An agent asked for the phone's position; the consent dialog is open. */
+    val locationRequest: LocationRequest? = null,
+    /** [ChatLine.key] of the message being read aloud, and whether it is paused. */
+    val speakingKey: String? = null,
+    val speechPaused: Boolean = false,
+    val speechLoadingKey: String? = null,
     val queuedRuns: List<QueuedRun> = emptyList(),
     val queueInsertionActive: Boolean = false,
     val backgroundAgentRuns: List<BackgroundAgentRun> = emptyList(),
@@ -308,6 +360,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             language = store.language,
             appearance = store.appearance,
             voiceInput = store.voiceInput,
+            showToolCalls = store.showToolCalls,
+            speakReplies = store.speakReplies,
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -914,6 +968,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 notice = null,
                 selectedRuntime = runtime,
                 pendingRunAction = null,
+                compression = null,
+                abortPhase = null,
+                locationRequest = null,
+                sessionPushEnabled = false,
             )
         }
 
@@ -1032,6 +1090,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 notice = null,
                 selectedRuntime = runtime,
                 pendingRunAction = null,
+                compression = null,
+                abortPhase = null,
+                locationRequest = null,
+                sessionPushEnabled = false,
             )
         }
     }
@@ -1168,10 +1230,71 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 ensureStreamingReply()
                                 updateLastReply(answer.toString(), thinking.toString(), streaming = true)
                             }
+                            is RunEvent.Interim -> {
+                                // The whole text so far; deltas may already have
+                                // carried it, in which case nothing changes.
+                                if (!event.alreadyStreamed || event.text.length > answer.length) {
+                                    answer = StringBuilder(event.text)
+                                    ensureStreamingReply()
+                                    updateLastReply(answer.toString(), thinking.toString(), streaming = true)
+                                }
+                            }
                             is RunEvent.Reasoning -> {
                                 thinking.append(event.delta)
                                 ensureStreamingReply()
                                 updateLastReply(answer.toString(), thinking.toString(), streaming = true)
+                            }
+                            is RunEvent.ReasoningAvailable -> {
+                                thinking = StringBuilder(event.text)
+                                ensureStreamingReply()
+                                updateLastReply(answer.toString(), thinking.toString(), streaming = true)
+                            }
+                            is RunEvent.SettingsUpdated -> applySessionSettings(event)
+                            is RunEvent.PeerUserMessage -> _state.update {
+                                if (it.lines.any { line -> line.messageId != null && line.messageId == event.id }) it
+                                else it.copy(lines = it.lines + ChatLine(event.content, fromUser = true, timestamp = event.timestamp, messageId = event.id))
+                            }
+                            is RunEvent.Compression -> _state.update {
+                                it.copy(
+                                    compression = CompressionStatus(
+                                        running = event.started,
+                                        messageCount = event.messageCount,
+                                        beforeTokens = event.beforeTokens,
+                                        afterTokens = event.afterTokens,
+                                        error = event.error,
+                                    ),
+                                    contextTokens = if (!event.started && event.afterTokens != null) event.afterTokens else it.contextTokens,
+                                )
+                            }
+                            is RunEvent.AbortPhase -> _state.update {
+                                it.copy(
+                                    abortPhase = if (event.phase == "completed") null else event.phase,
+                                    lines = if (event.phase == "timeout" && !event.message.isNullOrBlank()) {
+                                        it.lines + ChatLine(event.message, fromUser = false, system = true)
+                                    } else it.lines,
+                                )
+                            }
+                            is RunEvent.Command -> _state.update {
+                                val text = event.message.ifBlank { event.command }
+                                if (text.isBlank()) it
+                                else it.copy(lines = it.lines + ChatLine(text, fromUser = false, command = true, isError = !event.ok))
+                            }
+                            is RunEvent.TitleUpdated -> _state.update { state ->
+                                state.copy(
+                                    openSession = state.openSession?.let { open -> if (open.id == sessionId) open.copy(title = event.title) else open },
+                                    sessions = state.sessions.map { s -> if (s.id == sessionId) s.copy(title = event.title) else s },
+                                )
+                            }
+                            is RunEvent.WorkspaceUpdated -> _state.update { state ->
+                                state.copy(openSession = state.openSession?.let { open -> if (open.id == sessionId) open.copy(workspace = event.workspace) else open })
+                            }
+                            is RunEvent.LocationRequested -> _state.update { it.copy(locationRequest = event.request) }
+                            is RunEvent.MobileConsentRequested -> {
+                                // TODO(M3): calendar, reminder and health integrations are
+                                // not implemented on Android yet; the request is declined
+                                // so the agent gets an answer instead of a timeout.
+                                chat.denyMobileConsent(sessionId, event.capability, event.requestId, event.idKey)
+                                _state.update { it.copy(notice = str(R.string.consent_unsupported, event.capability)) }
                             }
                             is RunEvent.Tool -> {
                                 ensureStreamingReply()
@@ -1293,10 +1416,109 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
             }
-            if (wantsVoiceReply && finalReply.isNotBlank()) speak(finalReply, profile)
+            if ((wantsVoiceReply || _state.value.speakReplies) && finalReply.isNotBlank()) {
+                val key = _state.value.lines.lastOrNull { !it.fromUser && !it.isError && !it.system && !it.command }?.key
+                speakText(finalReply, key, profile)
+            }
             finishRun(sessionId)
         }
     }
+
+    /** `session.settings.updated`: the server changed the pills' values (from any client). */
+    private fun applySessionSettings(event: RunEvent.SettingsUpdated) {
+        event.reasoningEffort?.let { store.reasoningEffort = it }
+        _state.update {
+            it.copy(
+                sessionModel = event.model ?: it.sessionModel,
+                sessionProvider = event.provider ?: it.sessionProvider,
+                reasoningEffort = event.reasoningEffort ?: it.reasoningEffort,
+                sessionPushEnabled = event.pushEnabled ?: it.sessionPushEnabled,
+            )
+        }
+    }
+
+    // ── composer ⚙ menu ───────────────────────────────────────────────────
+
+    fun setShowToolCalls(enabled: Boolean) {
+        store.showToolCalls = enabled
+        _state.update { it.copy(showToolCalls = enabled) }
+    }
+
+    fun setSpeakReplies(enabled: Boolean) {
+        store.speakReplies = enabled
+        if (!enabled) stopSpeaking()
+        _state.update { it.copy(speakReplies = enabled) }
+    }
+
+    /** Composer ⚙ → Push: completion messages for this session go to the push channel. */
+    fun togglePushEnabled() {
+        val sessionId = _state.value.openSession?.id ?: run {
+            _state.update { it.copy(notice = str(R.string.push_needs_session)) }
+            return
+        }
+        val next = !_state.value.sessionPushEnabled
+        _state.update { it.copy(sessionPushEnabled = next) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.setSessionPushEnabled(sessionId, next) } }
+                .onFailure { failure ->
+                    _state.update { it.copy(sessionPushEnabled = !next, error = failure.readableMessage(localized)) }
+                }
+        }
+    }
+
+    // ── queued runs ───────────────────────────────────────────────────────
+
+    fun steerQueuedRun(queueId: String) {
+        val sessionId = activeRunSessionId ?: _state.value.openSession?.id ?: return
+        chat.steerQueuedRun(sessionId, queueId)
+    }
+
+    // ── mobile consent (location) ─────────────────────────────────────────
+
+    /**
+     * The user answered the location consent dialog. On consent the fix is read
+     * with the platform LocationManager (permission already granted by the UI)
+     * and sent as `location.respond`; a refusal is reported as `denied`.
+     */
+    fun respondToLocation(granted: Boolean) {
+        val request = _state.value.locationRequest ?: return
+        _state.update { it.copy(locationRequest = null) }
+        if (!granted) {
+            deliverLocation(request, LocationResult.Denied)
+            return
+        }
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val precise = request.accuracy == "precise"
+            val result = runCatching { MobileLocation.currentFix(app, precise, request.timeoutMs) }
+                .getOrElse { LocationResult.Error("location_failed") }
+            deliverLocation(request, result)
+        }
+    }
+
+    /** The runtime permission was refused: tell the agent instead of leaving it waiting. */
+    fun reportLocationPermissionDenied() {
+        val request = _state.value.locationRequest ?: return
+        _state.update { it.copy(locationRequest = null) }
+        deliverLocation(request, LocationResult.Error("location_permission_denied"))
+    }
+
+    private fun deliverLocation(request: LocationRequest, result: LocationResult) {
+        val sent = chat.respondToLocation(locationResponsePayload(request.sessionId, request.id, result))
+        val notice = when {
+            !sent -> str(R.string.location_reply_lost)
+            result is LocationResult.Success -> str(R.string.location_shared)
+            result is LocationResult.Denied -> str(R.string.location_denied_notice)
+            else -> str(R.string.location_failed_notice)
+        }
+        _state.update { if (sent && result is LocationResult.Success) it.copy(notice = notice) else it.copy(error = notice) }
+    }
+
+    // ── inline media ──────────────────────────────────────────────────────
+
+    /** Where an inline player streams a chat file from, and the headers it must send. */
+    fun mediaSource(file: ChatFileLink, profile: String): Pair<String, Map<String, String>> =
+        api.streamUrl(file.path, file.fileName, profile.ifBlank { null }) to api.mediaHeaders(profile.ifBlank { null })
 
     fun resolveRunAction(response: String) {
         val action = _state.value.pendingRunAction ?: return
@@ -1402,6 +1624,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 reasoning = reasoning.ifBlank { null },
                 streaming = streaming,
                 finishedAtMillis = if (streaming) null else now,
+                // Thinking is "observed" until the first answer text (or the end).
+                thinkingFinishedAtMillis = current.thinkingFinishedAtMillis ?: if (text.isNotBlank() || !streaming) now else null,
                 tools = if (streaming) {
                     current.tools
                 } else {
@@ -1444,6 +1668,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     } else {
                         (event.occurredAtMillis - current.startedAtMillis).coerceAtLeast(0) / 1000.0
                     },
+                    arguments = event.arguments ?: current.arguments,
+                    output = event.output ?: current.output,
+                    outputTruncated = event.outputTruncated || current.outputTruncated,
+                    outputOriginalLength = event.outputOriginalLength ?: current.outputOriginalLength,
+                    reasoning = event.reasoning ?: current.reasoning,
                 )
             } else {
                 val fallbackDuration = event.durationSeconds
@@ -1459,6 +1688,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     status = event.status,
                     startedAtMillis = startedAt,
                     durationSeconds = fallbackDuration,
+                    arguments = event.arguments,
+                    output = event.output,
+                    outputTruncated = event.outputTruncated,
+                    outputOriginalLength = event.outputOriginalLength,
+                    reasoning = event.reasoning,
                 )
             }
 
@@ -1495,7 +1729,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     },
                 )
             }
-            state.copy(lines = lines, sending = false, activity = null)
+            state.copy(lines = lines, sending = false, activity = null, abortPhase = null, locationRequest = null)
         }
     }
 
@@ -1510,27 +1744,94 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 sending = false,
                 activity = null,
+                abortPhase = null,
+                locationRequest = null,
+                compression = it.compression?.takeIf { c -> !c.running },
                 unreadSessionIds = if (away) it.unreadSessionIds + sessionId else it.unreadSessionIds,
             )
         }
     }
 
+    fun dismissCompression() = _state.update { it.copy(compression = null) }
+
     private class SocketUnavailable(message: String) : Exception(message)
 
     // ── attachments ───────────────────────────────────────────────────────
 
-    /** Uploads the picked file to the server so the agent can read it by path. */
+    private val uploadJobs = mutableMapOf<String, Job>()
+
+    /**
+     * Uploads the picked file through the chunked App upload
+     * (`/api/studio/app-uploads`, 256 KiB PUTs, 50 MB max) with a progress chip
+     * the user can cancel. A server that predates the route (404) falls back to
+     * the multipart `/upload`.
+     */
     fun attach(bytes: ByteArray, filename: String, mime: String) {
         val profile = currentProfile()
-        _state.update { it.copy(attaching = true, error = null) }
-        viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.upload(profile, bytes, filename, mime) } }
-                .onSuccess { upload ->
-                    _state.update { it.copy(attaching = false, attachments = it.attachments + upload) }
+        if (bytes.size.toLong() > AppUploads.MAX_BYTES) {
+            _state.update { it.copy(error = str(R.string.upload_too_large, filename)) }
+            return
+        }
+        val id = AppUploads.newId()
+        _state.update {
+            it.copy(
+                attaching = true,
+                error = null,
+                uploads = it.uploads + UploadProgress(id, filename, 0, bytes.size.toLong()),
+            )
+        }
+        uploadJobs[id] = viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val session = try {
+                        api.openAppUpload(profile, id, filename, bytes.size.toLong())
+                    } catch (failure: HermesException) {
+                        if (failure.statusCode == 404) return@withContext api.upload(profile, bytes, filename, mime)
+                        throw failure
+                    }
+                    var offset = session.nextOffset
+                    for (chunk in planUploadChunks(bytes.size.toLong(), session.maxChunkBytes, session.nextOffset)) {
+                        ensureActive()
+                        val start = chunk.offset.toInt()
+                        offset = api.appendAppUploadChunk(profile, id, chunk.offset, bytes.copyOfRange(start, start + chunk.length))
+                        _state.update { state ->
+                            state.copy(uploads = state.uploads.map { u -> if (u.id == id) u.copy(sent = offset) else u })
+                        }
+                    }
+                    api.completeAppUpload(profile, id, mime, filename)
                 }
-                .onFailure { failure ->
-                    _state.update { it.copy(attaching = false, error = failure.readableMessage(localized)) }
+            }.onSuccess { upload ->
+                _state.update {
+                    val remaining = it.uploads.filterNot { u -> u.id == id }
+                    it.copy(attaching = remaining.isNotEmpty(), uploads = remaining, attachments = it.attachments + upload)
                 }
+            }.onFailure { failure ->
+                if (failure is kotlinx.coroutines.CancellationException) {
+                    // Cancelled from the chip: let the server drop the partial file.
+                    viewModelScope.launch(Dispatchers.IO) { runCatching { api.abortAppUpload(profile, id) } }
+                    _state.update {
+                        val remaining = it.uploads.filterNot { u -> u.id == id }
+                        it.copy(attaching = remaining.isNotEmpty(), uploads = remaining)
+                    }
+                    return@onFailure
+                }
+                _state.update {
+                    val remaining = it.uploads.filterNot { u -> u.id == id }
+                    it.copy(attaching = remaining.isNotEmpty(), uploads = remaining, error = failure.readableMessage(localized))
+                }
+            }
+            uploadJobs.remove(id)
+        }
+    }
+
+    /** The content resolver returned nothing for a picked file: say so instead of dropping it silently. */
+    fun reportAttachmentUnreadable(name: String) = _state.update { it.copy(error = str(R.string.upload_unreadable, name)) }
+
+    fun cancelUpload(id: String) {
+        uploadJobs.remove(id)?.cancel()
+        _state.update {
+            val remaining = it.uploads.filterNot { u -> u.id == id }
+            it.copy(attaching = remaining.isNotEmpty(), uploads = remaining)
         }
     }
 
@@ -1702,59 +2003,155 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         else -> str(R.string.error_speech_generic, code)
     }
 
+    private var speechJob: Job? = null
+    private var deviceTts: android.speech.tts.TextToSpeech? = null
+    private var deviceTtsReady = false
+
     fun stopSpeaking() {
+        speechJob?.cancel()
+        speechJob = null
         runCatching { speechPlayer?.stop() }
         runCatching { speechPlayer?.release() }
         speechPlayer = null
-        _state.update { it.copy(speaking = false) }
+        runCatching { deviceTts?.stop() }
+        _state.update { it.copy(speaking = false, speakingKey = null, speechPaused = false, speechLoadingKey = null) }
     }
 
-    private fun speak(text: String, profile: String) {
-        viewModelScope.launch {
-            runCatching {
+    /**
+     * The per-message play/pause button. Tapping the message being read pauses
+     * or resumes it; tapping another one starts reading that message.
+     */
+    fun toggleSpeech(line: ChatLine, profile: String) {
+        val key = line.key
+        val current = _state.value
+        if (current.speakingKey == key) {
+            val player = speechPlayer
+            if (player != null) {
+                if (current.speechPaused) {
+                    runCatching { player.start() }
+                    _state.update { it.copy(speechPaused = false) }
+                } else {
+                    runCatching { player.pause() }
+                    _state.update { it.copy(speechPaused = true) }
+                }
+            } else {
+                // The device engine cannot pause; stop instead.
+                stopSpeaking()
+            }
+            return
+        }
+        if (current.speechLoadingKey == key) {
+            stopSpeaking()
+            return
+        }
+        speakText(line.text, key, profile)
+    }
+
+    private fun speak(text: String, profile: String) = speakText(text, null, profile)
+
+    /**
+     * Reads [text] aloud: `POST /api/studio/tts/synthesize` on the server first;
+     * when that fails (no provider, network, bad audio) the Android
+     * TextToSpeech engine reads the same text so the reply is still heard.
+     */
+    private fun speakText(text: String, key: String?, profile: String) {
+        stopSpeaking()
+        val spoken = plainSpeechText(text)
+        if (spoken.isBlank()) return
+        _state.update { it.copy(speechLoadingKey = key) }
+        speechJob = viewModelScope.launch {
+            val synthesized = runCatching {
                 withContext(Dispatchers.IO) {
-                    val audio = api.synthesize(profile, text)
+                    val audio = api.synthesize(profile, spoken)
                     val file = java.io.File.createTempFile("hermes-reply-", audio.extension, getApplication<Application>().cacheDir)
                     file.writeBytes(audio.bytes)
                     file
                 }
-            }.onSuccess { file ->
-                runCatching {
-                    stopSpeaking()
-                    MediaPlayer().also { player ->
-                        speechPlayer = player
-                        player.setDataSource(file.absolutePath)
-                        player.setOnPreparedListener { ready ->
-                            runCatching { ready.start() }
-                                .onSuccess { _state.update { it.copy(speaking = true) } }
-                                .onFailure { stopSpeaking(); file.delete(); _state.update { it.copy(error = it.error ?: str(R.string.voice_playback_failed)) } }
-                        }
-                        player.setOnCompletionListener { finished ->
-                            runCatching { finished.release() }
-                            if (speechPlayer === finished) speechPlayer = null
-                            file.delete()
-                            _state.update { it.copy(speaking = false) }
-                        }
-                        player.setOnErrorListener { failed, _, _ ->
-                            runCatching { failed.release() }
-                            if (speechPlayer === failed) speechPlayer = null
-                            file.delete()
-                            _state.update { it.copy(speaking = false, error = str(R.string.voice_playback_failed)) }
-                            true
-                        }
-                        player.prepareAsync()
+            }
+            val file = synthesized.getOrNull()
+            if (file == null) {
+                val serverProblem = synthesized.exceptionOrNull()?.takeUnless { it is kotlinx.coroutines.CancellationException }
+                if (serverProblem == null) return@launch
+                speakOnDevice(spoken, key, serverProblem.readableMessage(localized))
+                return@launch
+            }
+            runCatching {
+                MediaPlayer().also { player ->
+                    speechPlayer = player
+                    player.setDataSource(file.absolutePath)
+                    player.setOnPreparedListener { ready ->
+                        runCatching { ready.start() }
+                            .onSuccess { _state.update { it.copy(speaking = true, speakingKey = key, speechPaused = false, speechLoadingKey = null) } }
+                            .onFailure { stopSpeaking(); file.delete(); speakOnDevice(spoken, key, str(R.string.voice_playback_failed)) }
                     }
-                }.onFailure {
-                    stopSpeaking()
-                    file.delete()
-                    _state.update { state -> state.copy(error = str(R.string.voice_playback_failed)) }
+                    player.setOnCompletionListener { finished ->
+                        runCatching { finished.release() }
+                        if (speechPlayer === finished) speechPlayer = null
+                        file.delete()
+                        _state.update { it.copy(speaking = false, speakingKey = null, speechPaused = false) }
+                    }
+                    player.setOnErrorListener { failed, _, _ ->
+                        runCatching { failed.release() }
+                        if (speechPlayer === failed) speechPlayer = null
+                        file.delete()
+                        speakOnDevice(spoken, key, str(R.string.voice_playback_failed))
+                        true
+                    }
+                    player.prepareAsync()
                 }
-            }.onFailure { failure -> _state.update { it.copy(speaking = false, error = failure.readableMessage(localized)) } }
+            }.onFailure {
+                stopSpeaking()
+                file.delete()
+                speakOnDevice(spoken, key, str(R.string.voice_playback_failed))
+            }
+        }
+    }
+
+    /** Fallback: the platform engine. [reason] is shown as a notice so the user knows why. */
+    private fun speakOnDevice(text: String, key: String?, reason: String) {
+        val app = getApplication<Application>()
+        fun start(engine: android.speech.tts.TextToSpeech) {
+            val id = "core-hub-${System.currentTimeMillis()}"
+            engine.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) = Unit
+                override fun onDone(utteranceId: String?) {
+                    if (utteranceId == id) _state.update { it.copy(speaking = false, speakingKey = null, speechPaused = false) }
+                }
+
+                @Deprecated("Deprecated in Java")
+                override fun onError(utteranceId: String?) {
+                    if (utteranceId == id) _state.update { it.copy(speaking = false, speakingKey = null, error = str(R.string.voice_playback_failed)) }
+                }
+            })
+            val queued = engine.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, id)
+            if (queued == android.speech.tts.TextToSpeech.SUCCESS) {
+                _state.update { it.copy(speaking = true, speakingKey = key, speechPaused = false, speechLoadingKey = null, notice = str(R.string.voice_device_fallback, reason)) }
+            } else {
+                _state.update { it.copy(speaking = false, speakingKey = null, speechLoadingKey = null, error = str(R.string.voice_playback_failed)) }
+            }
+        }
+        val existing = deviceTts
+        if (existing != null && deviceTtsReady) {
+            start(existing)
+            return
+        }
+        runCatching { deviceTts?.shutdown() }
+        deviceTts = android.speech.tts.TextToSpeech(app) { status ->
+            val engine = deviceTts
+            if (status == android.speech.tts.TextToSpeech.SUCCESS && engine != null) {
+                deviceTtsReady = true
+                start(engine)
+            } else {
+                deviceTtsReady = false
+                _state.update { it.copy(speaking = false, speakingKey = null, speechLoadingKey = null, error = str(R.string.voice_playback_failed)) }
+            }
         }
     }
 
     override fun onCleared() {
         stopSpeaking()
+        runCatching { deviceTts?.shutdown() }
+        deviceTts = null
         super.onCleared()
     }
 
@@ -3426,6 +3823,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissNotice() = _state.update { it.copy(notice = null) }
 
+    /** A short confirmation from the UI (copied, shared, …) through the same notice strip. */
+    fun showNotice(id: Int) = _state.update { it.copy(notice = str(id)) }
+
     // ── misc ──────────────────────────────────────────────────────────────
 
     fun back() {
@@ -3598,6 +3998,19 @@ private val INVITE_ALPHABET = ('A'..'Z') + ('2'..'9')
 
 internal fun Throwable.invalidatesSavedSession(): Boolean =
     (this as? HermesException)?.statusCode in setOf(401, 403)
+
+/** Strips Markdown scaffolding and file links so a voice does not read "asterisk asterisk". */
+internal fun plainSpeechText(markdown: String): String = parseChatMessage(markdown).text
+    .replace(Regex("```[\\s\\S]*?```"), " ")
+    .replace(Regex("`([^`]*)`"), "$1")
+    .replace(Regex("!\\[[^\\]]*]\\([^)]*\\)"), " ")
+    .replace(Regex("\\[([^\\]]*)]\\([^)]*\\)"), "$1")
+    .replace(Regex("(?m)^\\s{0,3}#{1,6}\\s+"), "")
+    .replace(Regex("(?m)^\\s*[-*+]\\s+"), "")
+    .replace(Regex("(?m)^\\s*>\\s?"), "")
+    .replace(Regex("[*_~]{1,3}"), "")
+    .replace(Regex("[ \\t]+"), " ")
+    .trim()
 
 private fun Throwable.readableMessage(context: android.content.Context): String = when (this) {
     // A HermesException already carries what the server said, in its own words.

@@ -109,6 +109,16 @@ class Store(context: Context) {
         get() = prefs.getString(KEY_REASONING, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_REASONING, value).apply()
 
+    /** Composer ⚙ → "Show tool calls": the tool summary card under assistant replies. */
+    var showToolCalls: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_TOOL_CALLS, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_TOOL_CALLS, value).apply()
+
+    /** Composer ⚙ → "Voice mode": read every assistant reply aloud as it completes. */
+    var speakReplies: Boolean
+        get() = prefs.getBoolean(KEY_SPEAK_REPLIES, false)
+        set(value) = prefs.edit().putBoolean(KEY_SPEAK_REPLIES, value).apply()
+
     /**
      * Session pins, per profile, like the web's `hermes_session_pins_v1_<profile>`
      * localStorage key: a device-side preference, never sent to the server.
@@ -158,5 +168,7 @@ class Store(context: Context) {
         private const val KEY_APPEARANCE = "appearance"
         private const val KEY_PINS_PREFIX = "session_pins_"
         private const val KEY_RECENT_COUNT = "recent_session_count"
+        private const val KEY_SHOW_TOOL_CALLS = "show_tool_calls"
+        private const val KEY_SPEAK_REPLIES = "speak_replies"
     }
 }

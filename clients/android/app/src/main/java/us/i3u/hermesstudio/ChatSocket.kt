@@ -24,8 +24,45 @@ sealed interface RunEvent {
         val status: ToolRunStatus,
         val durationSeconds: Double?,
         val occurredAtMillis: Long,
+        /** Pretty-printed call arguments, when the server sends them. */
+        val arguments: String? = null,
+        /** The tool result as delivered over the socket (already bounded by the server). */
+        val output: String? = null,
+        val outputTruncated: Boolean = false,
+        val outputOriginalLength: Long? = null,
+        /** Reasoning attached to this tool call (Ekko/coding agents). */
+        val reasoning: String? = null,
     ) : RunEvent
     data class Usage(val contextTokens: Long, val contextWindow: Long?) : RunEvent
+    /** `message.interim`: the whole assistant text so far; [alreadyStreamed] when deltas carried it. */
+    data class Interim(val text: String, val alreadyStreamed: Boolean) : RunEvent
+    /** `reasoning.available`: the full reasoning text delivered at once. */
+    data class ReasoningAvailable(val text: String) : RunEvent
+    /** `session.settings.updated`, applied to the composer pills. */
+    data class SettingsUpdated(
+        val model: String?,
+        val provider: String?,
+        val reasoningEffort: String?,
+        val pushEnabled: Boolean?,
+    ) : RunEvent
+    /** `run.peer_user_message`: a user turn sent from another window on the same session. */
+    data class PeerUserMessage(val id: String?, val content: String, val timestamp: String?) : RunEvent
+    data class Compression(
+        val started: Boolean,
+        val messageCount: Int?,
+        val beforeTokens: Long?,
+        val afterTokens: Long?,
+        val error: String?,
+    ) : RunEvent
+    /** `abort.started` / `abort.timeout` / `abort.completed`. */
+    data class AbortPhase(val phase: String, val message: String?) : RunEvent
+    /** `session.command`: a slash-command acknowledgement; [terminal] unless the server said otherwise. */
+    data class Command(val command: String, val ok: Boolean, val message: String, val terminal: Boolean) : RunEvent
+    data class TitleUpdated(val title: String) : RunEvent
+    data class WorkspaceUpdated(val workspace: String?) : RunEvent
+    data class LocationRequested(val request: LocationRequest) : RunEvent
+    /** calendar / reminder / health requests; answered `denied` until those integrations exist. */
+    data class MobileConsentRequested(val capability: String, val requestId: String, val idKey: String) : RunEvent
     data class Done(val output: String, val reasoning: String) : RunEvent
     data class RequiresAction(
         val kind: RequiredAction,
@@ -108,6 +145,26 @@ class ChatSocket(
         socket?.emit("cancel_queued_run", JSONObject().put("session_id", sessionId).put("queue_id", queueId))
     }
 
+    /** Interrupts the current turn with the queued message instead of waiting for it. */
+    fun steerQueuedRun(sessionId: String, queueId: String) {
+        socket?.emit("steer_queued_run", JSONObject().put("session_id", sessionId).put("queue_id", queueId))
+    }
+
+    /** Answers `location.requested`; [payload] comes from [locationResponsePayload]. */
+    fun respondToLocation(payload: JSONObject): Boolean {
+        val live = socket ?: return false
+        live.emit("location.respond", payload)
+        return true
+    }
+
+    /** Declines a calendar / reminder / health request the phone cannot fulfil yet. */
+    fun denyMobileConsent(sessionId: String, capability: String, requestId: String, idKey: String) {
+        socket?.emit(
+            "$capability.respond",
+            JSONObject().put("session_id", sessionId).put(idKey, requestId).put("status", "denied"),
+        )
+    }
+
     fun run(
         profile: String,
         sessionId: String,
@@ -141,7 +198,9 @@ class ChatSocket(
             .setReconnectionDelayMax(30_000)
             .setTransports(arrayOf(WebSocket.NAME, Polling.NAME))
             .setAuth(mapOf("token" to token))
-            .setQuery("profile=" + URLEncoder.encode(profile, "UTF-8"))
+            // `platform` registers this phone as a mobile device target, which is
+            // what lets the agent ask it for location / calendar / health consent.
+            .setQuery("profile=" + URLEncoder.encode(profile, "UTF-8") + "&platform=android")
             .setTimeout(30_000)
             .build()
 
@@ -225,6 +284,44 @@ class ChatSocket(
                     runStarted = true
                     trySend(RunEvent.Reasoning(delta))
                 }
+            }
+        }
+        live.on("message.interim") { args ->
+            val event = eventPayload(args) ?: return@on
+            val text = event.firstString("text", "output")
+            if (text.isNotEmpty()) {
+                runStarted = true
+                trySend(RunEvent.Interim(text, event.optBoolean("already_streamed", false)))
+            }
+        }
+        live.on("reasoning.available") { args ->
+            val text = eventPayload(args).firstString("text", "reasoning")
+            if (text.isNotEmpty()) trySend(RunEvent.ReasoningAvailable(text))
+        }
+        live.on("usage.updated") { args -> usageFrom(eventPayload(args))?.let { trySend(it) } }
+        live.on("session.settings.updated") { args -> eventPayload(args)?.let { trySend(parseSettingsUpdated(it)) } }
+        live.on("session.title.updated") { args ->
+            val title = eventPayload(args).firstString("title")
+            if (title.isNotBlank()) trySend(RunEvent.TitleUpdated(title))
+        }
+        live.on("session.workspace.updated") { args ->
+            eventPayload(args)?.let { trySend(RunEvent.WorkspaceUpdated(it.optString("workspace").takeIf(String::isNotBlank))) }
+        }
+        live.on("run.peer_user_message") { args -> eventPayload(args)?.let { event -> parsePeerUserMessage(event)?.let { trySend(it) } } }
+        live.on("compression.started") { args -> eventPayload(args)?.let { trySend(parseCompression(it, started = true)) } }
+        live.on("compression.completed") { args -> eventPayload(args)?.let { trySend(parseCompression(it, started = false)) } }
+        listOf("abort.started", "abort.timeout", "abort.completed").forEach { name ->
+            live.on(name) { args ->
+                val event = eventPayload(args)
+                trySend(RunEvent.AbortPhase(name.substringAfter('.'), event.firstString("message", "reason").takeIf(String::isNotBlank)))
+            }
+        }
+        live.on("session.command") { args -> eventPayload(args)?.let { trySend(parseSessionCommand(it)) } }
+        live.on("location.requested") { args -> eventPayload(args)?.let { event -> parseLocationRequest(event, sessionId)?.let { trySend(RunEvent.LocationRequested(it)) } } }
+        listOf("calendar" to "calendar_request_id", "reminder" to "reminder_request_id", "health" to "health_request_id").forEach { (capability, key) ->
+            live.on("$capability.requested") { args ->
+                val id = eventPayload(args).firstString(key, "id")
+                if (id.isNotBlank()) trySend(RunEvent.MobileConsentRequested(capability, id, key))
             }
         }
         live.on("tool.started") { args ->
@@ -377,6 +474,61 @@ class ChatSocket(
         }
 }
 
+internal fun parseSettingsUpdated(event: JSONObject): RunEvent.SettingsUpdated = RunEvent.SettingsUpdated(
+    model = event.optString("model").takeIf(String::isNotBlank),
+    provider = event.optString("provider").takeIf(String::isNotBlank),
+    // An explicit empty string means "back to the profile default".
+    reasoningEffort = if (event.has("reasoning_effort") && !event.isNull("reasoning_effort")) event.optString("reasoning_effort") else null,
+    pushEnabled = if (event.has("push_enabled") && !event.isNull("push_enabled")) event.optBoolean("push_enabled") else null,
+)
+
+internal fun parsePeerUserMessage(event: JSONObject): RunEvent.PeerUserMessage? {
+    val message = event.optJSONObject("message") ?: return null
+    val role = message.optString("role").ifBlank { "user" }
+    if (role != "user" && role != "command") return null
+    val raw = message.opt("content")
+    val content = when (raw) {
+        is String -> raw
+        is JSONArray -> (0 until raw.length()).mapNotNull { raw.optJSONObject(it)?.optString("text")?.takeIf(String::isNotBlank) }.joinToString("\n")
+        else -> ""
+    }
+    if (content.isBlank()) return null
+    val stamp = message.opt("timestamp")?.takeUnless { it == JSONObject.NULL }?.toString()?.takeIf(String::isNotBlank)
+    return RunEvent.PeerUserMessage(message.firstString("id", "message_id").takeIf(String::isNotBlank), content, stamp)
+}
+
+internal fun parseCompression(event: JSONObject, started: Boolean): RunEvent.Compression {
+    fun number(vararg keys: String): Long? = keys.firstNotNullOfOrNull { key ->
+        if (!event.has(key) || event.isNull(key)) null else (event.opt(key) as? Number)?.toLong()
+    }
+    return RunEvent.Compression(
+        started = started,
+        messageCount = number("message_count", "totalMessages", "resultMessages")?.toInt(),
+        beforeTokens = number("token_count", "beforeTokens"),
+        afterTokens = number("afterTokens", "contextTokens"),
+        error = event.firstString("error").takeIf(String::isNotBlank),
+    )
+}
+
+internal fun parseSessionCommand(event: JSONObject): RunEvent.Command = RunEvent.Command(
+    command = event.firstString("command", "action"),
+    ok = event.optBoolean("ok", true),
+    message = event.firstString("message", "output", "text"),
+    terminal = !(event.has("terminal") && !event.isNull("terminal") && !event.optBoolean("terminal", true)),
+)
+
+internal fun parseLocationRequest(event: JSONObject, fallbackSessionId: String): LocationRequest? {
+    val id = event.firstString("location_request_id", "id")
+    if (id.isBlank()) return null
+    return LocationRequest(
+        id = id,
+        sessionId = event.optString("session_id").ifBlank { fallbackSessionId },
+        purpose = event.optString("purpose"),
+        accuracy = if (event.optString("accuracy") == "precise") "precise" else "coarse",
+        timeoutMs = event.optLong("timeout_ms", 30_000L).takeIf { it > 0 } ?: 30_000L,
+    )
+}
+
 internal fun parseResumedState(payload: JSONObject): RunEvent.ResumedState {
     val messages = if (payload.optBoolean("messagesCached", false)) null else payload.optJSONArray("messages")?.let { array ->
         (0 until array.length()).mapNotNull { index ->
@@ -496,6 +648,10 @@ internal fun parseToolEvent(
         }
     }
 
+    val output = listOf("output", "result", "error")
+        .firstNotNullOfOrNull { key -> event.opt(key).takeUnless { it == null || it == JSONObject.NULL || it is Boolean } }
+        ?.let { value -> if (value is String) value else prettyJson(value) }
+        ?.takeIf { it.isNotBlank() }
     return RunEvent.Tool(
         id = id,
         name = name.ifBlank { "tool" },
@@ -503,7 +659,26 @@ internal fun parseToolEvent(
         status = if (status == ToolRunStatus.Done && reportedError) ToolRunStatus.Error else status,
         durationSeconds = duration,
         occurredAtMillis = occurredAtMillis,
+        arguments = event.toolArguments(),
+        output = if (status == ToolRunStatus.Running) null else output,
+        outputTruncated = event.optBoolean("output_truncated", false),
+        outputOriginalLength = event.opt("output_original_length").let { (it as? Number)?.toLong() },
+        reasoning = event.firstString("reasoning").takeIf(String::isNotBlank),
     )
+}
+
+private fun prettyJson(value: Any): String = when (value) {
+    is JSONObject -> value.toString(2)
+    is JSONArray -> value.toString(2)
+    else -> value.toString()
+}
+
+private fun JSONObject.toolArguments(): String? {
+    val raw = listOf("arguments", "args", "function_args")
+        .firstNotNullOfOrNull { key -> opt(key).takeUnless { it == null || it == JSONObject.NULL } }
+        ?: return null
+    val text = if (raw is String) raw else prettyJson(raw)
+    return text.takeIf { it.isNotBlank() && it != "{}" }
 }
 
 private fun JSONObject?.firstString(vararg keys: String): String {
