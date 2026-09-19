@@ -253,7 +253,7 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
         Screen.Kanban, Screen.KanbanTask, Screen.Skills, Screen.Skill, Screen.Plugins, Screen.Mcp, Screen.Pets,
         Screen.Insights, Screen.AgentRuntimes, Screen.AgentHub, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files,
         Screen.Logs, Screen.Connections, Screen.Journey, Screen.Webhooks, Screen.RuntimeVersions, Screen.Appearance,
-        Screen.Workflow, Screen.WorkflowRun, Screen.Models, Screen.AgentSettings,
+        Screen.Workflow, Screen.WorkflowRun, Screen.AgentSettings,
         -> BackHandler { viewModel.back() }
         Screen.Groups, Screen.Workflows, Screen.History -> BackHandler { viewModel.showTab(Tab.Chat) }
         else -> Unit
@@ -297,7 +297,6 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
         Screen.Webhooks -> WebhooksScreen(state, viewModel)
         Screen.RuntimeVersions -> RuntimeVersionsScreen(state, viewModel)
         Screen.Appearance -> AppearanceScreen(state, viewModel)
-        Screen.Models -> ModelsScreen(state, viewModel)
         Screen.AgentSettings -> AgentSettingsScreen(state, viewModel)
         Screen.Login -> LoginScreen(state, viewModel)
         // The four sections of the conversation switch share the drawer shell.
@@ -1005,6 +1004,14 @@ private fun InsightMetric(label: String, value: String, supporting: String? = nu
 @Composable
 private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
     val group = state.openGroup ?: return
+    // Models is a page, not a settings body: it mirrors the web's ModelsView
+    // (providers and their catalogues), while the key form it used to show
+    // stays on the Settings page's Models tab, as on the web. It keeps this
+    // destination so the drawer's Models item still marks itself selected.
+    if (group == SettingsGroup.Models) {
+        ModelsScreen(state, viewModel)
+        return
+    }
     val title = stringResource(
         when (group) {
             SettingsGroup.Account -> R.string.settings_account

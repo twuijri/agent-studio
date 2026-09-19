@@ -24,7 +24,7 @@ enum class Screen {
     Loading, Onboarding, Login, Chats, Groups, AgentHub, Conversation, Room, Profiles,
     Settings, SettingsPage, SettingsGroup, History, Channels, Channel, CronJobs, CronJob, CronHistory,
     Kanban, KanbanTask, Skills, Skill, Plugins, Mcp, Pets, Insights, AgentRuntimes, Workflows, Workflow, WorkflowRun, GlobalAgent, EkkoHub, Files, Logs, Connections, Journey, Webhooks, RuntimeVersions, Appearance,
-    Models, AgentSettings,
+    AgentSettings,
 }
 
 /**
@@ -4112,23 +4112,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ── settings groups ───────────────────────────────────────────────────
 
     fun openSettingsGroup(group: SettingsGroup) {
-        // Models is no longer a settings body: the drawer's Models rail item
-        // asks for this group, and the group stays the selected key, but the
-        // destination is the full provider page.
-        if (group == SettingsGroup.Models) {
-            val from = _state.value.screen
-            _state.update {
-                it.copy(
-                    toolReturnScreen = when (from) {
-                        Screen.AgentHub -> Screen.AgentHub
-                        Screen.SettingsPage -> Screen.SettingsPage
-                        else -> Screen.Settings
-                    },
-                )
-            }
-            openModels()
-            return
-        }
         _state.update {
             it.copy(
                 screen = Screen.SettingsGroup,
@@ -4148,6 +4131,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         loadSettingsGroup(group)
+        // Models is no longer a settings body — `SettingsGroupScreen` renders
+        // the provider page for it — so it needs the fallback chain too.
+        if (group == SettingsGroup.Models) loadFallbackChain()
     }
 
     /** The tabbed Settings page (web tab order); [group] is the tab shown first. */
@@ -4427,27 +4413,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Models page ------------------------------------------------------
 
     /**
-     * Opens the Models page. The drawer still asks for
-     * `SettingsGroup.Models`, so the group is kept as the selected key while
-     * the screen itself is the full provider page, not a settings body.
+     * Opens the Models page.
+     *
+     * It is still reached as `SettingsGroup.Models`, because the drawer's
+     * Models rail item asks for that group and marks itself selected on
+     * `openGroup == Models && screen == SettingsGroup`. What changed is what
+     * that destination draws: `SettingsGroupScreen` hands Models to the
+     * provider page instead of to a settings body.
      */
-    fun openModels() {
-        _state.update {
-            it.copy(
-                screen = Screen.Models,
-                openGroup = SettingsGroup.Models,
-                error = null,
-                notice = null,
-            )
-        }
-        loadModelProviders()
-        loadFallbackChain()
-    }
-
-    fun reloadModels() {
-        loadModelProviders()
-        loadFallbackChain()
-    }
+    fun openModels() = openSettingsGroup(SettingsGroup.Models)
 
     /** The header action: drops the server's cached provider catalogues. */
     fun refreshModelCache() = modelsWork { api.refreshModelCache() }
@@ -5341,7 +5315,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 Screen.Kanban, Screen.Skills, Screen.Plugins, Screen.Mcp, Screen.AgentRuntimes, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files, Screen.Connections, Screen.Webhooks, Screen.RuntimeVersions -> Screen.AgentHub
                 Screen.Pets, Screen.Insights, Screen.Logs, Screen.Journey, Screen.Appearance, Screen.SettingsPage -> Screen.Settings
                 Screen.AgentSettings -> Screen.AgentHub
-                Screen.Channels, Screen.SettingsGroup, Screen.CronJobs, Screen.Models -> state.toolReturnScreen
+                Screen.Channels, Screen.SettingsGroup, Screen.CronJobs -> state.toolReturnScreen
                 Screen.Profiles -> state.profilesReturnScreen
                 else -> state.tab.rootScreen(state.openSession.takeUnless { state.screen == Screen.Conversation })
             }
