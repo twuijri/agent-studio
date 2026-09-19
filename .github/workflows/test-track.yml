@@ -277,3 +277,18 @@ jobs:
           fi
           gh release upload "$RELEASE_TAG" builds/* --repo "$BUILDS_REPO" --clobber
           echo "Published Core Hub Test $version to https://github.com/$BUILDS_REPO/releases/latest" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the workflow artifacts (this repository is public)
+        # Actions artifacts of a public repository can be downloaded by anyone
+        # who is signed in to GitHub. The private release above is the only
+        # place the owner wants test builds to live, so drop the copies here
+        # once they are published.
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+            --jq '.artifacts[] | select(.name | startswith("core-hub-test-")) | .id' \
+          | while read -r id; do
+              gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" && echo "deleted artifact $id"
+            done
