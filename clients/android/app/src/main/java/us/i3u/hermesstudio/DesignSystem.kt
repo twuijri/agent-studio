@@ -36,9 +36,15 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.BorderStroke
+import us.i3u.hermesstudio.ui.theme.CoreHub
+import us.i3u.hermesstudio.ui.theme.CoreHubTextStyles
+import us.i3u.hermesstudio.ui.theme.CoreHubTokens
 
 internal val StudioHorizontalPadding = 16.dp
-internal val StudioCardRadius = 12.dp
+
+/** Cards use the spec's 14 dp radius; every other value comes from CoreHubTokens. */
+internal val StudioCardRadius = CoreHubTokens.Radius.card
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,7 +79,8 @@ internal fun StudioGroupedCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(StudioCardRadius),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        colors = CardDefaults.cardColors(containerColor = CoreHub.palette.bgCard, contentColor = CoreHub.palette.textPrimary),
+        border = BorderStroke(1.dp, CoreHub.palette.borderLight),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         content = content,
     )
@@ -82,11 +89,10 @@ internal fun StudioGroupedCard(
 @Composable
 internal fun StudioSectionTitle(text: String, modifier: Modifier = Modifier) {
     Text(
-        text = text,
+        text = text.uppercase(),
         modifier = modifier.padding(start = 6.dp, end = 6.dp, top = 18.dp, bottom = 8.dp),
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = CoreHubTextStyles.groupHeader,
+        color = CoreHub.palette.textSecondary,
     )
 }
 
@@ -107,7 +113,7 @@ internal fun StudioIconTile(icon: ImageVector, color: Color, modifier: Modifier 
     ) {
         Card(
             modifier = Modifier.size(38.dp),
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(CoreHubTokens.Radius.bubble),
             colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.16f)),
         ) {
             Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
@@ -125,7 +131,7 @@ internal fun StudioIconTile(icon: Painter, color: Color, modifier: Modifier = Mo
     ) {
         Card(
             modifier = Modifier.size(38.dp),
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(CoreHubTokens.Radius.bubble),
             colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.16f)),
         ) {
             Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
@@ -226,12 +232,13 @@ internal fun StudioSearchField(
         placeholder = { Text(placeholder) },
         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
         singleLine = true,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(CoreHubTokens.Radius.bubble),
+        textStyle = CoreHubTextStyles.input.copy(color = CoreHub.palette.textPrimary),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-            focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = Color.Transparent,
+            focusedContainerColor = CoreHub.palette.bgInput,
+            unfocusedContainerColor = CoreHub.palette.bgInput,
+            focusedBorderColor = CoreHub.palette.accent,
+            unfocusedBorderColor = CoreHub.palette.inputBorder,
         ),
         modifier = modifier.fillMaxWidth(),
     )

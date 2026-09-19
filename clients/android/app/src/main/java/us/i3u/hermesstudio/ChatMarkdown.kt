@@ -23,6 +23,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.foundation.shape.RoundedCornerShape
+import us.i3u.hermesstudio.ui.theme.CoreHub
+import us.i3u.hermesstudio.ui.theme.CoreHubTextStyles
+import us.i3u.hermesstudio.ui.theme.CoreHubTokens
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -233,7 +237,7 @@ internal fun chatTextDirection(text: String): TextDirection {
 @Composable
 internal fun ChatMarkdownText(text: String, modifier: Modifier = Modifier) {
     val linkColor = MaterialTheme.colorScheme.primary
-    val codeBackground = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+    val codeBackground = CoreHub.palette.codeBg
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -261,12 +265,14 @@ internal fun ChatMarkdownText(text: String, modifier: Modifier = Modifier) {
                         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.055f))
                         .padding(horizontal = 10.dp, vertical = 7.dp),
                 )
+                // Code: bg code, radius 6, 13/1.5 mono, always left-to-right (DESIGN-SPEC).
                 is ChatMarkdownBlock.Code -> MarkdownLine(
                     block.text,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                        .background(CoreHub.palette.codeBg, RoundedCornerShape(CoreHubTokens.Radius.small))
                         .padding(9.dp),
+                    style = CoreHubTextStyles.code,
                     monospace = true,
                 )
                 is ChatMarkdownBlock.Paragraph -> MarkdownLine(block.text)
@@ -283,7 +289,8 @@ private fun MarkdownLine(
     style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyLarge,
     monospace: Boolean = false,
 ) {
-    val direction = chatTextDirection(text)
+    // Code, paths and model ids are forced LTR; prose resolves per block.
+    val direction = if (monospace) TextDirection.Ltr else chatTextDirection(text)
     Text(
         text = chatMarkdownInline(
             text,
