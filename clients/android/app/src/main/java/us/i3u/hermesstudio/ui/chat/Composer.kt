@@ -40,6 +40,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -78,6 +79,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -89,8 +91,12 @@ import us.i3u.hermesstudio.AppViewModel
 import us.i3u.hermesstudio.ContentDirectionBox
 import us.i3u.hermesstudio.DetectionBlock
 import us.i3u.hermesstudio.DictationHint
+import us.i3u.hermesstudio.GroupMentions
+import us.i3u.hermesstudio.MentionEdit
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.Store
+import us.i3u.hermesstudio.Upload
+import us.i3u.hermesstudio.UploadProgress
 import us.i3u.hermesstudio.chatProfile
 import us.i3u.hermesstudio.UiState
 import us.i3u.hermesstudio.SpeechLanguageOption
@@ -105,14 +111,76 @@ import us.i3u.hermesstudio.ui.theme.CoreHubIcons
 import us.i3u.hermesstudio.ui.theme.CoreHubTextStyles
 import us.i3u.hermesstudio.ui.theme.CoreHubTokens
 
+/** Where the number in the composer's top-end corner comes from. */
+internal sealed interface ComposerCounter {
+    /** The session's context window: used / total, with the bar. */
+    data object Context : ComposerCounter
+
+    /** A running total of tokens, which is all a room publishes. */
+    data class Tokens(val total: Long) : ComposerCounter
+}
+
+/**
+ * The work the send button can interrupt.
+ *
+ * A chat has one run, so while it streams the button belongs to it. A room has
+ * one run per agent and stays writable throughout, so there the stop only
+ * appears when there is nothing waiting to be sent.
+ */
+internal data class ComposerRun(
+    val running: Boolean,
+    val stopping: Boolean = false,
+    val blocksSend: Boolean = true,
+    val onStop: () -> Unit,
+) {
+    /** Whether the rest of the composer is held by the run as well. */
+    val blocksInput: Boolean get() = running && blocksSend
+}
+
+/** The `@all` chip and the line under it that says what it does. */
+internal data class ComposerAllMention(val onHint: Int, val offHint: Int)
+
+/**
+ * What one screen adds to the shared composer.
+ *
+ * Everything the card itself does — the styling, the attachment sheet,
+ * dictation with its language long-press and hint, the content direction, the
+ * counter and the send button — is the same on every screen. This is only the
+ * part that genuinely differs: where an attachment goes, what the counter
+ * counts, which trailing controls exist and who can be mentioned.
+ */
+internal data class ComposerConfig(
+    val placeholder: Int,
+    val attachments: List<Upload>,
+    val uploads: List<UploadProgress>,
+    val onAttach: (ByteArray, String, String) -> Unit,
+    val onCancelUpload: (String) -> Unit,
+    val onRemoveAttachment: (Upload) -> Unit,
+    val counter: ComposerCounter,
+    val run: ComposerRun,
+    /**
+     * The model and reasoning-effort pickers. Both are settings of one
+     * session; a room's agents each carry their own model and effort, and the
+     * room's settings sheet owns them, so a room does not offer these.
+     */
+    val sessionPickers: Boolean = false,
+    /** Push notifications are per session, so only a session offers the row. */
+    val sessionPush: Boolean = false,
+    /** Names the "@" chip can insert; empty hides the chip. */
+    val mentionTargets: List<String> = emptyList(),
+    /** The `@all` toggle, for screens where addressing everyone means something. */
+    val allMention: ComposerAllMention? = null,
+)
+
 /**
  * The composer per DESIGN-SPEC: a radius-18 card at least 150 dp tall with the
  * context indicator top-end, a borderless 16 sp textarea (dir=auto, never
  * auto-focused), attachment chips with upload progress, and the toolbar
  * [+ attach] [🧠 reasoning] [⚙ settings] [model] … [mic 30] [send 30 / stop].
  * Below ~380 dp the pill labels collapse to icons.
+ *
+ * The conversation screen's composer: every control, with the session pickers.
  */
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun Composer(
     state: UiState,
@@ -121,6 +189,49 @@ internal fun Composer(
     onSend: () -> Unit,
     viewModel: AppViewModel,
 ) {
+    StudioComposer(
+        state = state,
+        draft = draft,
+        onDraftChange = onDraftChange,
+        onSend = onSend,
+        viewModel = viewModel,
+        config = ComposerConfig(
+            placeholder = R.string.composer_hint,
+            attachments = state.attachments,
+            uploads = state.uploads,
+            onAttach = viewModel::attach,
+            onCancelUpload = viewModel::cancelUpload,
+            onRemoveAttachment = viewModel::removeAttachment,
+            counter = ComposerCounter.Context,
+            run = ComposerRun(
+                running = state.sending,
+                stopping = state.abortPhase != null,
+                onStop = viewModel::stopRun,
+            ),
+            sessionPickers = true,
+            sessionPush = true,
+        ),
+    )
+}
+
+/**
+ * The one composer, used by the conversation screen and by a group room.
+ *
+ * It was two: the room had a bare "+", an outlined field and an arrow, with no
+ * dictation, no attachment sheet and none of the card's styling. Everything
+ * that is not genuinely per-screen now lives here, and [ComposerConfig] says
+ * what the screen adds.
+ */
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+internal fun StudioComposer(
+    state: UiState,
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    onSend: () -> Unit,
+    viewModel: AppViewModel,
+    config: ComposerConfig,
+) {
     val context = LocalContext.current
     val palette = CoreHub.palette
     var sheet by remember { mutableStateOf<ComposerSheet?>(null) }
@@ -128,18 +239,22 @@ internal fun Composer(
     var fieldFocused by remember { mutableStateOf(false) }
     var attachMenu by remember { mutableStateOf(false) }
     var settingsMenu by remember { mutableStateOf(false) }
+    var mentionSheet by remember { mutableStateOf(false) }
     var speechLanguageSheet by remember { mutableStateOf(false) }
 
+    val attach: (Uri, String?) -> Unit = { uri, fallback ->
+        readAndAttach(context, uri, viewModel, config.onAttach, fallbackName = fallback)
+    }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { readAndAttach(context, it, viewModel) }
+        uri?.let { attach(it, null) }
     }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { readAndAttach(context, it, viewModel) }
+        uri?.let { attach(it, null) }
     }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
         val uri = captureUri
         captureUri = null
-        if (saved && uri != null) readAndAttach(context, uri, viewModel, fallbackName = "photo.jpg")
+        if (saved && uri != null) attach(uri, "photo.jpg")
     }
     val askCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -156,6 +271,12 @@ internal fun Composer(
     var field by remember { mutableStateOf(TextFieldValue(draft, TextRange(draft.length))) }
     LaunchedEffect(draft) {
         if (field.text != draft) field = TextFieldValue(draft, TextRange(draft.length))
+    }
+    // One edit of the field from a control rather than the keyboard: a mention
+    // chip, or the @all toggle.
+    val applyEdit: (MentionEdit) -> Unit = { edit ->
+        field = TextFieldValue(edit.text, TextRange(edit.caret.coerceIn(0, edit.text.length)))
+        onDraftChange(edit.text)
     }
     var voiceAnchor by remember { mutableStateOf<Int?>(null) }
     var voiceLength by remember { mutableStateOf(0) }
@@ -198,38 +319,55 @@ internal fun Composer(
         )
     }
 
-    when (sheet) {
-        ComposerSheet.Model -> ModalBottomSheet(onDismissRequest = { sheet = null }, sheetState = rememberModalBottomSheetState()) {
+    if (mentionSheet) {
+        ModalBottomSheet(onDismissRequest = { mentionSheet = false }, sheetState = rememberModalBottomSheetState()) {
             PickerSheet(
-                title = stringResource(R.string.sheet_model),
-                loading = state.loadingModels,
-                rows = state.models.map { option ->
-                    PickerRow(label = option.id, detail = option.provider, selected = option.id == state.sessionModel) {
-                        viewModel.selectModel(option)
-                        sheet = null
-                    }
-                },
-            )
-        }
-
-        ComposerSheet.Reasoning -> ModalBottomSheet(onDismissRequest = { sheet = null }, sheetState = rememberModalBottomSheetState()) {
-            PickerSheet(
-                title = stringResource(R.string.sheet_reasoning),
+                title = stringResource(R.string.composer_mention_title),
                 loading = false,
-                rows = REASONING_LEVELS.map { (value, label) ->
-                    PickerRow(
-                        label = stringResource(label),
-                        detail = if (value.isBlank()) stringResource(R.string.reasoning_use_profile) else null,
-                        selected = value == state.reasoningEffort,
-                    ) {
-                        viewModel.setReasoningEffort(value)
-                        sheet = null
+                rows = config.mentionTargets.map { name ->
+                    PickerRow(label = name, detail = null, selected = GroupMentions.mentions(field.text, name)) {
+                        mentionSheet = false
+                        applyEdit(GroupMentions.insert(field.text, field.selection.end, name))
                     }
                 },
             )
         }
+    }
 
-        ComposerSheet.Options, null -> Unit
+    if (config.sessionPickers) {
+        when (sheet) {
+            ComposerSheet.Model -> ModalBottomSheet(onDismissRequest = { sheet = null }, sheetState = rememberModalBottomSheetState()) {
+                PickerSheet(
+                    title = stringResource(R.string.sheet_model),
+                    loading = state.loadingModels,
+                    rows = state.models.map { option ->
+                        PickerRow(label = option.id, detail = option.provider, selected = option.id == state.sessionModel) {
+                            viewModel.selectModel(option)
+                            sheet = null
+                        }
+                    },
+                )
+            }
+
+            ComposerSheet.Reasoning -> ModalBottomSheet(onDismissRequest = { sheet = null }, sheetState = rememberModalBottomSheetState()) {
+                PickerSheet(
+                    title = stringResource(R.string.sheet_reasoning),
+                    loading = false,
+                    rows = REASONING_LEVELS.map { (value, label) ->
+                        PickerRow(
+                            label = stringResource(label),
+                            detail = if (value.isBlank()) stringResource(R.string.reasoning_use_profile) else null,
+                            selected = value == state.reasoningEffort,
+                        ) {
+                            viewModel.setReasoningEffort(value)
+                            sheet = null
+                        }
+                    },
+                )
+            }
+
+            ComposerSheet.Options, null -> Unit
+        }
     }
 
     // The hint fades on its own; nothing to tap, nothing to dismiss, no modal.
@@ -253,7 +391,7 @@ internal fun Composer(
         BoxWithConstraints(modifier = Modifier.fillMaxWidth().heightIn(min = CoreHubTokens.Metrics.composerMinHeight)) {
             val compact = maxWidth < 380.dp
             // Context indicator, top-end, above the textarea (the 22 dp top padding of the spec).
-            Box(modifier = Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 12.dp)) { ContextUsage(state) }
+            Box(modifier = Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 12.dp)) { ComposerCount(state, config.counter) }
             // Two blocks with the free space between them, so the toolbar sits on
             // the card's bottom edge even when the card is at its 150 dp minimum.
             Column(
@@ -264,17 +402,17 @@ internal fun Composer(
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                if (state.attachments.isNotEmpty() || state.uploads.isNotEmpty()) {
+                if (config.attachments.isNotEmpty() || config.uploads.isNotEmpty()) {
                     FlowRow(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        state.uploads.forEach { upload ->
-                            UploadChip(name = upload.name, percent = upload.percent) { viewModel.cancelUpload(upload.id) }
+                        config.uploads.forEach { upload ->
+                            UploadChip(name = upload.name, percent = upload.percent) { config.onCancelUpload(upload.id) }
                         }
-                        state.attachments.forEach { file ->
-                            AttachmentChip(name = file.name) { viewModel.removeAttachment(file) }
+                        config.attachments.forEach { file ->
+                            AttachmentChip(name = file.name) { config.onRemoveAttachment(file) }
                         }
                     }
                 }
@@ -311,7 +449,7 @@ internal fun Composer(
                             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                                 if (field.text.isEmpty()) {
                                     Text(
-                                        stringResource(R.string.composer_hint),
+                                        stringResource(config.placeholder),
                                         style = CoreHubTextStyles.input,
                                         color = palette.textMuted,
                                         modifier = Modifier.fillMaxWidth(),
@@ -334,23 +472,34 @@ internal fun Composer(
                 }
                 }
 
+                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    RoundToolbarButton(icon = Icons.Filled.Add, label = stringResource(R.string.composer_attach), enabled = !state.sending) { attachMenu = true }
+                    RoundToolbarButton(icon = Icons.Filled.Add, label = stringResource(R.string.composer_attach), enabled = !config.run.blocksInput) { attachMenu = true }
                     Row(
                         modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        ToolbarChip(
-                            icon = Icons.Filled.Psychology,
-                            label = reasoningLabel(state.reasoningEffort),
-                            compact = compact,
-                            contentDescription = stringResource(R.string.sheet_reasoning),
-                        ) { sheet = ComposerSheet.Reasoning }
+                        if (config.sessionPickers) {
+                            ToolbarChip(
+                                icon = Icons.Filled.Psychology,
+                                label = reasoningLabel(state.reasoningEffort),
+                                compact = compact,
+                                contentDescription = stringResource(R.string.sheet_reasoning),
+                            ) { sheet = ComposerSheet.Reasoning }
+                        }
+                        if (config.mentionTargets.isNotEmpty()) {
+                            ToolbarChip(
+                                icon = Icons.Filled.AlternateEmail,
+                                label = stringResource(R.string.composer_mention),
+                                compact = compact,
+                                contentDescription = stringResource(R.string.composer_mention_title),
+                            ) { mentionSheet = true }
+                        }
                         Box {
                             ToolbarChip(
                                 icon = CoreHubIcons.Settings,
@@ -365,22 +514,26 @@ internal fun Composer(
                                 SettingsMenuItem(stringResource(R.string.composer_show_tool_calls), state.showToolCalls) {
                                     viewModel.setShowToolCalls(!state.showToolCalls)
                                 }
-                                SettingsMenuItem(stringResource(R.string.composer_push), state.sessionPushEnabled) {
-                                    settingsMenu = false
-                                    viewModel.togglePushEnabled()
+                                if (config.sessionPush) {
+                                    SettingsMenuItem(stringResource(R.string.composer_push), state.sessionPushEnabled) {
+                                        settingsMenu = false
+                                        viewModel.togglePushEnabled()
+                                    }
                                 }
                             }
                         }
-                        ToolbarChip(
-                            icon = Icons.Filled.ModelTraining,
-                            label = state.sessionModel ?: stringResource(R.string.sheet_model),
-                            compact = compact,
-                            contentDescription = stringResource(R.string.sheet_model),
-                            maxLabelWidth = 190.dp,
-                            ltrLabel = state.sessionModel != null,
-                        ) {
-                            viewModel.loadModels()
-                            sheet = ComposerSheet.Model
+                        if (config.sessionPickers) {
+                            ToolbarChip(
+                                icon = Icons.Filled.ModelTraining,
+                                label = state.sessionModel ?: stringResource(R.string.sheet_model),
+                                compact = compact,
+                                contentDescription = stringResource(R.string.sheet_model),
+                                maxLabelWidth = 190.dp,
+                                ltrLabel = state.sessionModel != null,
+                            ) {
+                                viewModel.loadModels()
+                                sheet = ComposerSheet.Model
+                            }
                         }
                     }
                     MicButton(
@@ -395,11 +548,55 @@ internal fun Composer(
                             speechLanguageSheet = true
                         },
                     )
-                    ComposerActionButton(state, draft, onSend, viewModel)
+                    ComposerActionButton(config, draft, onSend)
+                }
+                config.allMention?.let { all ->
+                    AllMentionRow(
+                        all = all,
+                        active = GroupMentions.mentionsAll(field.text),
+                        onToggle = { applyEdit(GroupMentions.toggleAll(field.text, field.selection.end)) },
+                    )
+                }
                 }
             }
         }
     }
+    }
+}
+
+/**
+ * The `@all` chip and its sentence.
+ *
+ * The chip is not a hidden flag: it puts `@all` in the draft and takes it out
+ * again, because that token is what the room actually routes on, and a
+ * structured mention the text does not carry is refused by the server.
+ */
+@Composable
+private fun AllMentionRow(all: ComposerAllMention, active: Boolean, onToggle: () -> Unit) {
+    val palette = CoreHub.palette
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "@${GroupMentions.ALL}",
+            style = CoreHubTextStyles.meta.copy(fontWeight = FontWeight.Medium, textDirection = TextDirection.Ltr),
+            color = if (active) palette.textOnAccent else palette.textSecondary,
+            modifier = Modifier
+                .clip(RoundedCornerShape(CoreHubTokens.Radius.pill))
+                .background(if (active) palette.accent else palette.segmentTrack)
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+        )
+        Text(
+            stringResource(if (active) all.onHint else all.offHint),
+            style = CoreHubTextStyles.meta.copy(textDirection = TextDirection.Content),
+            color = palette.textMuted,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -710,6 +907,26 @@ private fun MicButton(
     }
 }
 
+/**
+ * The counter in the card's top-end corner: a session's context window, or a
+ * room's running token total — a room has no single context window to show.
+ */
+@Composable
+private fun ComposerCount(state: UiState, counter: ComposerCounter) {
+    val palette = CoreHub.palette
+    when (counter) {
+        ComposerCounter.Context -> ContextUsage(state)
+        is ComposerCounter.Tokens -> if (counter.total > 0) {
+            Text(
+                stringResource(R.string.room_tokens, counter.total),
+                style = CoreHubTextStyles.meta.copy(textDirection = TextDirection.Ltr),
+                color = palette.textMuted,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
 /** "45.0k / 256.0k · remaining 211.0k": 11 sp muted, amber above 80 %, bar 42×4. */
 @Composable
 internal fun ContextUsage(state: UiState) {
@@ -942,35 +1159,42 @@ internal fun appearanceLabel(appearance: String): String = stringResource(
 internal const val PHONE_REPOSITORY_URL = "https://github.com/twuijri/hermes-studio-mobile"
 internal const val STUDIO_REPOSITORY_URL = "https://github.com/EKKOLearnAI/hermes-studio"
 
-/** 30 dp accent circle: send when there is a payload, a square stop while streaming. */
+/**
+ * 30 dp accent circle: send when there is a payload, a square stop while
+ * something is running.
+ *
+ * A chat's run owns the button while it streams. A room stays writable while
+ * its agents reply, so there the stop only takes the button when the draft is
+ * empty — and it interrupts whoever is talking.
+ */
 @Composable
 internal fun ComposerActionButton(
-    state: UiState,
+    config: ComposerConfig,
     draft: String,
     onSend: () -> Unit,
-    viewModel: AppViewModel,
 ) {
-    val hasPayload = draft.isNotBlank() || state.attachments.isNotEmpty()
+    val hasPayload = draft.isNotBlank() || config.attachments.isNotEmpty()
     val palette = CoreHub.palette
-    val stopping = state.abortPhase != null
-    val active = hasPayload || state.sending
+    val run = config.run
+    val showStop = run.running && (run.blocksSend || !hasPayload)
+    val active = hasPayload || showStop
     val background = if (active) palette.accent else palette.bgSecondary
     val tint = if (active) palette.textOnAccent else palette.textMuted
-    val uploading = state.uploads.isNotEmpty()
+    val uploading = config.uploads.isNotEmpty()
 
     Box(
         modifier = Modifier
             .size(CoreHubTokens.Metrics.composerButton)
             .clip(CircleShape)
             .background(background)
-            .clickable(enabled = (state.sending && !stopping) || (hasPayload && !uploading)) {
-                if (state.sending) viewModel.stopRun() else onSend()
+            .clickable(enabled = (showStop && !run.stopping) || (!showStop && hasPayload && !uploading)) {
+                if (showStop) run.onStop() else onSend()
             },
         contentAlignment = Alignment.Center,
     ) {
         when {
-            stopping -> CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = tint)
-            state.sending -> Box(
+            showStop && run.stopping -> CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = tint)
+            showStop -> Box(
                 modifier = Modifier.size(12.dp).background(tint, RoundedCornerShape(2.dp)),
             )
             else -> Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.composer_send), tint = tint, modifier = Modifier.size(16.dp))
@@ -1135,11 +1359,15 @@ internal fun newCaptureUri(context: Context): Uri {
     return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
 }
 
-/** Reads a picked document through the content resolver and hands it to the upload. */
+/**
+ * Reads a picked document through the content resolver and hands it to the
+ * upload the screen owns — the session's, or the room's chunked one.
+ */
 internal fun readAndAttach(
     context: Context,
     uri: Uri,
     viewModel: AppViewModel,
+    onAttach: (ByteArray, String, String) -> Unit,
     fallbackName: String? = null,
 ) {
     val resolver = context.contentResolver
@@ -1156,5 +1384,5 @@ internal fun readAndAttach(
         viewModel.reportAttachmentUnreadable(name)
         return
     }
-    viewModel.attach(bytes, name, mime)
+    onAttach(bytes, name, mime)
 }

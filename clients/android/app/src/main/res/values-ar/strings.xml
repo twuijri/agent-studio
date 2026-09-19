@@ -940,6 +940,8 @@
     <string name="message_copied">نُسخت الرسالة</string>
     <string name="composer_attach">إرفاق</string>
     <string name="composer_settings">الإعدادات</string>
+    <string name="composer_mention">إشارة</string>
+    <string name="composer_mention_title">أشِر إلى وكيل</string>
     <string name="composer_voice_mode">الوضع الصوتي</string>
     <string name="composer_show_tool_calls">إظهار نداءات الأدوات</string>
     <string name="composer_push">الإرسال</string>
