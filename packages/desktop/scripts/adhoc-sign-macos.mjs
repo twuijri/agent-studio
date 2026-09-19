@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -22,7 +22,11 @@ import { join } from 'node:path'
 export function shouldAdhocSign(env = process.env, platform = 'darwin') {
   if (platform !== 'darwin') return false
   if (env.CORE_HUB_SKIP_ADHOC_SIGN === '1') return false
-  const hasIdentity = Boolean((env.CSC_LINK || env.MAC_CSC_LINK || env.CSC_NAME || '').trim())
+  // CI signing (configure-macos-signing.mjs) imports the certificate into a
+  // dedicated keychain and exports CSC_KEYCHAIN; local/manual signing uses
+  // CSC_LINK / CSC_NAME. Any of them means a real identity signs the app and
+  // this hook must stay out of the way.
+  const hasIdentity = Boolean((env.CSC_LINK || env.MAC_CSC_LINK || env.CSC_NAME || env.CSC_KEYCHAIN || '').trim())
   if (hasIdentity) return false
   return env.CSC_IDENTITY_AUTO_DISCOVERY === 'false' || !hasIdentity
 }
@@ -31,14 +35,15 @@ function run(args) {
   return execFileSync('codesign', args, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' })
 }
 
+export function hasDeveloperIdSignature(codesignOutput) {
+  return /Authority=Developer ID Application/.test(String(codesignOutput || ''))
+}
+
 function isSignedByDeveloperId(appPath) {
-  try {
-    const info = execFileSync('codesign', ['-dv', '--verbose=2', appPath], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' })
-    return /Authority=Developer ID Application/.test(info)
-  } catch {
-    // Either unsigned or broken signature; both need the ad-hoc re-sign.
-    return false
-  }
+  // codesign prints the signature details on STDERR, not stdout.
+  const result = spawnSync('codesign', ['-dv', '--verbose=2', appPath], { encoding: 'utf8' })
+  if (result.error) return false
+  return hasDeveloperIdSignature(`${result.stdout || ''}\n${result.stderr || ''}`)
 }
 
 export default async function adhocSignMacOs(context) {
