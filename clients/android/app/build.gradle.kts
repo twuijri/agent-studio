@@ -23,8 +23,11 @@ android {
         applicationId = "us.i3u.hermesstudio"
         minSdk = 26
         targetSdk = 35
-        versionCode = 34
-        versionName = "1.4.0"
+        // Core Hub Mobile follows the Core Hub version: CI passes the core
+        // package.json version (test builds: <core>-test.<run>) and the run
+        // number; local builds fall back to the values below.
+        versionCode = System.getenv("CORE_HUB_VERSION_CODE")?.toIntOrNull() ?: 34
+        versionName = System.getenv("CORE_HUB_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.4.0"
         buildConfigField("String", "BUILD_COMMIT", "\"$buildCommit\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
