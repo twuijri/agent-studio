@@ -841,6 +841,7 @@ export default {
 
 
   chat: {
+    onDevice: 'на устройстве',
     contextRemaining: 'Осталось',
     contextClickToEdit: 'Нажмите, чтобы изменить размер контекста',
     contextEditTitle: 'Изменить размер контекста',
