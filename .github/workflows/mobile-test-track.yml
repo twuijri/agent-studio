@@ -193,6 +193,19 @@ jobs:
           printf '%s\n' "$ASC_API_KEY_P8" > "$HOME/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
           chmod 600 "$HOME/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
           echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+      - name: Ensure an App Store provisioning profile
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          BUNDLE_ID: com.twuijri.corehub
+          PROFILE_NAME: Core Hub Mobile App Store
+        run: |
+          set -o pipefail
+          python3 -m venv "$RUNNER_TEMP/ascvenv"
+          "$RUNNER_TEMP/ascvenv/bin/pip" install --quiet --disable-pip-version-check pyjwt cryptography
+          ASC_API_KEY_PATH="$HOME/private_keys/AuthKey_${ASC_API_KEY_ID}.p8" \
+            "$RUNNER_TEMP/ascvenv/bin/python" scripts/ci/asc_profile.py
       - name: Archive, sign and upload to TestFlight
         if: steps.secrets.outputs.ready == 'true'
         env:
@@ -205,8 +218,9 @@ jobs:
           ARCHIVE="$RUNNER_TEMP/CoreHubMobile-signed.xcarchive"
           xcodebuild -project clients/ios/HermesStudio.xcodeproj -scheme HermesStudio -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" \
-            -allowProvisioningUpdates -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_API_KEY_ID" -authenticationKeyIssuerID "$ASC_API_ISSUER_ID" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_API_KEY_ID" -authenticationKeyIssuerID "$ASC_API_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID" CODE_SIGN_IDENTITY="Apple Distribution" \
             MARKETING_VERSION="$MARKETING_VERSION" CURRENT_PROJECT_VERSION="$CURRENT_PROJECT_VERSION" \
             archive > "$RUNNER_TEMP/archive.log" 2>&1 || { grep -E "error:|BUILD FAILED" "$RUNNER_TEMP/archive.log" | sort -u | head -40; tail -40 "$RUNNER_TEMP/archive.log"; exit 1; }
           cat > "$RUNNER_TEMP/export.plist" <<PLIST
@@ -216,13 +230,17 @@ jobs:
             <key>method</key><string>app-store-connect</string>
             <key>destination</key><string>upload</string>
             <key>teamID</key><string>$APPLE_TEAM_ID</string>
-            <key>signingStyle</key><string>automatic</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key><dict>
+              <key>com.twuijri.corehub</key><string>$PROVISIONING_PROFILE_UUID</string>
+            </dict>
             <key>uploadSymbols</key><true/>
             <key>manageAppVersionAndBuildNumber</key><false/>
           </dict></plist>
           PLIST
           xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist "$RUNNER_TEMP/export.plist" -exportPath "$RUNNER_TEMP/export" \
-            -allowProvisioningUpdates -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_API_KEY_ID" -authenticationKeyIssuerID "$ASC_API_ISSUER_ID" \
+            -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_API_KEY_ID" -authenticationKeyIssuerID "$ASC_API_ISSUER_ID" \
             > "$RUNNER_TEMP/export.log" 2>&1 || { grep -E "error:|Error" "$RUNNER_TEMP/export.log" | sort -u | head -40; tail -40 "$RUNNER_TEMP/export.log"; exit 1; }
           grep -E "EXPORT SUCCEEDED|Upload|uploaded" "$RUNNER_TEMP/export.log" | tail -3
           echo "Uploaded Core Hub Mobile $MARKETING_VERSION (build $CURRENT_PROJECT_VERSION) to TestFlight" >> "$GITHUB_STEP_SUMMARY"

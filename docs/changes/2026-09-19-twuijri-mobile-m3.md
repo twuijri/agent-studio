@@ -99,3 +99,16 @@
   SIGPIPE من `grep -m1`.
 - الدليل: التشغيل 35430895715 (`** BUILD SUCCEEDED **` ثم خروج 1 بلا مخرجات)،
   والتشغيل التالي على `299f06c0` للتحقق ورفع أول نسخة إلى TestFlight.
+
+## إضافة: رفع TestFlight بتوقيع يدوي بدل التوقيع السحابي (2026-09-19)
+- التشغيل 35431363797: الاختبارات نجحت والأرشفة نجحت، لكن التصدير سقط بـ
+  «Cloud signing permission error» و«No profiles for 'com.twuijri.corehub'
+  were found»: توقيع Xcode السحابي يحتاج صلاحية على مفتاح App Store Connect
+  قد لا تكون متاحة لحساب جديد.
+- الحل: `scripts/ci/asc_profile.py` يتحدث مع App Store Connect API مباشرة،
+  يتحقق من تسجيل معرّف الحزمة ومن وجود شهادة توزيع، ينشئ ملف تعريف
+  `IOS_APP_STORE` باسم «Core Hub Mobile App Store» إن لم يوجد، يثبّته للمشغّل
+  ويصدّر اسمه ومعرّفه. الأخطاء تُطبع بنص آبل نفسه بلا أي سر.
+- الأرشفة والتصدير صارا `CODE_SIGN_STYLE=Manual` مع الملف المذكور و
+  `Apple Distribution`، وأُزيل `-allowProvisioningUpdates`.
+- غير مُتحقق بعد: نجاح الرفع الفعلي؛ ينتظر التشغيل التالي على `mobile`.
