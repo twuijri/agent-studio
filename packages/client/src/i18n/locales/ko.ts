@@ -957,6 +957,7 @@ export default {
 
   // 채팅
   chat: {
+    onDevice: '기기에 있음',
     contextRemaining: '남음',
     contextClickToEdit: '클릭하여 컨텍스트 길이 편집',
     contextEditTitle: '컨텍스트 길이 편집',

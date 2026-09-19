@@ -945,6 +945,7 @@ export default {
 
   // 对话
   chat: {
+    onDevice: '在设备上',
     contextRemaining: '剩余',
     contextClickToEdit: '点击编辑上下文长度',
     contextEditTitle: '编辑上下文长度',

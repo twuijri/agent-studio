@@ -957,6 +957,7 @@ export default {
 
   // Chat
   chat: {
+    onDevice: 'no dispositivo',
     contextRemaining: 'restante',
     contextClickToEdit: 'Clique para editar o tamanho do contexto',
     contextEditTitle: 'Editar tamanho do contexto',

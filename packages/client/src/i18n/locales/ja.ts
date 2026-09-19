@@ -957,6 +957,7 @@ export default {
 
   // チャット
   chat: {
+    onDevice: 'デバイス上',
     contextRemaining: '残り',
     contextClickToEdit: 'クリックしてコンテキスト長を編集',
     contextEditTitle: 'コンテキスト長を編集',

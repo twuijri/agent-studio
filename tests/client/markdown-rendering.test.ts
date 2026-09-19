@@ -1353,3 +1353,30 @@ describe('MarkdownRenderer', () => {
     expect(execCommand).toHaveBeenCalledWith('copy')
   })
 })
+
+describe('device file links', () => {
+  it('plays device://<id>/<path> videos from the device through the download route with a badge', () => {
+    const wrapper = mount(MarkdownRenderer, {
+      props: { content: '[final.mp4](device://hwui_abcdef123456/Users/ali/Core%20Hub/final.mp4)' },
+    })
+    const video = wrapper.find('video.markdown-video')
+    expect(video.exists()).toBe(true)
+    const src = new URL(video.attributes('src') || '', 'http://localhost')
+    expect(src.pathname).toBe('/api/studio/files/download')
+    expect(decodeURIComponent(src.searchParams.get('path') || '')).toBe('device://hwui_abcdef123456/Users/ali/Core Hub/final.mp4')
+    expect(wrapper.find('.markdown-device-badge').exists()).toBe(true)
+    expect(wrapper.find('.markdown-video-footer .att-name').text()).toBe('final.mp4')
+    wrapper.unmount()
+  })
+
+  it('turns other device files into download links from the device', () => {
+    const wrapper = mount(MarkdownRenderer, {
+      props: { content: '[report.pdf](device://hwui_abcdef123456/Users/ali/Core%20Hub/report.pdf)' },
+    })
+    const link = wrapper.find('a.markdown-device-file-link')
+    expect(link.exists()).toBe(true)
+    expect(link.attributes('href')).toContain('/api/studio/files/download?path=')
+    expect(link.text()).toContain('report.pdf')
+    wrapper.unmount()
+  })
+})

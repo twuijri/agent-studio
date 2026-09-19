@@ -957,6 +957,7 @@ export default {
 
   // Chat
   chat: {
+    onDevice: 'sur l’appareil',
     contextRemaining: 'restant',
     contextClickToEdit: 'Cliquez pour modifier la longueur du contexte',
     contextEditTitle: 'Modifier la longueur du contexte',

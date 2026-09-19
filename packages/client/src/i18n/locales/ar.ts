@@ -938,6 +938,7 @@ export default {
 
   // Chat
   chat: {
+    onDevice: 'على الجهاز',
     contextRemaining: 'متبقٍ',
     contextClickToEdit: 'اضغط لتعديل طول السياق',
     contextEditTitle: 'تعديل طول السياق',

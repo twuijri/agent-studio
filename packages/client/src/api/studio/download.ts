@@ -49,6 +49,12 @@ export function inferDownloadFileName(filePath: string, fileName?: string): stri
  * Construct a download URL with auth token as query parameter.
  * Token is passed via query param because <a> tags cannot set headers.
  */
+/** device://<device id>/<absolute path> — a file that lives on a linked device. */
+export function parseDeviceFileUrl(value: string): { deviceId: string; path: string } | null {
+  const match = /^device:\/\/([A-Za-z0-9_.-]+)(\/.*)$/.exec(value)
+  return match ? { deviceId: match[1], path: match[2] } : null
+}
+
 export function getDownloadUrl(filePath: string, fileName?: string, profile?: string | null): string {
   const base = getBaseUrlValue()
 
