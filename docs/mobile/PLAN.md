@@ -310,3 +310,131 @@ Xcode على جهاز التطوير؛ الكود مكتوب بحذر بـ Swift
   التطبيق الجديدة تظهر على الشاشة الرئيسية باسم «Core Hub».
 - المظهر الفاتح/الداكن/النظام يبدّل ألوان `Palette` (UIColor ديناميكي)
   والتذييل يعرض إصدار الخادم من `/health`.
+
+## M3 iOS — الدردشة بمطابقة عميل الويب (فرع `mobile-m3-ios`، 2026-09-19)
+كل التغييرات داخل `clients/ios` فقط (بلا مساس بـ `clients/android`). لا يوجد
+Xcode على جهاز التطوير؛ الكود Swift 5 / SwiftUI (iOS 17) مكتوب بحذر وغير
+مُترجَم محليًا — CI على macOS يبني ويشغّل الاختبارات بعد الدمج.
+
+1. **سوكت دائم `/chat-run`:** `Core/SocketIO.swift` أُعيد بناء `ChatSocket`
+   ليبقى متصلًا طوال بقاء المحادثة على الشاشة (لا اتصال لكل تشغيل): مصافحة
+   `auth: { token }` و`query: { profile, platform: 'ios' }` (تسجّل الهاتف كجهاز
+   هدف)، `app.resume` عند كل اتصال، إعادة اتصال بتراجع أسّي حتى 30 ث، وإعادة
+   الاتصال فورًا عند عودة التطبيق للواجهة. الترجمة من أحداث السيرفر إلى
+   `LiveRunEvent` دالة نقية `ChatSocket.events(for:json:sessionID:)` تغطي:
+   `message.delta/interim`، `reasoning.delta/thinking.delta/reasoning.available`،
+   `tool.started/completed/failed` (مع `output_truncated`/`output_original_length`/
+   `preview_truncated` عبر `ToolEvent`)، `subagent.*`/`delegation.updated`،
+   `workspace.diff.completed`، `run.started/completed/failed/queued/
+   queue_insertion.updated/peer_user_message/reattach_failed`،
+   `approval.*`، `clarify.*`، `compression.*`، `abort.started/timeout/completed`،
+   `usage.updated`، `session.command` (نهائي ما لم يكن `terminal === false`)،
+   `session.title.updated`، `session.workspace.updated`،
+   `session.settings.updated`، `resumed`، `location.requested`،
+   `calendar/reminder/health.requested`. الإرسال: `run` (بحقل `push_enabled`
+   الحالي)، `abort`، `approval.respond` (مع خيار `deny` الموجود)،
+   `clarify.respond`، `insert/steer/cancel_queued_run`، `location.respond`،
+   ورد `denied` على calendar/reminder/health.
+2. **مخفِّض نقي للبث:** `Core/ChatStream.swift` — `ChatStreamState` +
+   `ChatRunReducer.apply(event, to:)` يبني الأسطر (مستخدم/وكيل/نظام/أمر/خطأ/
+   تفاعل)، النص المؤقت `interim`، التفكير مع وقت البداية/النهاية، الأدوات
+   (إدراج/تحديث، مدة، مقاطعة عند الإيقاف)، الطابور، الضغط، الإيقاف، رسائل
+   الأقران، الأوامر، الإعدادات، الموقع. زائد `ToolSummary` (≤3 أسماء فريدة
+   «·» +N)، `ThinkingFormat` (5s / 1m 20s)، `ReferenceQuote` (8 أسطر `> `)،
+   `ContextUsageFormat` (x.xk / x.xM، تحذير > 80%)، وخيارات جهد الاستدلال.
+3. **الفقاعات (`Features/Chat/MessageRow.swift`):** مستخدم بحد 75% وخلفية
+   `msg.user` وزاوية 10 وحشوة 10×14 وشرائح المرفقات؛ وكيل بصورة الوكيل 22pt
+   وتسمية 12pt وبحد 80%؛ نظام بحد بادئ 3pt تحذيري؛ أمر (`/fork`) بخط أحادي على
+   خلفية الكود؛ خطأ بلون الخطأ على `error@6%`؛ نقاط بث عند غياب النص.
+4. **بطاقة الأدوات (`ToolSummaryCard.swift`):** رأس 30pt (سهم يدور 90°،
+   مفتاح ربط من مسار الويب، «N tools/{count} أداة»، الأسماء، ✓ / ••• / Error)،
+   وأسطر 11pt أحادية (حالة، اسم، معاينة، مدة) تُفتح إلى Thinking/Arguments/
+   Result مع تنويه الاقتطاع. تحترم «إظهار نداءات الأدوات».
+5. **كتلة التفكير (`ThinkingBlock.swift`):** 💭 Thinking/التفكير · Observed
+   {duration} · {count} chars، 13pt مائل 85%، قابلة للطي، تحدّث كل ثانية أثناء البث.
+6. **صف الإجراءات (`MessageActionRow.swift`، ظاهر دائمًا):** تشغيل/إيقاف مؤقت
+   للصوت، نسخ، إشارة (اقتباس إلى المحرّر)، تفريع (`/fork` كما في الويب)،
+   والوقت 11pt؛ أزرار 24pt زاوية 6.
+7. **المحرّر (`ChatComposer.swift`):** بطاقة زاوية 18 وحد أدنى 150pt وظل؛ شريط
+   [+ إرفاق: كاميرا / مكتبة الصور / الملفات] [🧠 جهد الاستدلال: default/none/
+   minimal/low/medium/high/xhigh/max] [⚙: الوضع الصوتي، إظهار نداءات الأدوات ✓،
+   الإشعارات ✓] [النموذج ≤190pt من `/api/hermes/available-models`] … [ميكروفون
+   30pt = إدخال M1] [إرسال 30pt دائرة/مربع إيقاف أثناء البث]، وزر طابور عند
+   وجود مسودة أثناء البث؛ مؤشر السياق أعلى النهاية؛ التسميات تنطوي إلى أيقونات
+   دون 380pt؛ إدخال 16pt باتجاه لكل نص؛ لا تركيز تلقائي عند الفتح.
+   `session.settings.updated` يُطبَّق على الحبّات.
+8. **المرفقات المجزّأة (`Core/AppUploads.swift`):** `POST /api/studio/app-uploads`
+   بمعرّف يولّده العميل (32 حرفًا من `[A-Za-z0-9_-]`) → `PUT …/chunks?offset=N`
+   بجسم خام ≤ 256 KiB → `POST …/complete` → المسار إلى كتلة المحتوى؛ إلغاء عبر
+   `DELETE`؛ تقدّم لكل مرفق وسقف 50 MB. الالتقاط بالكاميرا
+   (`UIImagePickerController`)، مكتبة الصور (`PhotosPicker`)، والملفات
+   (`fileImporter`) في `AttachmentPickers.swift`.
+9. **الوسائط والملفات (`MediaPlayers.swift`، `Core/MediaLinks.swift`):** روابط
+   المسارات المطلقة و`device://<id>/<path>` تمر عبر
+   `/api/studio/files/download?path=` بترويسة Bearer؛ فيديو (mp4/webm/mov/m4v)
+   بـ `VideoPlayer` وصوت (mp3/wav/ogg/m4a/aac/flac) بمشغّل مضمّن، كلاهما على
+   `AVURLAsset` بمفتاح `AVURLAssetHTTPHeaderFieldsKey`؛ بقية الملفات بطاقات
+   تنزيل؛ ملفات الجهاز تحمل وسم «On the device / على الجهاز».
+10. **النطق (`Core/MessageSpeaker.swift`):** `POST /api/studio/tts/synthesize`
+    مع `X-Hermes-Profile` → `AVAudioPlayer`، تشغيل/إيقاف مؤقت لكل رسالة، رسالة
+    واحدة في كل مرة، تشغيل تلقائي للردود عند «الوضع الصوتي»، والرجوع إلى
+    `AVSpeechSynthesizer` عند فشل الخادم.
+11. **الموافقات والاستيضاحات داخل البث (`InteractionCard.swift`):** بطاقة
+    بحد تحذيري: الأمر بخط أحادي، الوصف، أزرار الخيارات (once/session/always
+    بحسب `allow_permanent`) + رفض، أو حقل إجابة حرّة مع `initial_response`
+    و`response_mode`؛ تتحول إلى صف «تمت الموافقة/مرفوض/تمت الإجابة» عند الحل.
+    الطابور (إدراج/توجيه/إلغاء)، لافتات الضغط والإيقاف وإعادة الاتصال،
+    `run.peer_user_message` كسطر مستخدم، وصف تغييرات مساحة العمل في
+    `ChatBanners.swift`.
+12. **موافقة الجوال (`LocationConsentSheet.swift`، `Core/LocationConsent.swift`):**
+    عند `location.requested` تظهر ورقة بالغرض والدقة؛ «مشاركة الموقع» تقرأ
+    قراءة واحدة من CoreLocation (`NSLocationWhenInUseUsageDescription` في
+    Info.plist) ثم `location.respond` `{ status:'success', location:{ latitude,
+    longitude, accuracyMeters, coordinateSystem:'wgs84', timestamp } }`؛ «عدم
+    المشاركة» أو الإغلاق → `denied`؛ الفشل → `error` مع الرمز والرسالة.
+    **TODO:** طلبات `calendar.requested` / `reminder.requested` /
+    `health.requested` تُرد `denied` تلقائيًا حتى تُبنى تكاملات EventKit/HealthKit.
+13. **الأخطاء ظاهرة دائمًا:** كل فشل (تشغيل، رفع، نطق، موقع، طابور بلا اتصال)
+    يظهر في الشريط الموحّد أو كسطر خطأ داخل البث. كل السلاسل الجديدة (72)
+    بالعربية والإنجليزية في `Localizable.strings`؛ الاتجاه لكل نص، الكود
+    والمسارات ومعرّفات النماذج LTR، المسافات منطقية.
+14. **الاختبارات:** `HermesStudioTests/ChatParityTests.swift` (26 اختبارًا):
+    مصافحة السوكت، تحليل أحداث الأدوات والاقتطاع، خريطة أحداث السيرفر،
+    خيارات الموافقة، كتل المحتوى، المخفِّض (البث، الإكمال، الأدوات، الإيقاف،
+    الفشل، التفاعلات، الأقران/الطابور/الإعدادات، الأوامر النهائية، الاستئناف،
+    الطابور المتسلسل)، ملخص الأدوات، مدة التفكير، الاقتباس، مؤشر السياق،
+    معرّفات وأجزاء الرفع، روابط الجهاز وأنواع الوسائط، سجل الرسائل، حمولة الموقع.
+
+**انحرافات مقصودة:** المحرّر لا ينطوي إلى شريط صغير عند الفراغ (المواصفة:
+حد أدنى 150pt)؛ بطاقة الأدوات تحمل خلفية `bgSecondary@60%` بدل
+`rgba(surface,.28)`؛ عرض الفقاعات محسوب من `GeometryReader` واحد بدل
+`containerRelativeFrame`.
+
+**ما يجب التحقق منه في Xcode (لم يُترجَم هنا):**
+- البناء (`HermesStudio` + `HermesStudioTests`) وتشغيل الاختبارات
+  (43 + 24 + 26). النقاط الأعلى خطرًا: `MessageRowContext` بالإغلاقات داخل
+  `LazyVStack`، `ConversationSheets` (تمرير `self` إلى `ViewModifier`)،
+  `.photosPicker(isPresented:selection:maxSelectionCount:matching:)`،
+  `TimelineView(.periodic)` داخل زر، تعبيرات `ChatComposer` الطويلة (قسّمها لو
+  اشتكى المحلّل)، والتقاط `self` في إغلاقات `@Sendable` للرفع.
+- السوكت: يبقى متصلًا بعد اكتمال الرد؛ سحب الشبكة ثم إعادتها → لافتة
+  «إعادة الاتصال» ثم استئناف؛ الخلفية والعودة → اتصال فوري وتحميل السجل.
+- البث: نقاط الانتظار ثم النص، كتلة التفكير بعدّاد الثواني، بطاقة «N tools»
+  تفتح تلقائيًا أثناء التشغيل وتغلق بعده، زر الإيقاف (مربع) → لافتة
+  «جارٍ الإيقاف…» ثم اكتمال؛ رسالة ثانية أثناء البث → زر الطابور → شريحة
+  الطابور بإدراج/توجيه/إلغاء.
+- الموافقة: بطاقة داخل البث، الخيارات ترسل `approval.respond`، الرفض `deny`،
+  التحول إلى صف محلول؛ الاستيضاح: حقل الإجابة و`initial_response`.
+- المرفقات: كاميرا/مكتبة/ملفات → شريحة بتقدّم وإلغاء (يحذف الجلسة على
+  السيرفر)، الإرسال يتضمن كتل `image`/`file` بالمسار المُعاد؛ ملف > 50 MB يُرفض
+  برسالة.
+- الوسائط: رد يحوي `[clip](/path/clip.mp4)` يعرض مشغّل فيديو، `.m4a` مشغّل صوت
+  بتقدّم، `device://…` يحمل وسم «على الجهاز»، بقية الملفات بطاقة تنزيل.
+- النطق: زر التشغيل في صف الإجراءات (تشغيل/إيقاف مؤقت)، «الوضع الصوتي» ينطق
+  الرد التالي تلقائيًا، وعند تعطيل TTS على الخادم يُستخدم صوت الجهاز.
+- الموقع: أداة تطلب الموقع → ورقة الموافقة → إذن iOS → الرد بالإحداثيات؛
+  الرفض/الإغلاق → `denied`.
+- RTL/العربية: فقاعة المستخدم في النهاية، النص العربي بمحاذاة اليمين داخل
+  فقاعة الوكيل، الأسهم والمفاتيح تنعكس، مؤشر السياق «45.0k / 256.0k · متبقٍ 211.0k»
+  يبقى LTR، الحبّات تنطوي إلى أيقونات على iPhone SE.
+- الوضعان الفاتح/الداكن: خلفيات `msg.*` و`bgComposer` والظلال.
