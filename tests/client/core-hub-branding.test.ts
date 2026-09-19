@@ -45,14 +45,19 @@ describe('Core Hub branding without a data or deployment migration', () => {
     expect(text).not.toContain('(await repo.json()).private !== true')
     expect(text).not.toContain("visibility !== 'private'")
     expect(text).toContain('Report the image package visibility')
-    expect(text).toContain("if (visibility !== 'public') console.log('::warning::")
-    expect(text).toContain('ghcr.io/twuijri/core-hub:latest')
+    expect(text).toContain("const expected = '${{ inputs.image_repo }}' === 'core-hub' ? 'public' : 'private';")
+    expect(text).toContain('if (visibility !== expected) console.log(`::warning::')
+    // The package name is an input (core-hub = public deployment image, core-hub-test = private test track).
+    expect(text).toContain('ghcr.io/twuijri/${{ inputs.image_repo }}:latest')
+    expect(text).toContain('Refuse to promote the test-track package to latest')
     expect(text).not.toContain('ghcr.io/twuijri/agent-studio:')
     expect(text).not.toContain('packages/container/agent-studio')
-    expect(text.match(/packages\/container\/core-hub/g)).toHaveLength(2)
-    const imageReferences = text.match(/ghcr\.io\/twuijri\/[a-z-]+/g) || []
+    expect(text.match(/packages\/container\/\$\{\{ inputs\.image_repo \}\}/g)).toHaveLength(2)
+    expect(text.match(/packages\/container\/core-hub\b/g)).toBeNull()
+    // Every image reference goes through the input; no literal package name is left behind.
+    const imageReferences = text.match(/ghcr\.io\/twuijri\/(?:\$\{\{ inputs\.image_repo \}\}|[a-z-]+)/g) || []
     expect(imageReferences.length).toBeGreaterThan(5)
-    expect(new Set(imageReferences)).toEqual(new Set(['ghcr.io/twuijri/core-hub']))
+    expect(new Set(imageReferences)).toEqual(new Set(['ghcr.io/twuijri/${{ inputs.image_repo }}']))
     expect(text).toContain('--install-agents')
     expect(text).toContain('node scripts/check-personal-license.mjs')
     expect(read('compose.personal.yml')).toContain('agent-studio-hermes:/home/agent/.hermes')
