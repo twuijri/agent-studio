@@ -29,6 +29,11 @@
 - **الوكلاء:** أيقونات hermes/ekko/claude/codex/deepseek/grok/pi/opencode،
   ونقاط `/api/coding-agents` و`/api/agents/*` كما عندنا.
 
+## معرّف التطبيق (قرار المالك 2026-09-19)
+`com.twuijri.corehub` على المنصتين (Android `applicationId`، iOS
+`PRODUCT_BUNDLE_IDENTIFIER`؛ اختبارات iOS `com.twuijri.corehub.tests`)، وفريق
+آبل `58QWJ228ZE`. مساحة الأسماء في كوتلن تبقى `us.i3u.hermesstudio`.
+
 ## قاعدة الإصدار (قرار المالك 2026-09-19)
 رقم نسخة تطبيق الجوال = رقم آخر إصدار للكور (يُقرأ من `package.json` في جذر
 المستودع؛ لا يُكتب يدويًا في التطبيق). بناءات التست: `<نسخة الكور>-test.<رقم

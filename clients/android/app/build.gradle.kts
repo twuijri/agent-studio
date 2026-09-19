@@ -20,7 +20,9 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "us.i3u.hermesstudio"
+        // Store identity of Core Hub Mobile (owner decision 2026-09-19); the Kotlin
+        // package/namespace stays us.i3u.hermesstudio.
+        applicationId = "com.twuijri.corehub"
         minSdk = 26
         targetSdk = 35
         // Core Hub Mobile follows the Core Hub version: CI passes the core
