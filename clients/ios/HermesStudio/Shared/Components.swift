@@ -65,7 +65,9 @@ struct AgentToolRow: View {
 
 struct FileDownloadCard: View {
     let link: DownloadLink
-    let url: URL?
+    /// Fetches the file with the bearer token in the Authorization header and
+    /// returns a local copy (see `APIClient.downloadFile`).
+    let fetch: () async throws -> URL
     @State private var localURL: URL?
     @State private var loading = false
     @State private var error: String?
@@ -91,14 +93,9 @@ struct FileDownloadCard: View {
     }
 
     private func download() async {
-        guard let url else { error = String(localized: "Download link is unavailable"); return }
         loading = true; defer { loading = false }
         do {
-            let (temporary, response) = try await URLSession.shared.download(from: url)
-            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { throw HermesError.http(http.statusCode, "") }
-            let destination = FileManager.default.temporaryDirectory.appendingPathComponent(ChatFiles.fileName(for: link))
-            try? FileManager.default.removeItem(at: destination); try FileManager.default.copyItem(at: temporary, to: destination)
-            localURL = destination; error = nil
+            localURL = try await fetch(); error = nil
         } catch { self.error = error.localizedDescription }
     }
 }

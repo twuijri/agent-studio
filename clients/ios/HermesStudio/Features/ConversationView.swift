@@ -34,7 +34,13 @@ struct ConversationView: View {
     @State private var loadingContext = false
     @State private var socket = ChatSocket()
     @StateObject private var recorder = VoiceRecorder()
+    @StateObject private var speech = OnDeviceSpeechRecognizer()
     @StateObject private var speechPlayer = SpeechPlayer()
+    enum VoiceState: Equatable { case idle, listening, transcribing, error }
+    @State private var voiceState: VoiceState = .idle
+    /// Composer text captured when dictation started; live partial results are appended after it.
+    @State private var voiceBase = ""
+    @State private var serverSttProvider = ""
     @State private var voiceReplyPending = false
     @State private var bottomVisible = true
     @State private var actionLine: ChatLine?
@@ -141,14 +147,14 @@ struct ConversationView: View {
             // persisted history as soon as the conversation becomes visible.
             if phase == .active { socket.resumeApp(sessionID: session.id); Task { await reload() } }
         }
-        .onDisappear { socket.close(); if recorder.isRecording { _ = recorder.stop() } }
+        .onDisappear { socket.close(); speech.cancel(); if recorder.isRecording { _ = recorder.stop() }; voiceState = .idle }
     }
 
     private var profile: Profile? { store.profiles.first { $0.name == session.profile } }
 
     private var composerIsEmpty: Bool {
         input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        attachments.isEmpty && !recorder.isRecording && !uploading
+        attachments.isEmpty && voiceState == .idle && !uploading
     }
 
     private var composer: some View {
@@ -207,7 +213,7 @@ struct ConversationView: View {
             if !attachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) { HStack { ForEach(attachments) { item in HStack(spacing: 6) { Image(systemName: item.mime.hasPrefix("image/") ? "photo" : "doc"); Text(item.name).lineLimit(1); Button { attachments.removeAll { $0.id == item.id } } label: { Image(systemName: "xmark.circle.fill") } }.font(.caption).padding(8).background(.thinMaterial, in: Capsule()) } }.padding(.horizontal, 12) }
             }
-            if recorder.isRecording { HStack { Circle().fill(.red).frame(width: 8, height: 8); Text("Recording \(recorder.elapsed.formatted(.number.precision(.fractionLength(0))))s").font(.caption.monospacedDigit()); Spacer(); Text("Tap the microphone to transcribe").font(.caption2).foregroundStyle(.secondary) }.padding(.horizontal, 16) }
+            if voiceState != .idle { voiceStatusRow }
             TextField("Type a message…", text: $input, axis: .vertical)
                 .lineLimit(1...6)
                 .focused($inputFocused)
@@ -240,14 +246,17 @@ struct ConversationView: View {
                     .foregroundStyle(.secondary)
                 }
                 Button {
-                    if sending && canSend { queueCurrentMessage() } else if canSend || sending { send() } else { Task { await voice() } }
+                    if voiceState == .listening { stopVoice() }
+                    else if voiceState == .transcribing { return }
+                    else if sending && canSend { queueCurrentMessage() } else if canSend || sending { send() } else { Task { await voice() } }
                 } label: {
-                    Image(systemName: sending && canSend ? "text.line.last.and.arrowtriangle.forward" : sending || recorder.isRecording ? "stop.fill" : canSend ? "arrow.up" : "mic.fill")
+                    Image(systemName: composerButtonIcon)
                         .font(.headline)
-                        .foregroundStyle(canSend || sending ? Color.white : recorder.isRecording ? Color.red : Color.primary)
+                        .foregroundStyle(composerButtonForeground)
                         .frame(width: 40, height: 40)
-                        .background((sending ? Color.red : canSend ? HermesTheme.purple : Color(uiColor: .secondarySystemBackground)).gradient, in: Circle())
+                        .background(composerButtonBackground.gradient, in: Circle())
                 }
+                .disabled(voiceState == .transcribing)
             }.padding(.horizontal, 10)
         }
         .padding(.top, 9)
@@ -258,6 +267,142 @@ struct ConversationView: View {
 
     private var canSend: Bool {
         !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
+    }
+
+    // MARK: - Voice input (mic button states: idle / listening / transcribing / error)
+
+    private var composerButtonIcon: String {
+        switch voiceState {
+        case .listening: return "stop.fill"
+        case .transcribing: return "ellipsis"
+        case .error: return canSend ? "arrow.up" : "mic.slash.fill"
+        case .idle: break
+        }
+        if sending && canSend { return "text.line.last.and.arrowtriangle.forward" }
+        if sending { return "stop.fill" }
+        return canSend ? "arrow.up" : "mic.fill"
+    }
+
+    private var composerButtonForeground: Color {
+        if voiceState == .listening || sending || canSend { return .white }
+        if voiceState == .error { return .red }
+        return .primary
+    }
+
+    private var composerButtonBackground: Color {
+        if voiceState == .listening || sending { return .red }
+        if voiceState == .transcribing { return Color(uiColor: .secondarySystemBackground) }
+        return canSend ? HermesTheme.purple : Color(uiColor: .secondarySystemBackground)
+    }
+
+    private var voiceStatusRow: some View {
+        HStack(spacing: 8) {
+            switch voiceState {
+            case .listening:
+                Circle().fill(.red).frame(width: 8, height: 8)
+                if recorder.isRecording {
+                    Text("Recording \(recorder.elapsed.formatted(.number.precision(.fractionLength(0))))s").font(.caption.monospacedDigit())
+                } else {
+                    Text("Listening…").font(.caption)
+                }
+                Spacer()
+                Text("Tap the microphone to finish").font(.caption2).foregroundStyle(.secondary)
+            case .transcribing:
+                ProgressView().controlSize(.mini)
+                Text("Transcribing…").font(.caption)
+                Spacer()
+            case .error:
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                Text("Voice input failed. Tap the microphone to try again.").font(.caption)
+                Spacer()
+            case .idle:
+                EmptyView()
+            }
+        }.padding(.horizontal, 16)
+    }
+
+    private func voice() async {
+        switch voiceState {
+        case .listening: stopVoice(); return
+        case .transcribing: return
+        case .idle, .error: break
+        }
+        store.errorMessage = nil
+        composerExpanded = true
+        if store.voiceInput == Preferences.voiceInputServer { await startServerVoice(); return }
+        guard OnDeviceSpeechRecognizer.isAvailable(localeIdentifier: store.speechLocaleIdentifier) else {
+            store.notify(String(localized: "On-device speech is unavailable; using the Core Hub server"))
+            await startServerVoice(); return
+        }
+        await startDeviceVoice()
+    }
+
+    private func startDeviceVoice() async {
+        voiceBase = input
+        do {
+            try await speech.start(localeIdentifier: store.speechLocaleIdentifier) { text, isFinal in
+                applyDictation(text)
+                guard isFinal else { return }
+                if let failure = speech.lastError, text.isEmpty {
+                    store.errorMessage = failure; voiceState = .error
+                } else {
+                    voiceState = .idle; voiceReplyPending = !text.isEmpty
+                }
+                inputFocused = true
+            }
+            voiceState = .listening
+        } catch OnDeviceSpeechRecognizer.Failure.notAuthorized {
+            store.notify(String(localized: "Speech permission was not granted; using the Core Hub server"))
+            await startServerVoice()
+        } catch OnDeviceSpeechRecognizer.Failure.unavailable {
+            store.notify(String(localized: "On-device speech is unavailable; using the Core Hub server"))
+            await startServerVoice()
+        } catch {
+            store.errorMessage = error.localizedDescription; voiceState = .error
+        }
+    }
+
+    /// Server path: check `/api/studio/stt/profile-status` first, then record 16 kHz WAV.
+    private func startServerVoice() async {
+        do {
+            let status = try await store.api.sttProfileStatus(profile: session.profile)
+            guard status.configured, !status.activeProvider.isEmpty else {
+                store.errorMessage = status.message; voiceState = .error; return
+            }
+            serverSttProvider = status.activeProvider
+            try await recorder.start()
+            voiceState = .listening
+        } catch {
+            store.errorMessage = error.localizedDescription; voiceState = .error
+        }
+    }
+
+    private func stopVoice() {
+        if speech.isListening { speech.stop(); voiceState = .transcribing; return }
+        if recorder.isRecording { Task { await finishServerVoice() } }
+    }
+
+    private func finishServerVoice() async {
+        guard let url = recorder.stop() else { voiceState = .idle; return }
+        voiceState = .transcribing
+        defer { try? FileManager.default.removeItem(at: url) }
+        do {
+            let data = try Data(contentsOf: url)
+            let result = try await store.api.transcribe(wav: data, provider: serverSttProvider, language: store.speechLanguageHint, profile: session.profile)
+            voiceBase = input
+            applyDictation(result.text)
+            voiceState = .idle; voiceReplyPending = true; inputFocused = true
+        } catch {
+            store.errorMessage = error.localizedDescription; voiceState = .error
+        }
+    }
+
+    /// Replaces the interim dictation segment after `voiceBase`; the final text stays in the field and is never sent automatically.
+    private func applyDictation(_ text: String) {
+        let base = voiceBase
+        guard !text.isEmpty else { input = base; return }
+        let separator = base.isEmpty || base.hasSuffix(" ") || base.hasSuffix("\n") ? "" : " "
+        input = base + separator + text
     }
 
     private func reload() async {
@@ -272,7 +417,7 @@ struct ConversationView: View {
     }
 
     private func loadModels() async {
-        models = (try? await store.api.models(profile: session.profile)) ?? []
+        models = (await store.attempt({ try await store.api.models(profile: session.profile) })) ?? []
         selectedModel = session.model.nilIfEmpty ?? profile?.model ?? models.first?.id ?? ""
         selectedProvider = models.first { $0.id == selectedModel }?.provider ?? session.provider
         await refreshContextWindow()
@@ -280,12 +425,18 @@ struct ConversationView: View {
 
     private func refreshContextWindow() async {
         loadingContext = true
-        contextWindow = (try? await store.api.contextLength(profile: session.profile, provider: selectedProvider, model: selectedModel)) ?? contextWindow
+        do { contextWindow = try await store.api.contextLength(profile: session.profile, provider: selectedProvider, model: selectedModel) }
+        catch HermesError.malformedResponse { /* Studio does not know this model's window; keep the last value. */ }
+        catch { store.errorMessage = error.localizedDescription }
         loadingContext = false
     }
 
     private func send() {
         if sending { socket.abort(sessionID: session.id); socket.close(); sending = false; if let index = lines.indices.last { lines[index].isStreaming = false; lines[index].finishedAt = .now }; return }
+        // Sending always ends dictation; the text already in the field is what goes out.
+        if speech.isActive { speech.cancel() }
+        if recorder.isRecording { _ = recorder.stop() }
+        voiceState = .idle
         var text = input.trimmingCharacters(in: .whitespacesAndNewlines); guard !text.isEmpty || !attachments.isEmpty else { return }
         if let replyingTo {
             let quote = replyingTo.text.split(separator: "\n", omittingEmptySubsequences: false).prefix(8).map { "> \($0)" }.joined(separator: "\n")
@@ -362,13 +513,6 @@ struct ConversationView: View {
         }
     }
 
-    private func voice() async {
-        if recorder.isRecording {
-            guard let url = recorder.stop() else { return }; uploading = true; defer { uploading = false }
-            do { input = try await store.api.transcribe(data: Data(contentsOf: url), name: url.lastPathComponent, mime: "audio/mp4", profile: session.profile); voiceReplyPending = true; inputFocused = true }
-            catch { store.errorMessage = error.localizedDescription }
-        } else { _ = await recorder.toggle() }
-    }
     private func newConversation() { input = ""; attachments = []; lines = [] }
 
     private func speak(_ text: String) async {
@@ -427,7 +571,7 @@ private struct MessageBubble: View {
                     }.font(.subheadline)
                 }
                 if !parsed.text.isEmpty { MarkdownText(text: parsed.text).font(.body).foregroundStyle(line.isError ? .red : .primary) }
-                ForEach(parsed.files) { link in FileDownloadCard(link: link, url: api.downloadURL(path: link.path, name: ChatFiles.fileName(for: link), profile: sessionProfile)) }
+                ForEach(parsed.files) { link in FileDownloadCard(link: link, fetch: { try await api.downloadFile(path: link.path, name: ChatFiles.fileName(for: link), profile: sessionProfile) }) }
                 HStack(spacing: 5) { if line.isStreaming { ProgressView().controlSize(.mini) }; if let timestamp = line.timestamp { Text(timestamp.chatTime) } }.font(.caption2).foregroundStyle(.secondary)
             }
             // Assistant replies need a real proposed width so an RTL paragraph

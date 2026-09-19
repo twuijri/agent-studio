@@ -52,6 +52,14 @@ enum Preferences {
         get { UserDefaults.standard.string(forKey: "reasoningEffort") ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: "reasoningEffort") }
     }
+    /// Where spoken input is transcribed: `device` (Apple Speech, default) or
+    /// `server` (Core Hub `/api/studio/stt/transcribe`).
+    static let voiceInputDevice = "device"
+    static let voiceInputServer = "server"
+    static var voiceInput: String {
+        get { UserDefaults.standard.string(forKey: "voiceInput") ?? voiceInputDevice }
+        set { UserDefaults.standard.set(newValue, forKey: "voiceInput") }
+    }
     static func session(for profile: String) -> String { UserDefaults.standard.string(forKey: "session.\(profile)") ?? "" }
     static func setSession(_ id: String, profile: String) { UserDefaults.standard.set(id, forKey: "session.\(profile)") }
 }

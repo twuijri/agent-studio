@@ -1,6 +1,8 @@
 import AVFoundation
 import Foundation
 
+/// Records microphone audio as 16 kHz mono 16-bit Linear PCM WAV, the format
+/// every Core Hub speech provider accepts through `/api/studio/stt/transcribe`.
 @MainActor
 final class VoiceRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     @Published var isRecording = false
@@ -9,27 +11,60 @@ final class VoiceRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     private var timer: Timer?
     private var outputURL: URL?
 
-    func toggle() async -> URL? {
-        if isRecording { return stop() }
-        let granted = await withCheckedContinuation { continuation in
-            AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
+    enum RecorderError: LocalizedError {
+        case microphoneDenied
+        case startFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .microphoneDenied: return String(localized: "Microphone access is required for voice input. Enable it in Settings → H Studio → Microphone.")
+            case .startFailed: return String(localized: "The microphone could not start recording.")
+            }
         }
-        guard granted else { return nil }
-        do {
-            let session = AVAudioSession.sharedInstance(); try session.setCategory(.record, mode: .spokenAudio); try session.setActive(true)
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("hermes-\(UUID().uuidString).m4a")
-            let settings: [String: Any] = [AVFormatIDKey: Int(kAudioFormatMPEG4AAC), AVSampleRateKey: 44_100, AVNumberOfChannelsKey: 1, AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue]
-            let recorder = try AVAudioRecorder(url: url, settings: settings); recorder.delegate = self; recorder.record()
-            self.recorder = recorder; outputURL = url; elapsed = 0; isRecording = true
-            timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in Task { @MainActor in self?.elapsed = self?.recorder?.currentTime ?? 0 } }
-        } catch { return nil }
-        return nil
     }
 
+    static let wavSettings: [String: Any] = [
+        AVFormatIDKey: Int(kAudioFormatLinearPCM),
+        AVSampleRateKey: 16_000.0,
+        AVNumberOfChannelsKey: 1,
+        AVLinearPCMBitDepthKey: 16,
+        AVLinearPCMIsFloatKey: false,
+        AVLinearPCMIsBigEndianKey: false,
+    ]
+
+    static func requestMicrophonePermission() async -> Bool {
+        await withCheckedContinuation { continuation in
+            AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
+        }
+    }
+
+    /// Starts a new WAV recording. Every failure is thrown so the caller can
+    /// show it; nothing fails silently.
+    func start() async throws {
+        guard !isRecording else { return }
+        guard await Self.requestMicrophonePermission() else { throw RecorderError.microphoneDenied }
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.record, mode: .spokenAudio)
+        try session.setActive(true)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hermes-\(UUID().uuidString).wav")
+        let recorder = try AVAudioRecorder(url: url, settings: Self.wavSettings)
+        recorder.delegate = self
+        guard recorder.record() else {
+            try? session.setActive(false)
+            throw RecorderError.startFailed
+        }
+        self.recorder = recorder; outputURL = url; elapsed = 0; isRecording = true
+        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.elapsed = self?.recorder?.currentTime ?? 0 }
+        }
+    }
+
+    /// Stops recording and returns the WAV file, or `nil` when nothing was recorded.
     func stop() -> URL? {
         recorder?.stop(); recorder = nil; timer?.invalidate(); timer = nil; isRecording = false
         try? AVAudioSession.sharedInstance().setActive(false)
-        return outputURL
+        let url = outputURL; outputURL = nil
+        return url
     }
 }
 

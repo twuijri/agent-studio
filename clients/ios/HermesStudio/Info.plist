@@ -64,9 +64,11 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Attach photos to Hermes conversations.</string>
+	<string>Scan the Core Hub pairing QR code and attach photos to conversations.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Record voice messages for Hermes transcription.</string>
+	<string>Record your voice so it can be turned into text for the composer.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Turn your voice into text on this device while you speak.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Attach images to Hermes conversations.</string>
 	<key>UIApplicationSceneManifest</key>
