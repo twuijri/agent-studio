@@ -57,7 +57,8 @@ async function toggle(app: DesktopDiscoveredApp, enabled: boolean) {
     const next: DesktopSharedApp[] = enabled
       ? [...current, { id: app.id, name: app.name, source: app.source, command: app.command || '', args: app.args, env: app.env, cwd: app.cwd, enabled: true }]
       : current
-    agent.value = await bridge.setApps(next)
+    // Plain data only: the desktop bridge serialises this over IPC and rejects Vue's reactive proxies.
+    agent.value = await bridge.setApps(JSON.parse(JSON.stringify(next)))
     message.success(enabled ? t(localMode.value ? 'appConnections.sharedLocal' : 'appConnections.shared', { name: app.name }) : t('appConnections.unshared', { name: app.name }))
   } catch (err: any) {
     message.error(err?.message || t('appConnections.saveFailed'))
