@@ -34,7 +34,8 @@ class NavigationStructureTest {
             assertFalse("${file.name} still mounts the old bottom tabs", file.readText().contains("bottomBar = { StudioTabs"))
         }
         listOf(Tab.Chat, Tab.Group, Tab.Workflow, Tab.History).forEach { tab ->
-            assertTrue("drawer switch must offer $tab", drawer.contains("Tab.$tab to R.string.segment_"))
+            // Each segment is an icon, a label and the tab it selects.
+            assertTrue("drawer switch must offer $tab", Regex("""Triple\(Tab\.$tab, CoreHubIcons\.\w+, R\.string\.segment_""").containsMatchIn(drawer))
         }
         // Every section is rendered inside the drawer shell with a hamburger.
         listOf(
@@ -74,7 +75,8 @@ class NavigationStructureTest {
             "state.account?.takeIf { it.isNotBlank() }",
             "if (state.connected) R.string.connected else R.string.disconnected",
             "R.string.footer_version, state.serverVersion ?: BuildConfig.VERSION_NAME",
-            "LanguageAction(state, viewModel)",
+            "DrawerLanguageSwitch(state, viewModel)",
+            "DrawerThemeSwitch(state, viewModel)",
             "viewModel.openSettings()",
         ).forEach { needle -> assertTrue("footer lost $needle", drawer.contains(needle)) }
         assertTrue("250 ms slide", drawer.contains("tween(CoreHubTokens.Metrics.drawerSlideMs)"))

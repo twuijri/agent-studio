@@ -185,6 +185,14 @@ object CoreHubTokens {
 
         val categoryTag: TextUnit = 10.sp
 
+        /**
+         * Conversation-switch label: the group-header size without its
+         * tracking, semibold when the segment is selected. It shrinks rather
+         * than truncate when a translation is long ("محادثة جماعية").
+         */
+        val segmentLabel: TextUnit = groupHeader
+        val segmentLabelMin: TextUnit = 8.sp
+
         /** Code: 13 / 1.5 mono. */
         val code: TextUnit = 13.sp
         val codeLineHeight: TextUnit = 20.sp
@@ -222,8 +230,11 @@ object CoreHubTokens {
         /** Category tag, workspace chip. */
         val tag: Dp = 4.dp
 
-        /** Segmented tab. */
+        /** Segmented tab (the selected thumb). */
         val segment: Dp = 5.dp
+
+        /** The segmented track: the thumb radius plus its 2 dp inset. */
+        val segmentTrack: Dp = segment + 2.dp
     }
 
     /**
@@ -252,12 +263,57 @@ object CoreHubTokens {
         val sidebarWidth: Dp = 240.dp
         val sidebarCollapsed: Dp = 64.dp
 
-        /** Off-canvas drawer on phones (sidebar width plus its padding). */
-        val drawerWidth: Dp = 300.dp
+        /**
+         * Off-canvas drawer on phones: the sidebar width plus its padding, but
+         * never more than 84 % of a narrow screen (iOS `drawerMaxWidth` /
+         * `drawerWidthFraction`).
+         */
+        val drawerMaxWidth: Dp = 300.dp
+        const val drawerWidthFraction = 0.84f
+
+        /** The strip along the start edge that opens the drawer by swipe. */
+        val edgeSwipeWidth: Dp = 18.dp
+
         val headerHeight: Dp = 60.dp
         val breakpoint: Dp = 768.dp
 
+        /**
+         * Drawer header: the app mark, a 10 dp gutter to the title, and a
+         * 34 dp close target holding a 20 dp glyph, inside a 14 dp margin.
+         */
+        val drawerHeaderPadding: Dp = 14.dp
+        val drawerHeaderGap: Dp = 10.dp
+        val drawerMark: Dp = 26.dp
+        val drawerCloseButton: Dp = 34.dp
+        val drawerCloseIcon: Dp = 20.dp
+
+        /**
+         * Primary rail: 36 dp rows 2 dp apart, a 20 dp icon and a 10 dp gutter
+         * to the label, inside an 8 dp margin with a 4 dp lead-in.
+         */
+        val railRowHeight: Dp = 36.dp
+        val railRowGap: Dp = 2.dp
+        val railIcon: Dp = 20.dp
+        val railIconGap: Dp = 10.dp
+        val railRowPaddingH: Dp = 10.dp
+        val railPaddingH: Dp = 8.dp
+        val railPaddingTop: Dp = 4.dp
+
+        /**
+         * The 4-segment conversation switch. The track is 2 dp of padding
+         * around segments that are 2 dp apart; each segment is the base
+         * 30 dp plus 12 dp for the icon that sits above its label.
+         */
         val segmentHeight: Dp = 30.dp
+        val segmentIconExtra: Dp = 12.dp
+        val segmentItemHeight: Dp = segmentHeight + segmentIconExtra
+        val segmentTrackPadding: Dp = 2.dp
+        val segmentGap: Dp = 2.dp
+        val segmentIcon: Dp = 16.dp
+        val segmentLabelGap: Dp = 2.dp
+        val segmentPaddingH: Dp = 12.dp
+        val segmentPaddingV: Dp = 8.dp
+
         val sessionRowPaddingV: Dp = 8.dp
         val sessionRowPaddingH: Dp = 10.dp
         val pinSize: Dp = 11.dp
@@ -265,6 +321,48 @@ object CoreHubTokens {
         val agentAvatar: Dp = 18.dp
         val profileChipAvatar: Dp = 16.dp
         val groupChevron: Dp = 10.dp
+
+        /** Section header actions ("New room", "Join by code", the RECENT gear). */
+        val sectionAction: Dp = 24.dp
+        val sectionActionIcon: Dp = 14.dp
+        val sectionGap: Dp = 6.dp
+
+        /** Drawer room row: avatar cluster, a 10 dp gutter, two lines 3 dp apart. */
+        val roomRowGap: Dp = 10.dp
+        val roomRowLineGap: Dp = 3.dp
+        val roomMetaGap: Dp = 8.dp
+        val workflowRowIcon: Dp = 16.dp
+        val workflowRowGap: Dp = 8.dp
+        val workflowRowPaddingV: Dp = 6.dp
+
+        /**
+         * Drawer footer: four rows 6 dp apart inside a 12 × 10 margin. The
+         * profile and model chips are 30 dp tall with a 1 dp border; Sign Out
+         * is a 34 dp pill; the username, language and theme controls are the
+         * small chips beside it.
+         */
+        val footerPaddingH: Dp = 12.dp
+        val footerPaddingV: Dp = 10.dp
+        val footerRowGap: Dp = 6.dp
+        val footerChipGap: Dp = 8.dp
+        val footerChipHeight: Dp = 30.dp
+        val footerChipAvatar: Dp = 18.dp
+        val footerChipIcon: Dp = 14.dp
+        val footerChipChevron: Dp = 9.dp
+        val footerChipBorder: Dp = 1.dp
+        val pillHeight: Dp = 34.dp
+        val pillPaddingH: Dp = 14.dp
+        val pillIcon: Dp = 12.dp
+        val usernameChipHeight: Dp = 22.dp
+        val usernameChipPaddingH: Dp = 8.dp
+        val footerSettingsButton: Dp = 32.dp
+        val footerSettingsIcon: Dp = 18.dp
+        val connectionDot: Dp = 7.dp
+        val footerToggleWidth: Dp = 28.dp
+        val footerToggleHeight: Dp = 24.dp
+        val footerToggleIcon: Dp = 12.dp
+        val githubIcon: Dp = 14.dp
+
         val messageAvatar: Dp = 22.dp
         val actionButton: Dp = 24.dp
         val composerButton: Dp = 30.dp
