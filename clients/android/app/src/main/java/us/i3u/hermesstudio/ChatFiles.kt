@@ -121,8 +121,11 @@ fun inferDownloadFileName(path: String, label: String? = null): String {
         .ifBlank { "download" }
 }
 
+/** Download links the server may put into a message: the canonical Studio route and the legacy alias. */
+private val STUDIO_DOWNLOAD_PREFIXES = listOf("/api/studio/files/download?", "/api/hermes/download?")
+
 fun unwrapStudioDownloadPath(value: String): String {
-    if (!value.startsWith("/api/hermes/download?")) return decodeUrlPart(value)
+    if (STUDIO_DOWNLOAD_PREFIXES.none(value::startsWith)) return decodeUrlPart(value)
     val encoded = value.substringAfter('?').split('&')
         .firstOrNull { it.substringBefore('=') == "path" }
         ?.substringAfter('=', "")

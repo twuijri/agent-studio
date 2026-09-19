@@ -71,7 +71,7 @@ data class WorkspaceRunChange(
 /**
  * The streaming half of the chat API.
  *
- * `POST /api/chat-run/runs` is the server's own wrapper around this socket: it
+ * `POST /api/studio/chat-run/runs` is the server's own wrapper around this socket: it
  * connects, waits for the whole answer, and returns it. Talking to /chat-run
  * directly is the same conversation, except the words arrive as they are
  * written, and the run can be stopped part-way.

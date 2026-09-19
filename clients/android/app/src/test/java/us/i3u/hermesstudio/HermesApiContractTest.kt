@@ -306,7 +306,7 @@ class HermesApiContractTest {
 
         assertEquals("1786800123", message.timestamp)
         assertEquals(
-            "/api/hermes/sessions/conversations/session-1/messages?humanOnly=true",
+            "/api/studio/sessions/conversations/session-1/messages?humanOnly=true",
             server.takeRequest().path,
         )
     }
@@ -319,7 +319,7 @@ class HermesApiContractTest {
             "mohamed",
         ).toHttpUrl()
 
-        assertEquals("/api/hermes/download", url.encodedPath)
+        assertEquals("/api/studio/files/download", url.encodedPath)
         assertEquals(
             "/home/agent/.hermes/profiles/mohamed/workspace/My Slides.pptx",
             url.queryParameter("path"),
@@ -347,9 +347,9 @@ class HermesApiContractTest {
         val text = api.transcribe("manager", byteArrayOf(1, 2, 3), "voice.m4a", "audio/mp4")
 
         assertEquals("hello from audio", text)
-        assertEquals("/api/hermes/stt/profile-status?profile=manager", server.takeRequest().path)
+        assertEquals("/api/studio/stt/profile-status?profile=manager", server.takeRequest().path)
         val upload = server.takeRequest()
-        assertEquals("/api/hermes/stt/transcribe?profile=manager", upload.path)
+        assertEquals("/api/studio/stt/transcribe?profile=manager", upload.path)
         val multipart = upload.body.readUtf8()
         assertTrue(multipart.contains("name=\"provider\""))
         assertTrue(multipart.contains("\r\n\r\nopenai\r\n"))
@@ -367,26 +367,76 @@ class HermesApiContractTest {
         assertEquals(24_576L, history.contextTokens)
         assertEquals("hello", history.messages.single().content)
         assertEquals(131_072L, window)
-        assertEquals("/api/hermes/sessions/conversations/session+1/messages?humanOnly=true", server.takeRequest().path)
-        assertEquals("/api/hermes/sessions/context-length?profile=manager&provider=openai&model=gpt-5", server.takeRequest().path)
+        assertEquals("/api/studio/sessions/conversations/session+1/messages?humanOnly=true", server.takeRequest().path)
+        assertEquals("/api/studio/sessions/context-length?profile=manager&provider=openai&model=gpt-5", server.takeRequest().path)
     }
 
     @Test
-    fun `transcription falls back to the settings route used by the official app`() {
+    fun `transcription does not negotiate legacy routes when profile status is missing`() {
         enqueue("""{"error":"Not found"}""", code = 404)
-        enqueue("""{"activeProvider":"groq","providers":[]}""")
-        enqueue("""{"text":"legacy transcript"}""")
 
-        assertEquals(
-            "legacy transcript",
-            api.transcribe("default", byteArrayOf(7), "voice.m4a", "audio/mp4"),
-        )
+        val failure = assertThrows(HermesException::class.java) {
+            api.transcribe("default", byteArrayOf(7), "voice.m4a", "audio/mp4")
+        }
 
-        server.takeRequest()
-        assertEquals("/api/hermes/stt/settings?profile=default", server.takeRequest().path)
-        val multipart = server.takeRequest().body.readUtf8()
-        assertTrue(multipart.contains("name=\"provider\""))
-        assertTrue(multipart.contains("\r\n\r\ngroq\r\n"))
+        assertEquals(404, failure.statusCode)
+        assertEquals("/api/studio/stt/profile-status?profile=default", server.takeRequest().path)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `session mutations rooms usage and performance use canonical Studio routes only`() {
+        enqueue("""{"ok":true}""")
+        api.renameSession("session 1", "Renamed")
+        assertEquals("/api/studio/sessions/session+1/rename", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.deleteSession("session 1")
+        val deletion = server.takeRequest()
+        assertEquals("DELETE", deletion.method)
+        assertEquals("/api/studio/sessions/session+1", deletion.path)
+
+        enqueue("""{"ok":true}""")
+        api.setSessionModel("session 1", "gpt-5", "openai")
+        assertEquals("/api/studio/sessions/session+1/model", server.takeRequest().path)
+
+        enqueue("""{"results":[{"id":"s2","title":"Found"}]}""")
+        assertEquals("Found", api.searchSessions("plan", "manager").single().title)
+        assertEquals("/api/studio/sessions/search?q=plan&limit=50&profile=manager", server.takeRequest().path)
+
+        enqueue("""{"rooms":[{"id":"room-1","name":"Planning"}]}""")
+        api.rooms()
+        assertEquals("/api/studio/group-chat/rooms", server.takeRequest().path)
+
+        enqueue("""{"room":{"id":"room-1","name":"Planning"},"agents":[],"messages":[]}""")
+        api.room("room-1")
+        assertEquals("/api/studio/group-chat/rooms/room-1?limit=80&offset=0", server.takeRequest().path)
+
+        enqueue("""{"room":{"id":"room-2","name":"New"}}""")
+        api.createRoom("New", "ABC234", listOf("manager"))
+        assertEquals("/api/studio/group-chat/rooms", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.deleteRoom("room-2")
+        assertEquals("/api/studio/group-chat/rooms/room-2", server.takeRequest().path)
+
+        enqueue("""{"total_input_tokens":10,"total_output_tokens":4}""")
+        assertEquals(10L, api.usageStats(7).inputTokens)
+        assertEquals("/api/studio/usage/stats?days=7", server.takeRequest().path)
+
+        enqueue("""{"system":{"cpuPercent":12.5},"bridge":{"workers":[]}}""")
+        assertEquals(12.5, api.runtimePerformance().cpuPercent!!, 0.001)
+        assertEquals("/api/studio/performance/runtime", server.takeRequest().path)
+    }
+
+    @Test
+    fun `a failing canonical session list is reported instead of retried on a legacy route`() {
+        enqueue("""{"error":"boom"}""", code = 500)
+
+        val failure = assertThrows(HermesException::class.java) { api.sessions("manager") }
+
+        assertEquals(500, failure.statusCode)
+        assertEquals(1, server.requestCount)
     }
 
     @Test
@@ -405,7 +455,7 @@ class HermesApiContractTest {
         assertEquals(".wav", audio.extension)
         assertTrue(wav.contentEquals(audio.bytes))
         val request = server.takeRequest()
-        assertEquals("/api/hermes/tts/synthesize", request.path)
+        assertEquals("/api/studio/tts/synthesize", request.path)
         assertEquals("audio/*", request.getHeader("Accept"))
         assertFalse(JSONObject(request.body.readUtf8()).getJSONObject("options").has("format"))
     }
@@ -423,7 +473,9 @@ class HermesApiContractTest {
             provider = "openrouter",
         )
 
-        val body = JSONObject(server.takeRequest().body.readUtf8())
+        val request = server.takeRequest()
+        assertEquals("/api/studio/chat-run/runs", request.path)
+        val body = JSONObject(request.body.readUtf8())
         assertEquals("anthropic/claude-sonnet-4", body.getString("model"))
         assertEquals("openrouter", body.getString("provider"))
         assertEquals("high", body.getString("reasoning_effort"))

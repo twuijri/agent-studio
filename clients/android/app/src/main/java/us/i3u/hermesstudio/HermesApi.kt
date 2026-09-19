@@ -249,16 +249,14 @@ class HermesApi(
         }
     }
 
-    /** POST /api/hermes/sessions/{id}/rename */
+    /** POST /api/studio/sessions/{id}/rename */
     fun renameSession(sessionId: String, title: String) {
-        runCatching { call("/api/studio/sessions/${enc(sessionId)}/rename", "POST", JSONObject().put("title", title)) }
-            .getOrElse { call("/api/hermes/sessions/${enc(sessionId)}/rename", "POST", JSONObject().put("title", title)) }
+        call("/api/studio/sessions/${enc(sessionId)}/rename", "POST", JSONObject().put("title", title))
     }
 
-    /** DELETE /api/hermes/sessions/{id} */
+    /** DELETE /api/studio/sessions/{id} */
     fun deleteSession(sessionId: String) {
-        runCatching { call("/api/studio/sessions/${enc(sessionId)}", "DELETE") }
-            .getOrElse { call("/api/hermes/sessions/${enc(sessionId)}", "DELETE") }
+        call("/api/studio/sessions/${enc(sessionId)}", "DELETE")
     }
 
     fun archiveSession(sessionId: String, archived: Boolean) {
@@ -285,7 +283,7 @@ class HermesApi(
     fun sessionExportUrl(id: String, compressed: Boolean = false, ext: String = "json"): String = url("/api/studio/sessions/${enc(id)}/export?mode=${if (compressed) "compressed" else "full"}&ext=${enc(ext)}&token=${enc(token)}")
 
     fun searchSessions(query: String, profile: String?): List<SessionSummary> {
-        val path = "/api/studio/search/sessions?q=${enc(query)}&limit=50" + if (profile.isNullOrBlank()) "" else "&profile=${enc(profile)}"
+        val path = "/api/studio/sessions/search?q=${enc(query)}&limit=50" + if (profile.isNullOrBlank()) "" else "&profile=${enc(profile)}"
         return parseSessions(call(path).optJSONArray("results") ?: JSONArray())
     }
 
@@ -305,7 +303,7 @@ class HermesApi(
     }
 
     /**
-     * POST /api/hermes/group-chat/rooms — a room needs a name and an invite
+     * POST /api/studio/group-chat/rooms — a room needs a name and an invite
      * code, and the agents it starts with are profiles.
      */
     fun createRoom(name: String, inviteCode: String, agents: List<String>): Room {
@@ -313,7 +311,7 @@ class HermesApi(
             .put("name", name)
             .put("inviteCode", inviteCode)
             .put("agents", JSONArray().apply { agents.forEach { put(JSONObject().put("profile", it)) } })
-        val result = call("/api/hermes/group-chat/rooms", "POST", body)
+        val result = call("/api/studio/group-chat/rooms", "POST", body)
         val room = result.optJSONObject("room") ?: throw HermesException("The server returned no room")
         return Room(
             id = firstNonBlank(room, "id") ?: throw HermesException("The new room has no id"),
@@ -324,14 +322,14 @@ class HermesApi(
         )
     }
 
-    /** DELETE /api/hermes/group-chat/rooms/{id} */
+    /** DELETE /api/studio/group-chat/rooms/{id} */
     fun deleteRoom(roomId: String) {
-        call("/api/hermes/group-chat/rooms/${enc(roomId)}", "DELETE")
+        call("/api/studio/group-chat/rooms/${enc(roomId)}", "DELETE")
     }
 
-    /** POST /api/hermes/group-chat/rooms/{id}/agents */
+    /** POST /api/studio/group-chat/rooms/{id}/agents */
     fun addRoomAgent(roomId: String, profile: String) {
-        call("/api/hermes/group-chat/rooms/${enc(roomId)}/agents", "POST", JSONObject().put("profile", profile))
+        call("/api/studio/group-chat/rooms/${enc(roomId)}/agents", "POST", JSONObject().put("profile", profile))
     }
 
     /** GET /api/hermes/config — the pieces of it the app can act on. */
@@ -563,18 +561,14 @@ class HermesApi(
         call("/api/hermes/config?profile=${enc(profile)}", "PUT", body)
     }
 
-    /** GET /api/hermes/sessions — most recent conversations for a profile. */
+    /** GET /api/studio/sessions — most recent conversations for a profile. */
     fun sessions(profile: String?, limit: Int = 80): List<SessionSummary> {
-        val canonical = if (profile.isNullOrBlank()) {
+        val path = if (profile.isNullOrBlank()) {
             "/api/studio/sessions?limit=$limit"
         } else {
             "/api/studio/sessions?profile=${enc(profile)}&limit=$limit"
         }
-        val result = runCatching { call(canonical) }.getOrElse {
-            val legacy = canonical.replace("/api/studio/sessions", "/api/hermes/sessions")
-            call(legacy)
-        }
-        return parseSessions(result.optJSONArray("sessions") ?: JSONArray())
+        return parseSessions(call(path).optJSONArray("sessions") ?: JSONArray())
     }
 
     private fun parseSessions(array: JSONArray): List<SessionSummary> =
@@ -904,16 +898,16 @@ class HermesApi(
     fun kanbanAttachments(board: String, task: String): List<String> { val r = call("/api/hermes/kanban/${enc(task)}/attachments?board=${enc(board)}"); val a = r.optJSONArray("attachments") ?: JSONArray(); return (0 until a.length()).mapNotNull { i -> when(val v=a.opt(i)){ is JSONObject -> firstNonBlank(v,"name","filename","path"); is String -> v; else -> null } } }
     fun kanbanCommand(board: String, task: String, action: String, value: String = "") { val body: JSONObject; val path = when(action) { "complete" -> { body = JSONObject().put("task_ids", JSONArray().put(task)).put("summary", value); "/api/hermes/kanban/complete" }; "unblock" -> { body = JSONObject().put("task_ids", JSONArray().put(task)); "/api/hermes/kanban/unblock" }; "dispatch" -> { body = JSONObject().put("max", 1); "/api/hermes/kanban/dispatch" }; "block" -> { body = JSONObject().put("reason", value); "/api/hermes/kanban/${enc(task)}/block" }; "reassign" -> { body = JSONObject().put("profile", value).put("reclaim", true); "/api/hermes/kanban/${enc(task)}/reassign" }; else -> return }; call("$path?board=${enc(board)}", "POST", body) }
 
-    /** POST /api/hermes/sessions/{id}/model */
+    /** POST /api/studio/sessions/{id}/model */
     fun setSessionModel(sessionId: String, model: String, provider: String?) {
         val body = JSONObject().put("model", model)
         if (!provider.isNullOrBlank()) body.put("provider", provider)
-        call("/api/hermes/sessions/${enc(sessionId)}/model", "POST", body)
+        call("/api/studio/sessions/${enc(sessionId)}/model", "POST", body)
     }
 
-    /** GET /api/hermes/sessions/conversations/{id}/messages — existing history. */
+    /** GET /api/studio/sessions/conversations/{id}/messages — existing history. */
     fun conversationHistory(sessionId: String, humanOnly: Boolean = true): ConversationHistory {
-        val path = "/api/hermes/sessions/conversations/${enc(sessionId)}/messages?humanOnly=$humanOnly"
+        val path = "/api/studio/sessions/conversations/${enc(sessionId)}/messages?humanOnly=$humanOnly"
         val root = call(path)
         val array = root.optJSONArray("messages") ?: JSONArray()
         val messages = (0 until array.length()).mapNotNull { index ->
@@ -967,13 +961,13 @@ class HermesApi(
             provider?.takeIf(String::isNotBlank)?.let { "provider=${enc(it)}" },
             model?.takeIf(String::isNotBlank)?.let { "model=${enc(it)}" },
         ).joinToString("&")
-        val root = call("/api/hermes/sessions/context-length?$query", profile = profile)
+        val root = call("/api/studio/sessions/context-length?$query", profile = profile)
         return root.firstLong("context_length", "contextLength")?.takeIf { it > 0 }
             ?: throw HermesException("Studio returned no context length")
     }
 
     fun usageStats(days: Int): UsageStats {
-        val root = call("/api/hermes/usage/stats?days=${days.coerceIn(1, 365)}")
+        val root = call("/api/studio/usage/stats?days=${days.coerceIn(1, 365)}")
         fun entries(key: String, nameKey: String) = root.optJSONArray(key).objects().map { item ->
             UsageBreakdown(
                 name = item.optString(nameKey).ifBlank { "unknown" },
@@ -1009,7 +1003,7 @@ class HermesApi(
     }
 
     fun runtimePerformance(): RuntimePerformance {
-        val root = call("/api/hermes/performance/runtime")
+        val root = call("/api/studio/performance/runtime")
         val system = root.optJSONObject("system") ?: JSONObject()
         val bridge = root.optJSONObject("bridge") ?: JSONObject()
         val web = root.optJSONObject("web") ?: JSONObject()
@@ -1171,9 +1165,9 @@ class HermesApi(
         )
     }
 
-    /** GET /api/hermes/group-chat/rooms */
+    /** GET /api/studio/group-chat/rooms */
     fun rooms(): List<Room> {
-        val array = call("/api/hermes/group-chat/rooms").optJSONArray("rooms") ?: JSONArray()
+        val array = call("/api/studio/group-chat/rooms").optJSONArray("rooms") ?: JSONArray()
         return (0 until array.length()).mapNotNull { index ->
             val item = array.optJSONObject(index) ?: return@mapNotNull null
             val id = firstNonBlank(item, "id", "roomId", "room_id") ?: return@mapNotNull null
@@ -1187,9 +1181,9 @@ class HermesApi(
         }
     }
 
-    /** GET /api/hermes/group-chat/rooms/{id} — room detail plus recent messages. */
+    /** GET /api/studio/group-chat/rooms/{id} — room detail plus recent messages. */
     fun room(roomId: String, limit: Int = 80): RoomDetail {
-        val result = call("/api/hermes/group-chat/rooms/${enc(roomId)}?limit=$limit&offset=0")
+        val result = call("/api/studio/group-chat/rooms/${enc(roomId)}?limit=$limit&offset=0")
         val roomObject = result.optJSONObject("room")
         val name = roomObject?.let { firstNonBlank(it, "name", "title") } ?: roomId
         val agents = result.optJSONArray("agents") ?: JSONArray()
@@ -1615,13 +1609,13 @@ class HermesApi(
     }
 
     /**
-     * POST /api/hermes/stt/transcribe — turns a recording into text with the
+     * POST /api/studio/stt/transcribe — turns a recording into text with the
      * profile's configured provider, the same call the web composer makes.
      */
     fun transcribe(profile: String, bytes: ByteArray, filename: String, mime: String): String {
         val provider = activeSttProvider(profile)
         val result = multipart(
-            path = "/api/hermes/stt/transcribe?profile=${enc(profile)}",
+            path = "/api/studio/stt/transcribe?profile=${enc(profile)}",
             field = "audio",
             bytes = bytes,
             filename = filename,
@@ -1638,7 +1632,7 @@ class HermesApi(
         // active provider (for example WAV for Groq Orpheus), while the client
         // identifies the returned bytes before choosing the local extension.
         val body = JSONObject().put("text", text).put("options", JSONObject())
-        val builder = request("/api/hermes/tts/synthesize", "POST", body, profile).newBuilder()
+        val builder = request("/api/studio/tts/synthesize", "POST", body, profile).newBuilder()
             .header("Accept", "audio/*")
         client.newCall(builder.build()).execute().use { response ->
             val bytes = response.body?.bytes() ?: byteArrayOf()
@@ -1666,34 +1660,19 @@ class HermesApi(
     }
 
     /**
-     * Current Studio versions require the selected provider in the multipart
-     * request. A 404 means an older server, whose transcribe route inferred it.
+     * GET /api/studio/stt/profile-status — Studio requires the selected provider
+     * in the multipart request, so it is read from the profile status first.
      */
     private fun activeSttProvider(profile: String): String? {
-        val status = try {
-            call("/api/hermes/stt/profile-status?profile=${enc(profile)}")
-        } catch (failure: HermesException) {
-            if (failure.statusCode == 404) {
-                try {
-                    call("/api/hermes/stt/settings?profile=${enc(profile)}")
-                } catch (settingsFailure: HermesException) {
-                    if (settingsFailure.statusCode == 404) return null
-                    throw settingsFailure
-                }
-            } else {
-                throw failure
-            }
-        }
+        val status = call("/api/studio/stt/profile-status?profile=${enc(profile)}")
         val provider = firstNonBlank(status, "activeProvider")
-        // profile-status reports `configured`; the settings route used by the
-        // official mobile app only exposes the selected active provider.
         if (status.optBoolean("configured", true) && provider != null && provider != "browser") return provider
         val reason = firstNonBlank(status, "reason") ?: "no server-backed STT provider is configured"
         throw HermesException("STT unavailable: $reason", statusCode = 409)
     }
 
     /**
-     * POST /api/chat-run/runs — run one turn and wait for the final answer.
+     * POST /api/studio/chat-run/runs — run one turn and wait for the final answer.
      *
      * This is the REST wrapper the server puts in front of its Socket.IO chat
      * channel, so a mobile client gets a complete reply without speaking the
@@ -1745,7 +1724,7 @@ class HermesApi(
             body.put("mode", "global")
         }
 
-        val result = call("/api/chat-run/runs", "POST", body)
+        val result = call("/api/studio/chat-run/runs", "POST", body)
         val failure = result.optString("error").takeIf { it.isNotBlank() }
         val output = firstNonBlank(result, "output", "text", "message").orEmpty()
         return ChatReply(
@@ -1784,7 +1763,7 @@ class HermesApi(
             profile?.trim()?.takeIf { it.isNotBlank() }?.let { add("profile=${enc(it)}") }
             token.takeIf { it.isNotBlank() }?.let { add("token=${enc(it)}") }
         }
-        return url("/api/hermes/download?${params.joinToString("&")}")
+        return url("/api/studio/files/download?${params.joinToString("&")}")
     }
 
     private fun cronJobAction(profile: String, jobId: String, action: String): CronJob {

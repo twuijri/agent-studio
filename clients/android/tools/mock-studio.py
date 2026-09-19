@@ -13,7 +13,7 @@ Debug builds allow plain HTTP to those two hosts (see
 app/src/debug/res/xml/network_security_config.xml); release builds do not.
 
 This mock speaks REST only. The app tries the /chat-run socket first and falls
-back to POST /api/chat-run/runs when it cannot connect, so running against this
+back to POST /api/studio/chat-run/runs when it cannot connect, so running against this
 file exercises that fallback rather than streaming.
 """
 import base64, json, re, time
@@ -198,10 +198,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/api/auth/users': self.send({"users": USERS, "profiles": [p["name"] for p in PROFILES]})
         elif path == '/api/auth/locked-ips': self.send({"locks": LOCKS})
         elif path == '/api/hermes/profiles': self.send({"profiles": PROFILES})
-        elif path == '/api/hermes/sessions': self.send({"sessions": SESSIONS})
-        elif re.match(r'/api/hermes/sessions/conversations/.+/messages', path): self.send({"messages": MESSAGES})
-        elif path == '/api/hermes/group-chat/rooms': self.send({"rooms": ROOMS})
-        elif re.match(r'/api/hermes/group-chat/rooms/.+', path):
+        elif path == '/api/studio/sessions': self.send({"sessions": SESSIONS})
+        elif re.match(r'/api/studio/sessions/conversations/.+/messages', path): self.send({"messages": MESSAGES})
+        elif path == '/api/studio/group-chat/rooms': self.send({"rooms": ROOMS})
+        elif re.match(r'/api/studio/group-chat/rooms/.+', path):
             self.send({"room": ROOMS[0], "agents": [{"name": "barq"}], "members": [], "messages": [
                 {"id": "g1", "role": "assistant", "senderName": "barq", "content": "جاهز.", "timestamp": "2026-07-30T12:00:00"}]})
         elif path == '/api/hermes/config':
@@ -270,7 +270,7 @@ class Handler(BaseHTTPRequestHandler):
                           "profiles": body.get('profiles', []), "default_profile": body.get('defaultProfile'),
                           "last_login_at": None})
             self.send({"users": USERS})
-        elif path == '/api/chat-run/runs':
+        elif path == '/api/studio/chat-run/runs':
             time.sleep(1)
             self.send({"output": "تم، سجلت الملاحظة.", "session_id": "s1"})
         elif path.endswith('/gateway/restart'): self.send({"success": True})
