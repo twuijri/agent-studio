@@ -1,7 +1,5 @@
 package us.i3u.hermesstudio.ui.groups
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -14,34 +12,25 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -57,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
@@ -69,11 +57,11 @@ import us.i3u.hermesstudio.AppViewModel
 import us.i3u.hermesstudio.ChatFileLink
 import us.i3u.hermesstudio.ErrorNote
 import us.i3u.hermesstudio.GroupAttachment
+import us.i3u.hermesstudio.GroupMentions
 import us.i3u.hermesstudio.LoadingRow
 import us.i3u.hermesstudio.NoticeNote
 import us.i3u.hermesstudio.PendingRunAction
 import us.i3u.hermesstudio.QueueItem
-import us.i3u.hermesstudio.ContentDirectionBox
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.RoomInteraction
 import us.i3u.hermesstudio.RoomState
@@ -81,9 +69,14 @@ import us.i3u.hermesstudio.StudioTopBar
 import us.i3u.hermesstudio.UiState
 import us.i3u.hermesstudio.roomTranscript
 import us.i3u.hermesstudio.ui.chat.ChatFileCard
+import us.i3u.hermesstudio.ui.chat.ComposerAllMention
+import us.i3u.hermesstudio.ui.chat.ComposerConfig
+import us.i3u.hermesstudio.ui.chat.ComposerCounter
+import us.i3u.hermesstudio.ui.chat.ComposerRun
 import us.i3u.hermesstudio.ui.chat.MessageBubble
 import us.i3u.hermesstudio.ui.chat.RunActionCard
 import us.i3u.hermesstudio.ui.chat.SpeechState
+import us.i3u.hermesstudio.ui.chat.StudioComposer
 import us.i3u.hermesstudio.ui.chat.avatarOf
 import us.i3u.hermesstudio.ui.theme.CoreHub
 import us.i3u.hermesstudio.ui.theme.CoreHubIcons
@@ -94,25 +87,17 @@ import us.i3u.hermesstudio.ui.theme.CoreHubTokens
  * A room, like the web's GroupChatPanel: the streamed transcript (agent rows
  * reuse the M3 message row with its tool card and thinking block), the
  * per-agent activity strip with interrupt, typing, the execution queue,
- * approval/clarification cards, and a composer with attachments and @all.
+ * approval/clarification cards, and the conversation screen's own composer —
+ * one component, configured for a room rather than written again here.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RoomScreen(state: UiState, viewModel: AppViewModel) {
     val palette = CoreHub.palette
     val room = state.openRoom
     var draft by rememberSaveable { mutableStateOf("") }
-    var mentionAll by rememberSaveable { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    val context = LocalContext.current
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri ?: return@rememberLauncherForActivityResult
-        val name = uri.lastPathSegment?.substringAfterLast('/') ?: "attachment"
-        val bytes = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-        if (bytes == null) viewModel.reportAttachmentUnreadable(name)
-        else viewModel.attachToRoom(bytes, name, context.contentResolver.getType(uri) ?: "application/octet-stream")
-    }
     val lines = remember(room?.messages) { room?.let { roomTranscript(it, null, state.account) }.orEmpty() }
     val attachmentsById = remember(room?.messages) { room?.messages?.associate { it.id to it.attachments }.orEmpty() }
 
@@ -210,63 +195,43 @@ fun RoomScreen(state: UiState, viewModel: AppViewModel) {
                 }
             }
 
-            // Composer: attachments, @all, text, send — the room has no REST posting endpoint.
-            Surface(color = palette.bgComposer, shape = RoundedCornerShape(topStart = CoreHubTokens.Radius.composer, topEnd = CoreHubTokens.Radius.composer), shadowElevation = CoreHubTokens.Shadow.composer) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (state.roomAttachments.isNotEmpty() || state.roomUploads.isNotEmpty()) {
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            state.roomUploads.forEach { upload ->
-                                Chip(text = "${upload.name} · ${upload.percent}%", onRemove = { viewModel.cancelRoomUpload(upload.id) })
-                            }
-                            state.roomAttachments.forEach { upload ->
-                                Chip(text = upload.name, onRemove = { viewModel.removeRoomAttachment(upload) })
-                            }
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        IconButton(onClick = { picker.launch("*/*") }, modifier = Modifier.size(CoreHubTokens.Metrics.composerButton)) {
-                            Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.composer_attach), tint = palette.textSecondary)
-                        }
-                        // Same rule as the chat composer: the field follows the
-                        // draft's own direction. The weight stays on a wrapper
-                        // because the provider is not a Row child itself.
-                        Box(modifier = Modifier.weight(1f)) {
-                            ContentDirectionBox(draft) {
-                                OutlinedTextField(
-                                    value = draft,
-                                    onValueChange = { draft = it },
-                                    placeholder = { Text(stringResource(R.string.room_hint), color = palette.textMuted) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 5,
-                                    textStyle = CoreHubTextStyles.input.copy(color = palette.textPrimary, textDirection = TextDirection.Content),
-                                    shape = RoundedCornerShape(CoreHubTokens.Radius.card),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = palette.accent, unfocusedBorderColor = palette.inputBorder, cursorColor = palette.accent),
-                                )
-                            }
-                        }
-                        val canSend = (draft.isNotBlank() || state.roomAttachments.isNotEmpty()) && state.roomUploads.isEmpty()
-                        Box(
-                            modifier = Modifier.padding(bottom = 4.dp).size(CoreHubTokens.Metrics.composerButton).clip(CircleShape)
-                                .background(if (canSend) palette.accent else palette.selected)
-                                .clickable(enabled = canSend) { if (viewModel.postToRoom(draft, mentionAll)) { draft = ""; mentionAll = false } },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.composer_send), tint = if (canSend) palette.textOnAccent else palette.textMuted, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "@all",
-                            style = CoreHubTextStyles.meta.copy(fontWeight = FontWeight.Medium),
-                            color = if (mentionAll) palette.textOnAccent else palette.textSecondary,
-                            modifier = Modifier.clip(RoundedCornerShape(CoreHubTokens.Radius.pill)).background(if (mentionAll) palette.accent else palette.selected).clickable { mentionAll = !mentionAll }.padding(horizontal = 10.dp, vertical = 4.dp),
-                        )
-                        Text(stringResource(if (mentionAll) R.string.room_mention_all_on else R.string.room_mention_all_off), style = CoreHubTextStyles.meta, color = palette.textMuted)
-                        Spacer(Modifier.weight(1f))
-                        room?.room?.totalTokens?.takeIf { it > 0 }?.let { Text(stringResource(R.string.room_tokens, it), style = CoreHubTextStyles.meta.copy(textDirection = TextDirection.Ltr), color = palette.textMuted) }
-                    }
-                }
-            }
+            // The same composer the conversation screen uses: the card, the
+            // attachment sheet, dictation with its language long-press, the
+            // content-direction rule, the counter and the send button. Only
+            // what a room genuinely adds is configured here — the room's own
+            // upload route, its agents for the "@" chip, the @all token and
+            // the running total — and what belongs to a session (the model and
+            // the reasoning effort) is left to the room's settings sheet,
+            // because each agent in a room carries its own.
+            StudioComposer(
+                state = state,
+                draft = draft,
+                onDraftChange = { draft = it },
+                onSend = { if (viewModel.postToRoom(draft, GroupMentions.mentionsAll(draft))) draft = "" },
+                viewModel = viewModel,
+                config = ComposerConfig(
+                    placeholder = R.string.room_hint,
+                    attachments = state.roomAttachments,
+                    uploads = state.roomUploads,
+                    onAttach = viewModel::attachToRoom,
+                    onCancelUpload = viewModel::cancelRoomUpload,
+                    onRemoveAttachment = viewModel::removeRoomAttachment,
+                    counter = ComposerCounter.Tokens(room?.room?.totalTokens ?: 0L),
+                    // A room stays writable while its agents reply, so the
+                    // stop only takes the button when there is nothing to
+                    // send; the activity strip still interrupts one agent.
+                    run = ComposerRun(
+                        running = room?.busyAgents?.isNotEmpty() == true,
+                        blocksSend = false,
+                        onStop = { room?.busyAgents.orEmpty().forEach { viewModel.interruptRoomAgent(it.agentName) } },
+                    ),
+                    mentionTargets = room?.agents?.map { it.name }.orEmpty(),
+                    allMention = ComposerAllMention(
+                        onHint = R.string.room_mention_all_on,
+                        offHint = R.string.room_mention_all_off,
+                    ),
+                ),
+            )
         }
     }
 }
@@ -339,18 +304,6 @@ private fun AttachmentCard(attachment: GroupAttachment, viewModel: AppViewModel)
     val (url, _) = remember(attachment) { viewModel.roomAttachmentSource(attachment) }
     val link = remember(attachment, url) { ChatFileLink(label = attachment.name, path = url, fileName = attachment.name) }
     ChatFileCard(link, onDownload = { viewModel.downloadRoomAttachment(attachment) })
-}
-
-@Composable
-private fun Chip(text: String, onRemove: () -> Unit) {
-    val palette = CoreHub.palette
-    Row(
-        modifier = Modifier.clip(RoundedCornerShape(CoreHubTokens.Radius.pill)).background(palette.selected).padding(start = 10.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text, style = CoreHubTextStyles.meta.copy(textDirection = TextDirection.Ltr), color = palette.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        IconButton(onClick = onRemove, modifier = Modifier.size(20.dp)) { Icon(CoreHubIcons.Close, contentDescription = stringResource(R.string.action_delete), tint = palette.textMuted, modifier = Modifier.size(12.dp)) }
-    }
 }
 
 /** Exposed for the settings sheet (agent rows show the same busy state). */

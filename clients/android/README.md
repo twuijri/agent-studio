@@ -25,6 +25,10 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   with per-agent activity, typing, the execution queue and inline approvals. Room
   settings carry the workspace, the members, the invite link with its QR, agent
   handoff and its chains, the running summary, and "clear the context"
+- **A room writes with the same composer as a conversation**: one component,
+  `ui/chat/Composer.kt`, used by both screens — the same card, the same attachment
+  sheet, the same microphone with its long-press language list, the same
+  content-direction rule and the same send button
 - **Workflows run from the phone**: the list shows a live status chip per workflow,
   a workflow shows its graph in execution order (read-only — the editor stays on
   the desktop), its schedules with enable/disable, and its runs. A run opens a node
@@ -254,6 +258,24 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   Pill labels collapse to icons on narrow phones. Attachments go through the chunked
   `POST /api/studio/app-uploads` (256 KiB PUTs, 50 MB max) with a progress chip that can
   be cancelled; a server without the route falls back to `/upload`
+- **One composer, two screens**: the conversation and a group room draw the same
+  `StudioComposer`, configured by a small `ComposerConfig` — the placeholder, where an
+  attachment goes, what the counter counts, which trailing controls exist and who can
+  be mentioned. A room therefore gets the card, the attachment sheet, dictation with
+  its language long-press and hint, and the content-direction fix, and it keeps what
+  only a room has:
+  - an **"@" chip** that inserts `@Agent` for a seat of this room, and the **@all chip**
+    with *only the agents you mention answer* under the toolbar. The chip writes the
+    `@all` token into the draft rather than holding a hidden flag, because the room
+    routes on what the message visibly says and the server refuses a structured
+    mention the text does not carry (`services/group-chat/mention-routing.ts`,
+    ported in `GroupMentions.kt`)
+  - **room attachments** through the same chunked upload, typing events, and a **stop**
+    that interrupts every agent currently replying when there is nothing to send — the
+    activity strip still interrupts one agent at a time
+  - **no model and no reasoning-effort picker**: both are settings of one session, and
+    a room's agents each carry their own, so the room's settings sheet owns them. Push
+    notifications are per session for the same reason
 - **Run interactions inline**: approvals (once / session / always / reject) and
   clarifications (choices + free text) are cards in the stream, queued messages get
   run-next / interrupt / cancel, context compression and abort progress show as
@@ -308,6 +330,7 @@ app/src/main/java/us/i3u/hermesstudio/
                           Socket.IO /chat-run, /group-chat and /workflow
   GroupModels.kt          room, seat, member, message and preset parsing
   GroupRoomState.kt       the room reducer and the transcript builder
+  GroupMentions.kt        who a room message addresses, by the server's own rule
   WorkflowModels.kt       workflow parsing, graph ordering, the run timeline
   AppUploads.kt           chunked App upload planning (/api/studio/app-uploads)
   AppUpdates.kt           in-app update arithmetic: build comparison, the check
