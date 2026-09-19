@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#091125</color>
+    <!-- DESIGN-SPEC.md: splash/theme colour #f7f7f4 (light); the launcher icon sits on it too. -->
+    <color name="core_hub_splash">#f7f7f4</color>
+    <color name="ic_launcher_background">#f7f7f4</color>
+    <!-- The vector mark (core-hub-mark.svg) is #101010. -->
+    <color name="core_hub_ink">#101010</color>
 </resources>

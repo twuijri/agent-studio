@@ -1,9 +1,8 @@
 <resources>
-    <!-- Splash/system bars follow the Core Hub splash colour (#f7f7f4 light, #1a1a1a dark; see values-night). -->
-    <style name="Theme.HermesStudio" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.HermesStudio" parent="android:Theme.Material.NoActionBar">
         <item name="android:statusBarColor">@color/core_hub_splash</item>
         <item name="android:navigationBarColor">@color/core_hub_splash</item>
         <item name="android:windowBackground">@color/core_hub_splash</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

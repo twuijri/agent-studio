@@ -184,6 +184,8 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import us.i3u.hermesstudio.ui.sessions.formatStamp
+import us.i3u.hermesstudio.ui.theme.CoreHubTheme
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import androidx.lifecycle.Lifecycle
@@ -219,7 +221,7 @@ private fun App(viewModel: AppViewModel = viewModel()) {
 
     LaunchedEffect(Unit) { availableUpdate = runCatching { AppUpdater.check() }.getOrNull() }
 
-    HermesTheme(appearance = state.appearance) {
+    CoreHubTheme(appearance = state.appearance) {
         Surface(modifier = Modifier.fillMaxSize()) {
             AppContent(state, viewModel)
         }
