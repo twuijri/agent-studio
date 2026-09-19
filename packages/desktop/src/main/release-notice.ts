@@ -1,6 +1,7 @@
 import { app, dialog, net, Notification, shell } from 'electron'
 import { join } from 'node:path'
 import { t } from './desktop-i18n'
+import { isTestChannel } from './channel'
 import {
   checkForNewRelease,
   DEFAULT_RELEASE_API_URL,
@@ -189,6 +190,8 @@ function stopAutomaticChecks(): void {
 
 /** Starts the automatic checks for packaged builds when the user has not turned them off. */
 export function startReleaseNoticeChecks(): void {
+  // Test-channel builds are never published as releases; the notice would only nag.
+  if (isTestChannel()) return
   if (!app.isPackaged && !process.env.CORE_HUB_RELEASE_API_URL) return
   if (!releaseNoticesEnabled()) return
   startupTimer = setTimeout(() => {
