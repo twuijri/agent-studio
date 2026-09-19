@@ -508,6 +508,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 api.update(normalized, token)
                 chat.update(normalized, token)
                 group.update(normalized, token)
+                workflowSocket.update(normalized, token)
                 val user = api.currentUser()
                 SessionBootstrap(user, api.profiles(), api.sessions(null), version = runCatching { api.serverVersion() }.getOrNull())
             },
@@ -549,6 +550,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 api.update(payload.backendUrl, result.token)
                 chat.update(payload.backendUrl, result.token)
                 group.update(payload.backendUrl, result.token)
+                workflowSocket.update(payload.backendUrl, result.token)
                 val user = api.currentUser()
                 SessionBootstrap(user, api.profiles(), api.sessions(null), version = runCatching { api.serverVersion() }.getOrNull())
             },
@@ -643,6 +645,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         api.update(store.baseUrl, refreshed.token)
         chat.update(store.baseUrl, refreshed.token)
         group.update(store.baseUrl, refreshed.token)
+        workflowSocket.update(store.baseUrl, refreshed.token)
         return refreshed
     }
 

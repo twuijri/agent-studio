@@ -51,7 +51,14 @@ class WorkflowSocket(
             .setQuery("profile=" + URLEncoder.encode(profile, "UTF-8"))
             .setTimeout(30_000)
             .build()
-        val live = IO.socket(URI.create(baseUrl.trimEnd('/') + "/workflow"), options)
+        // A blank or malformed base URL must surface as an event, not as an
+        // exception thrown out of the flow builder onto the main thread.
+        val live = runCatching { IO.socket(URI.create(baseUrl.trimEnd('/') + "/workflow"), options) }
+            .getOrElse { failure ->
+                trySend(WorkflowEvent.Failed(failure.message ?: "workflow socket unavailable"))
+                close()
+                return@callbackFlow
+            }
 
         live.on(Socket.EVENT_CONNECT) {
             trySend(WorkflowEvent.Connected)

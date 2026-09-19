@@ -56,7 +56,13 @@ class GroupSocket(
             .setTimeout(30_000)
             .build()
 
-        val live = IO.socket(URI.create(baseUrl.trimEnd('/') + "/group-chat"), options)
+        // Same guard as the workflow socket: a bad base URL is an event, not a crash.
+        val live = runCatching { IO.socket(URI.create(baseUrl.trimEnd('/') + "/group-chat"), options) }
+            .getOrElse { failure ->
+                trySend(RoomEvent.Failed(failure.message ?: "room socket unavailable"))
+                close()
+                return@callbackFlow
+            }
         socket = live
         joinedRoom = roomId
         producer = this

@@ -37,6 +37,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import us.i3u.hermesstudio.AppViewModel
 import us.i3u.hermesstudio.ConfirmDialog
+import us.i3u.hermesstudio.ErrorNote
+import us.i3u.hermesstudio.NoticeNote
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.StudioHorizontalPadding
 import us.i3u.hermesstudio.Tab
@@ -122,6 +124,9 @@ fun HistoryScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Unit) {
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            // A batch operation says what it did (or why it did not) right here.
+            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
+            state.notice?.let { NoticeNote(it) { viewModel.dismissNotice() } }
             FilterRow(state, viewModel)
             if (state.sessionSelectionMode) {
                 SelectionBar(
