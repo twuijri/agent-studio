@@ -1,17 +1,35 @@
-# Hermes Studio Mobile — iOS
+# Core Hub — iOS
 
-A native SwiftUI companion for [Hermes Studio](https://github.com/EKKOLearnAI/hermes-studio). It connects directly to the same REST and Socket.IO endpoints as Studio and keeps the bearer token in the iOS Keychain.
+The native SwiftUI client of [Core Hub](https://github.com/twuijri/core-hub) (twuijri's fork of Hermes Studio). It talks to the same `/api/studio/*` REST routes and Socket.IO namespaces as the web client and keeps the bearer token in the iOS Keychain.
 
-Current release: **1.4.0**. The public version is kept in sync with the Android app.
+The version follows the core (`package.json` at the repository root); see `docs/mobile/PLAN.md`.
 
-## Included
+## Design system (M2)
 
-- Chats with streaming text, live reasoning, tool progress, attachments, voice input, downloadable agent files, pull-to-refresh and automatic last-message positioning.
-- Group rooms with live people/agent messages and agent management.
-- A mobile Kanban board with drag and drop, task creation, assignment and comments.
-- Scheduled jobs, channels, skills, plugins, MCP servers, pets, memory and model management.
-- Account, profiles, connection, appearance, Arabic RTL and all Studio configuration sections collected under More Settings.
-- Hermes app icon and the short Home Screen name `H Studio`; the product name remains `Hermes Studio`.
+`HermesStudio/Theme/CoreHubTokens.swift` is the single source of the "Pure Ink" design system from `docs/mobile/DESIGN-SPEC.md`:
+
+- `CoreHubTokens.PaletteHex.light/.dark` — the raw hex values (unit-tested); `CoreHubTokens.Palette.*` — dynamic `Color`s that follow the effective colour scheme (system, or the user's light/dark choice through `preferredColorScheme`). State formulas: `hover` = accent @ 6 %, `selected` = accent @ 12 %, `inputBorderIdle` = accent @ 18 %.
+- `Typography` (14 base; 16/600 titles; 13 nav/session; 12 author; 11 meta; 10/600 uppercase group headers; monospaced code; inputs never below 16 pt), `Radius` (6/8/10/14/18/999/4/5), `Shadow` (card, composer light/dark, focused), `Motion` (150/250 ms), `Layout` (sidebar 240, header 60, drawer ≤ 300, …).
+- The app tint is `Palette.accent`; every view touched in M2 uses tokens only.
+
+Icons: `Theme/IconPath.swift` parses the 24-viewBox SVG path data written in the spec (`M/m L/l H/h V/v C/c A/a Z` plus circles and rounded rects; arcs become cubic curves) and `Theme/CoreHubIcons.swift` lists the rail, segment and header icons drawn with stroke 1.8 and round caps. Directional icons (`chevronForward`, `back`, `chat`, `workflow`, `history`) mirror in RTL. `CoreHubMarkView` draws the vector Core Hub mark.
+
+Agent avatars: `Theme/AgentAvatar.swift` maps a session's runtime id to the bundled assets `Agent-*` (copied from `packages/client/public/coding-agents/`; SVGs are used as vector imagesets, large PNGs were downscaled to 256 px) exactly like the web's `chat-agent-avatar.ts`.
+
+## Navigation (M2)
+
+`Features/RootShell.swift` replaces the old tab bar with the web's mobile layout: a navigation bar with a hamburger and an off-canvas drawer (`Features/SidebarDrawer.swift`, 250 ms slide, 40 % scrim, swipe to close, edge swipe to open):
+
+1. Primary rail — New Chat, Search, Device connections, Agent Manager (super-admin only), Models.
+2. Conversation switch — Chat · Group Chat · Workflow · History (`ConversationMode`).
+3. The list of the current mode — sessions (`Features/SessionListView.swift`), group rooms or workflows.
+4. Footer — profile selector, model selector (default model for new chats), Sign Out + username chip, connection dot from `GET /health`, "Core Hub v{server version}", language and theme switches, and the gear that swaps the drawer to the settings list (Logs, Usage, Performance (sa), Skills Usage, Theme, Pets, Profiles (sa), Settings) with a Back row.
+
+The Settings page (`Features/SettingsView.swift`) follows the web order — Current Account, Account Management (sa, placeholder), Webhooks (sa), Display, Proxy, Compression, Privacy, Models — and keeps every previous screen reachable under Advanced (Agent, Memory, Session reset, Approvals, Skill approvals, Voice, Gateway auto-start, Ekko, Runtime Versions) and Workspace tools (Global Agent, Files, Journey, Scheduled Jobs, Kanban, Channels, Skills, Plugins, MCP, Connections).
+
+Session list rows follow `SessionListItem.vue`: pin, unread dot, title with per-string direction, time (`SessionTimeFormatter`: same day → `HH:mm`, else "Sep 18"), 18 pt agent avatar, profile chip and category tag; long-press context menu (rename, pin, category, archive, session settings, delete), swipe to delete/archive and a 50 % ✕. Groups: RECENT (count 1–100, default 10, gear to change) → Pinned → categories → Uncategorized (`SessionGrouping`, `SessionBrowserPrefs`; pins, collapse state and the recent count are local to the device like the web's localStorage prefs).
+
+The chat header shows the title (16/600, per-string direction) with the workspace chip (last path segment) and a ⋯ menu (refresh, new conversation, new conversation with agent, fork, rename, session settings, archive, delete). Bubbles use `msg.user`/`msg.assistant` with radius 10; the composer is a radius-18 card with the spec shadow, 16 pt input and pill buttons. Bubble internals are M3.
 
 ## Connecting to Core Hub (M1)
 
@@ -23,7 +41,7 @@ Current release: **1.4.0**. The public version is kept in sync with the Android 
 ## Voice input (M1)
 
 - **Default: this device.** Apple Speech (`SFSpeechRecognizer` + `AVAudioEngine`) with partial results; the words appear live in the composer and the final text stays there. Nothing is sent automatically. Locale follows the app language (`ar-SA` / `en-US` / system).
-- **Option: Core Hub server** (*Settings → Voice → Voice input*). The app checks `GET /api/studio/stt/profile-status` first and explains any `reason`, records 16 kHz mono 16-bit PCM WAV, and posts it to `POST /api/studio/stt/transcribe` as multipart (`provider`, optional `language`, file part `audio` = `voice.wav`). `no_speech_detected` and every other failure are shown in the banner.
+- **Option: Core Hub server** (*Settings → Display → Voice input*). The app checks `GET /api/studio/stt/profile-status` first and explains any `reason`, records 16 kHz mono 16-bit PCM WAV, and posts it to `POST /api/studio/stt/transcribe` as multipart (`provider`, optional `language`, file part `audio` = `voice.wav`). `no_speech_detected` and every other failure are shown in the banner.
 - When on-device recognition is unavailable or its permission is denied, the app falls back to the server path for that attempt.
 - Mic button states: idle → listening → transcribing → error.
 
@@ -31,7 +49,13 @@ Required Info.plist strings: `NSCameraUsageDescription`, `NSMicrophoneUsageDescr
 
 ## Branding and distribution
 
-The install target includes every required iPhone and iPad icon size directly, generated from the 1024 px master. The App Store asset catalog is retained in `Design/Assets.xcassets`, and the editable vector master is `AppIcon.svg`. When preparing an App Store archive with a current Xcode release, add that catalog to the app target and select `AppIcon` as the App Icons Source.
+Display name **Core Hub** (`CFBundleDisplayName`, both locales). The app icon is the Core Hub mark (`packages/client/public/core-hub-mark.svg`, #101010) at 60 % width on the splash colour #f7f7f4: `swift Scripts/generate_app_icons.swift HermesStudio/Resources Design/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png` regenerates every size on macOS (the checked-in PNGs were rasterised from the same geometry with PIL on Linux). `AppIcon.svg` is a copy of the vector master. The in-app logo (`AppMark`) prefers the server's custom logo and otherwise draws the mark; `CoreHubLogo` holds `logo.png`.
+
+The install target includes every iPhone and iPad icon size directly; the App Store asset catalog is retained in `Design/Assets.xcassets`. When preparing an App Store archive, add that catalog to the app target and select `AppIcon` as the App Icons Source.
+
+## Arabic / RTL
+
+`environment(\.layoutDirection)` follows the app language. Content (session titles, chat titles, messages) resolves direction per string (`DirectionalText`, `MarkdownText.layoutDirection`); code, paths and model ids are forced LTR (`TechnicalText`); spacing is logical (leading/trailing) and directional icons mirror.
 
 ## Install on a personal iPhone
 
@@ -44,4 +68,4 @@ A free Personal Team installation normally needs to be signed again after seven 
 
 ## Project structure notes
 
-`HermesStudio.xcodeproj` uses Xcode 16 synchronized folders (`PBXFileSystemSynchronizedRootGroup`), so every `.swift` file under `HermesStudio/` and `HermesStudioTests/` is part of the matching target automatically; no `PBXBuildFile` entries are needed when adding files. Unit tests for pure logic (QR payload parsing, refresh policy, STT contract parsing) live in `HermesStudioTests/HermesStudioTests.swift`.
+`HermesStudio.xcodeproj` uses Xcode 16 synchronized folders (`PBXFileSystemSynchronizedRootGroup`), so every `.swift` file under `HermesStudio/` and `HermesStudioTests/` is part of the matching target automatically; no `PBXBuildFile` entries are needed when adding files. Unit tests for pure logic live in `HermesStudioTests/` (`HermesStudioTests.swift`: contracts, QR pairing, refresh policy, STT; `CoreHubDesignTests.swift`: tokens, icon path parser, session grouping, time formatter, avatar mapping, browser prefs).

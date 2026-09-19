@@ -15,7 +15,7 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
         var errorDescription: String? {
             switch self {
             case .unavailable: return String(localized: "On-device speech recognition is not available for this language right now.")
-            case .notAuthorized: return String(localized: "Speech recognition permission is required for voice input. Enable it in Settings → H Studio → Speech Recognition.")
+            case .notAuthorized: return String(localized: "Speech recognition permission is required for voice input. Enable it in Settings → Core Hub → Speech Recognition.")
             case let .engineFailed(detail): return String(localized: "The microphone could not be started for speech recognition: \(detail)")
             }
         }

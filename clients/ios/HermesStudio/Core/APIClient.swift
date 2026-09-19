@@ -132,6 +132,13 @@ final class APIClient: @unchecked Sendable {
         try AppAuthResponse(try await object("/api/auth/app-refresh", method: "POST", body: JSON()))
     }
 
+    /// `GET /health` — connection status and the server's Core Hub version
+    /// (`webui_version`), shown in the drawer footer.
+    func health() async throws -> HealthStatus {
+        let json = try await object("/health")
+        return HealthStatus(ok: json.string("status") == "ok", webUIVersion: json.string("webui_version"))
+    }
+
     func currentUser() async throws -> CurrentUser {
         let root = try await object("/api/auth/me")
         let user = root.object("user").isEmpty ? root : root.object("user")

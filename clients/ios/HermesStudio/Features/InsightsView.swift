@@ -53,7 +53,7 @@ struct InsightsView: View {
     }
 
     private func metric(_ title: LocalizedStringKey, _ value: String, _ icon: String, _ color: Color) -> some View {
-        HStack { Image(systemName: icon).foregroundStyle(color).frame(width: 24); Text(title); Spacer(); Text(value).fontWeight(.bold).foregroundStyle(HermesTheme.purple) }
+        HStack { Image(systemName: icon).foregroundStyle(color).frame(width: 24); Text(title); Spacer(); Text(value).fontWeight(.bold).foregroundStyle(CoreHubTokens.Palette.accent) }
     }
 
     private func compact(_ value: Int) -> String {

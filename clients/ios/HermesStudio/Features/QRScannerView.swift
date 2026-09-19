@@ -49,7 +49,7 @@ final class QRScannerController: UIViewController, AVCaptureMetadataOutputObject
             DispatchQueue.main.async {
                 guard let self else { return }
                 guard granted else {
-                    self.onError?(String(localized: "Camera access is required to scan the pairing code. Enable it in Settings → H Studio → Camera."))
+                    self.onError?(String(localized: "Camera access is required to scan the pairing code. Enable it in Settings → Core Hub → Camera."))
                     return
                 }
                 self.configureSession()

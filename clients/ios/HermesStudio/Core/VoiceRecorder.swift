@@ -17,7 +17,7 @@ final class VoiceRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
 
         var errorDescription: String? {
             switch self {
-            case .microphoneDenied: return String(localized: "Microphone access is required for voice input. Enable it in Settings → H Studio → Microphone.")
+            case .microphoneDenied: return String(localized: "Microphone access is required for voice input. Enable it in Settings → Core Hub → Microphone.")
             case .startFailed: return String(localized: "The microphone could not start recording.")
             }
         }

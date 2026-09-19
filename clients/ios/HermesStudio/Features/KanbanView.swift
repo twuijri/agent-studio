@@ -99,7 +99,7 @@ private struct KanbanCard: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .top) { Text(task.title).font(.subheadline.weight(.semibold)).multilineTextAlignment(.leading); Spacer(); Image(systemName: "line.3.horizontal").foregroundStyle(.tertiary) }
             if !task.description.isEmpty { Text(task.description).font(.caption).foregroundStyle(.secondary).lineLimit(3).multilineTextAlignment(.leading) }
-            FlowLayout(spacing: 5) { ForEach(task.tags, id: \.self) { Text($0).font(.caption2).padding(.horizontal, 7).padding(.vertical, 3).background(HermesTheme.purple.opacity(0.1), in: Capsule()) } }
+            FlowLayout(spacing: 5) { ForEach(task.tags, id: \.self) { Text($0).font(.caption2).padding(.horizontal, 7).padding(.vertical, 3).background(CoreHubTokens.Palette.accent.opacity(0.1), in: Capsule()) } }
             HStack { StatusPill(text: task.priority.capitalized, color: task.priority.lowercased() == "high" ? .red : .blue); Spacer(); if let assignee = task.assignee { Label(assignee, systemImage: "person.crop.circle").font(.caption2).foregroundStyle(.secondary) } }
         }.padding(13).background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 15)).shadow(color: .black.opacity(0.05), radius: 8, y: 3)
     }
