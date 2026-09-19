@@ -98,14 +98,22 @@ jobs:
       - name: Compile and run unit tests on the simulator
         run: |
           set -o pipefail
+          # Keep the full log as an artifact-friendly file and print every
+          # compiler error (not just the last lines) so failures are readable.
           xcodebuild -project clients/ios/HermesStudio.xcodeproj -scheme HermesStudio \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO MARKETING_VERSION="$MARKETING_VERSION" CURRENT_PROJECT_VERSION="$CURRENT_PROJECT_VERSION" \
-            build | tail -40
+            build > "$RUNNER_TEMP/xcodebuild-build.log" 2>&1 || {
+              echo "::group::xcodebuild errors"; grep -E "error:|BUILD FAILED" "$RUNNER_TEMP/xcodebuild-build.log" | sort -u | head -80; echo "::endgroup::"
+              tail -60 "$RUNNER_TEMP/xcodebuild-build.log"; exit 1; }
+          tail -5 "$RUNNER_TEMP/xcodebuild-build.log"
           dest=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [0-9A-Za-z ]+ \(' | sed 's/ ($//')
           xcodebuild -project clients/ios/HermesStudio.xcodeproj -scheme HermesStudio \
             -sdk iphonesimulator -destination "platform=iOS Simulator,name=${dest:-iPhone 16}" \
-            CODE_SIGNING_ALLOWED=NO test | tail -60
+            CODE_SIGNING_ALLOWED=NO test > "$RUNNER_TEMP/xcodebuild-test.log" 2>&1 || {
+              echo "::group::xcodebuild test failures"; grep -E "error:|failed on|XCTAssert|TEST FAILED" "$RUNNER_TEMP/xcodebuild-test.log" | sort -u | head -80; echo "::endgroup::"
+              tail -60 "$RUNNER_TEMP/xcodebuild-test.log"; exit 1; }
+          grep -E "Executed [0-9]+ tests" "$RUNNER_TEMP/xcodebuild-test.log" | tail -1
       - name: Unsigned .ipa for sideloading
         run: |
           set -o pipefail
