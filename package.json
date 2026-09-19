@@ -1,7 +1,7 @@
 {
   "name": "core-hub-personal",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Core Hub: a personal non-commercial fork of Ekko Studio for multi-agent chat, coding, and visual workflows.",
   "repository": {
     "type": "git",
