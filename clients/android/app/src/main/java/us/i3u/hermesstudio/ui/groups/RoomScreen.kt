@@ -329,7 +329,7 @@ private fun QueueCard(queue: List<QueueItem>, onCancel: (QueueItem) -> Unit) {
 @Composable
 private fun AttachmentCard(attachment: GroupAttachment, viewModel: AppViewModel) {
     val (url, _) = remember(attachment) { viewModel.roomAttachmentSource(attachment) }
-    val link = remember(attachment, url) { ChatFileLink(path = url, name = attachment.name, mime = attachment.type.ifBlank { null }) }
+    val link = remember(attachment, url) { ChatFileLink(label = attachment.name, path = url, fileName = attachment.name) }
     ChatFileCard(link, onDownload = { viewModel.downloadRoomAttachment(attachment) })
 }
 

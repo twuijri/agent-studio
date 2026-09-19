@@ -330,13 +330,19 @@ class HermesApiContractTest {
     }
 
     @Test
-    fun `room list does not invent zero counts absent from Studio`() {
-        enqueue("""{"rooms":[{"id":"room-1","name":"Planning","inviteCode":"ABC234"}]}""")
+    fun `room list keeps the seats Studio sends and invents none`() {
+        enqueue("""{"rooms":[{"id":"room-1","name":"Planning","inviteCode":"ABC234"},{"id":"room-2","name":"Build","agents":[{"id":"seat-1","agent":"claude","profile":"manager","name":"Ada"}],"canManage":true,"totalTokens":4096}]}""")
 
-        val room = api.rooms().single()
+        val rooms = api.rooms()
 
-        assertNull(room.agentCount)
-        assertNull(room.memberCount)
+        assertEquals(listOf("room-1", "room-2"), rooms.map { it.id })
+        assertEquals(emptyList<String>(), rooms[0].agents.map { it.id })
+        assertFalse(rooms[0].canManage)
+        assertEquals("ABC234", rooms[0].inviteCode)
+        assertEquals(listOf("Ada"), rooms[1].agents.map { it.name })
+        assertEquals("claude", rooms[1].agents.single().agent)
+        assertTrue(rooms[1].canManage)
+        assertEquals(4096L, rooms[1].totalTokens)
     }
 
     @Test
@@ -448,7 +454,7 @@ class HermesApiContractTest {
         assertEquals("/api/studio/group-chat/rooms/room-1?limit=80&offset=0", server.takeRequest().path)
 
         enqueue("""{"room":{"id":"room-2","name":"New"}}""")
-        api.createRoom("New", "ABC234", listOf("manager"))
+        api.createRoom("New", "ABC234", listOf(RoomAgentDraft(profile = "manager")), "manager")
         assertEquals("/api/studio/group-chat/rooms", server.takeRequest().path)
 
         enqueue("""{"ok":true}""")

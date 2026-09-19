@@ -185,9 +185,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import us.i3u.hermesstudio.ui.chat.*
+import us.i3u.hermesstudio.ui.groups.*
 import us.i3u.hermesstudio.ui.navigation.*
 import us.i3u.hermesstudio.ui.sessions.*
 import us.i3u.hermesstudio.ui.settings.*
+import us.i3u.hermesstudio.ui.workflows.*
 import us.i3u.hermesstudio.ui.theme.*
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
@@ -283,6 +285,7 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
         Screen.Kanban, Screen.KanbanTask, Screen.Skills, Screen.Skill, Screen.Plugins, Screen.Mcp, Screen.Pets,
         Screen.Insights, Screen.AgentRuntimes, Screen.AgentHub, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files,
         Screen.Logs, Screen.Connections, Screen.Journey, Screen.Webhooks, Screen.RuntimeVersions, Screen.Appearance,
+        Screen.Workflow, Screen.WorkflowRun,
         -> BackHandler { viewModel.back() }
         Screen.Groups, Screen.Workflows, Screen.History -> BackHandler { viewModel.showTab(Tab.Chat) }
         else -> Unit
@@ -334,6 +337,8 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
         Screen.History -> HomeShell(state, viewModel) { openDrawer -> HistoryScreen(state, viewModel, onMenu = openDrawer) }
         Screen.AgentHub -> AgentHubScreen(state, viewModel)
         Screen.Room -> RoomScreen(state, viewModel)
+        Screen.Workflow -> WorkflowScreen(state, viewModel)
+        Screen.WorkflowRun -> WorkflowRunScreen(state, viewModel)
         Screen.Profiles -> ProfilesScreen(state, viewModel)
     }
 }

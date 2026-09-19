@@ -21,7 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -81,7 +81,7 @@ import us.i3u.hermesstudio.ui.theme.CoreHubTokens
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RoomsScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Unit) {
+fun GroupsScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Unit) {
     val palette = CoreHub.palette
     var creating by remember { mutableStateOf(false) }
     var joining by remember { mutableStateOf(false) }
@@ -129,7 +129,7 @@ fun RoomsScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Unit) {
                 title = { Text(stringResource(R.string.segment_group_chat), style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = { MenuButton(onMenu) },
                 actions = {
-                    IconButton(onClick = { joining = true }) { Icon(Icons.Filled.Login, contentDescription = stringResource(R.string.room_join_title), tint = palette.textSecondary) }
+                    IconButton(onClick = { joining = true }) { Icon(Icons.AutoMirrored.Filled.Login, contentDescription = stringResource(R.string.room_join_title), tint = palette.textSecondary) }
                     IconButton(onClick = { viewModel.refreshRooms() }, enabled = !state.loadingRooms) { Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh), tint = palette.textSecondary) }
                     IconButton(onClick = { creating = true }) { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.groups_new), tint = palette.textPrimary) }
                 },

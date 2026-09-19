@@ -2897,6 +2897,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return url to api.mediaHeaders(_state.value.activeProfile.ifBlank { null })
     }
 
+    /** Saves a room attachment through DownloadManager, with the room's bearer token. */
+    fun downloadRoomAttachment(attachment: GroupAttachment) {
+        val (url, headers) = roomAttachmentSource(attachment)
+        val destinationName = uniqueQueuedDownloadName(attachment.name.ifBlank { attachment.id })
+        runCatching {
+            val request = DownloadManager.Request(Uri.parse(url))
+                .setTitle(destinationName)
+                .setMimeType(attachment.type.ifBlank { "application/octet-stream" })
+                .setAllowedOverMetered(true)
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, destinationName)
+            headers.forEach { (name, value) -> request.addRequestHeader(name, value) }
+            getApplication<Application>().getSystemService(DownloadManager::class.java)?.enqueue(request)
+                ?: error("DownloadManager unavailable")
+        }.onSuccess {
+            _state.update { it.copy(notice = str(R.string.download_started, destinationName), error = null) }
+        }.onFailure { failure ->
+            queuedDownloadNames.remove(destinationName)
+            _state.update { it.copy(error = str(R.string.download_failed, failure.readableMessage(localized)), notice = null) }
+        }
+    }
+
     // ── conversations ─────────────────────────────────────────────────────
 
     fun renameSession(session: SessionSummary, title: String) {
