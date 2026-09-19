@@ -1617,7 +1617,7 @@ const tools = [
   {
     name: 'ekko_studio_lan_peer_connections',
     toolset: 'devices',
-    description: 'List active LAN peer socket connections. Linked desktop devices appear with controllable=true, their capabilities, and a workspace folder: run commands there and keep any files you create inside it unless the user asks otherwise.',
+    description: 'List active LAN peer socket connections. Linked desktop devices appear with controllable=true, their capabilities, a workspace folder and a device_file_url_prefix. Work that runs on a device (its shared apps, commands, files) produces files on that device: refer to them as device_file_url_prefix + absolute path (device://<device id>/<path>) so the chat can show or play them straight from the device, and keep them there. Work that runs on this server stays in server paths. Never copy files between the server and a device unless the user asks.',
     inputSchema: inputSchema(),
   },
   {
@@ -1699,7 +1699,7 @@ const tools = [
   {
     name: 'ekko_studio_lan_file_download',
     toolset: 'devices',
-    description: 'Download a file from a connected LAN peer remote path to a local path on this machine.',
+    description: 'Copy a file from a connected LAN peer (remote path on the device) to a local path on this server. Only when the user asks to move work between the two; to just show or play a device file in chat, link it as device://<device id>/<path> instead.',
     inputSchema: inputSchema({
         connection_id: { type: 'string' },
         remote_path: { type: 'string' },
@@ -2172,8 +2172,18 @@ async function callTool(name, args = {}) {
       return jsonText(await request('/api/devices/scan', withAuthArgs(args, { method: 'POST' })))
     case 'ekko_studio_lan_peer_connect':
       return jsonText(await request(`/api/devices/${encodeURIComponent(args.device_id)}/connect`, withAuthArgs(args, { method: 'POST' })))
-    case 'ekko_studio_lan_peer_connections':
-      return jsonText(await request('/api/devices/peer-connections', withAuthArgs(args)))
+    case 'ekko_studio_lan_peer_connections': {
+      const result = await request('/api/devices/peer-connections', withAuthArgs(args))
+      const list = Array.isArray(result) ? result : Array.isArray(result?.connections) ? result.connections : null
+      if (list) {
+        for (const connection of list) {
+          if (connection && typeof connection === 'object' && connection.controllable && connection.device_id) {
+            connection.device_file_url_prefix = `device://${connection.device_id}`
+          }
+        }
+      }
+      return jsonText(result)
+    }
     case 'ekko_studio_lan_peer_disconnect':
       return jsonText(await request(`/api/devices/peer-connections/${encodeURIComponent(args.connection_id)}/disconnect`, withAuthArgs(args, { method: 'POST' })))
     case 'ekko_studio_lan_terminal_create':
