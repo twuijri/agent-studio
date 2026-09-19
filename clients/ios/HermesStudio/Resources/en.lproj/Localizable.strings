@@ -567,6 +567,8 @@
 "Message the group…" = "Message the group…";
 "Mention" = "Mention";
 "Mention an agent" = "Mention an agent";
+"Inserts the agent's name into the message" = "Inserts the agent's name into the message";
+"%@ tokens" = "%@ tokens";
 "Camera" = "Camera";
 "Invite QR code" = "Invite QR code";
 "The QR code could not be generated." = "The QR code could not be generated.";

@@ -25,6 +25,11 @@ struct GroupRoomView: View {
     @State private var importing = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var typingSentAt = Date.distantPast
+    @StateObject var recorder = VoiceRecorder()
+    @StateObject var speech = OnDeviceSpeechRecognizer()
+    /// Dictation bookkeeping, identical to the conversation screen
+    /// (`Core/Dictation.swift`).
+    @State var dictation = DictationState()
     @FocusState private var inputFocused: Bool
 
     var body: some View {
@@ -32,20 +37,23 @@ struct GroupRoomView: View {
             VStack(spacing: 0) {
                 transcript(width: geometry.size.width)
                 panels
-                RoomComposer(text: $input, focused: $inputFocused, uploads: uploads, state: composerState, actions: composerActions)
+                ComposerDictationHint(state: $dictation, open: { openSpeechLanguagePicker() })
+                RoomComposer(text: $input, focused: $inputFocused, uploads: uploads,
+                             state: composerState, actions: composerActions, availableWidth: geometry.size.width)
             }
         }
         .background(CoreHubTokens.Palette.bgPrimary)
         .navigationTitle(state.roomName.nilIfEmpty ?? room.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
-        .modifier(RoomSheets(view: self, showingSettings: $showingSettings, showingPhotos: $showingPhotos, showingCamera: $showingCamera, importing: $importing, photoItems: $photoItems))
+        .modifier(RoomSheets(view: self, showingSettings: $showingSettings, showingPhotos: $showingPhotos, showingCamera: $showingCamera, importing: $importing, photoItems: $photoItems, showingSpeechLanguage: $dictation.showingLanguagePicker))
         .task(id: "\(room.id)#\(connectionGeneration)") { await runStream() }
         .onChange(of: scenePhase) { _, phase in if phase == .active && !state.connected { connectionGeneration += 1 } }
         .onChange(of: input) { _, value in signalTyping(!value.isEmpty) }
         // The drawer opens over the composer: drop focus with it so the
         // keyboard does not stay up covering the drawer.
         .onChange(of: store.drawerOpen) { _, open in if open { inputFocused = false } }
+        .onDisappear { dictationRunner.endForDisappear() }
     }
 
     // MARK: - Transcript
@@ -163,18 +171,34 @@ struct GroupRoomView: View {
         )
     }
 
-    private var composerState: RoomComposerState {
-        RoomComposerState(connected: state.connected && state.joined && !state.kicked, sending: sending,
-                          mentionNames: GroupMentions.suggestions(agents: state.agents, canMentionAll: room.canMentionAll))
+    /// Profile the room's dictation, its counters and its STT provider are
+    /// resolved against — the same one the room's rows already use.
+    var speechProfile: String { roomSession.profile }
+
+    private var composerState: ComposerState {
+        ComposerState(
+            isRunning: !state.activeAgents.isEmpty, sending: sending,
+            canCompose: state.connected && state.joined && !state.kicked,
+            totalTokens: state.totalTokens, showToolCalls: store.showToolCalls,
+            mentionNames: GroupMentions.suggestions(agents: state.agents, canMentionAll: room.canMentionAll),
+            voiceState: dictation.voice, isRecording: recorder.isRecording, recordingElapsed: recorder.elapsed,
+            speechLanguage: store.activeSpeechLanguageLabel(for: speechProfile)
+        )
     }
 
-    private var composerActions: RoomComposerActions {
-        var actions = RoomComposerActions()
+    private var composerActions: ComposerActions {
+        var actions = ComposerActions()
         actions.send = { Task { await send() } }
+        actions.mic = { Task { await dictationRunner.toggle() } }
+        actions.micLanguage = { openSpeechLanguagePicker() }
         actions.attachCamera = { if CameraPicker.isAvailable { showingCamera = true } else { store.errorMessage = String(localized: "No camera is available on this device.") } }
         actions.attachPhotos = { showingPhotos = true }
         actions.attachFiles = { importing = true }
         actions.cancelUpload = { cancelUpload($0) }
+        // A room has no session model, no reasoning effort and no push
+        // setting of its own, so `ComposerConfiguration.room` offers only
+        // the switch the room rows actually honour.
+        actions.toggle = { setting in if setting == .showToolCalls { store.setShowToolCalls(!store.showToolCalls) } }
         actions.insertMention = { name in input = GroupMentions.insert(name, into: input); inputFocused = true }
         return actions
     }
@@ -201,6 +225,9 @@ struct GroupRoomView: View {
     }
 
     func send() async {
+        // Sending always ends dictation; the text already in the field is
+        // what goes out.
+        dictationRunner.endForSend()
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         let files = uploads.compactMap(\.result)
         guard !text.isEmpty || !files.isEmpty else { return }
@@ -322,6 +349,20 @@ struct GroupRoomView: View {
     }
 }
 
+// MARK: - Voice input
+
+/// The room dictates through the same `DictationRunner` as the conversation
+/// screen: the same on-device/server decision, the same fallbacks, the same
+/// long-press language picker and the same hint policy.
+extension GroupRoomView {
+    var dictationRunner: DictationRunner {
+        DictationRunner(store: store, profile: speechProfile, recorder: recorder, speech: speech,
+                        state: $dictation, text: $input, focus: { inputFocused = $0 })
+    }
+
+    func openSpeechLanguagePicker() { dictationRunner.openLanguagePicker() }
+}
+
 /// A one-line notice above the composer (kicked, join refused).
 struct RoomNoticeRow: View {
     let text: String
@@ -348,10 +389,14 @@ private struct RoomSheets: ViewModifier {
     @Binding var showingCamera: Bool
     @Binding var importing: Bool
     @Binding var photoItems: [PhotosPickerItem]
+    @Binding var showingSpeechLanguage: Bool
     @EnvironmentObject private var store: AppStore
 
     func body(content: Content) -> some View {
         content
+            .sheet(isPresented: $showingSpeechLanguage) {
+                SpeechInputLanguageSheet(profile: view.speechProfile).environmentObject(store)
+            }
             .sheet(isPresented: $showingSettings) {
                 RoomSettingsView(room: view.room) { Task { await view.reloadDetail() } }.environmentObject(store)
             }
