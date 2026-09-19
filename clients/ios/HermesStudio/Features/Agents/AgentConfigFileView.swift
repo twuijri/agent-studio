@@ -10,6 +10,17 @@ enum AgentConfigFiles {
         /// The `config-files/{key}` the server serves it under.
         let fileKey: String
         let title: LocalizedStringKey
+
+        // `LocalizedStringKey` is not Hashable, so the two identifying
+        // fields carry the conformance; the title is only presentation.
+        static func == (lhs: Editor, rhs: Editor) -> Bool {
+            lhs.key == rhs.key && lhs.fileKey == rhs.fileKey
+        }
+
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(key)
+            hasher.combine(fileKey)
+        }
     }
 
     private static let keys: [String: (preference: String, configuration: String)] = [
