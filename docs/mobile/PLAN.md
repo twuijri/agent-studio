@@ -29,6 +29,12 @@
 - **الوكلاء:** أيقونات hermes/ekko/claude/codex/deepseek/grok/pi/opencode،
   ونقاط `/api/coding-agents` و`/api/agents/*` كما عندنا.
 
+## قاعدة الإصدار (قرار المالك 2026-09-19)
+رقم نسخة تطبيق الجوال = رقم آخر إصدار للكور (يُقرأ من `package.json` في جذر
+المستودع؛ لا يُكتب يدويًا في التطبيق). بناءات التست: `<نسخة الكور>-test.<رقم
+التشغيل>`، ورقم البناء (`versionCode`/`CURRENT_PROJECT_VERSION`) = رقم التشغيل.
+الإصدار الرسمي للجوال يصدر مع إصدار الكور بنفس الرقم.
+
 ## قرارات
 1. أصلي (Kotlin/Compose + SwiftUI) كما بدأ المالك، لا WebView.
 2. عقد واحد: HTTP من `docs/openapi.json` (`npm run openapi:generate`) +
