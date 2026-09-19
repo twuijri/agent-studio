@@ -142,3 +142,12 @@ rows. Cleanup runs at startup, every six hours, and after each 1,000 new audit
 records, deleting in bounded batches. Super administrators can query the audit
 history through `/admin/appConnectionAudit/getList`. Retention and row limits
 can be adjusted with `APP_AUDIT_RETENTION_DAYS` and `APP_AUDIT_MAX_ROWS`.
+
+## Silent token renewal (Core Hub, 2026-09-19)
+
+`POST /api/auth/app-refresh` with the current device-bound App token as the bearer
+(empty JSON body) returns `{ token, token_expires_at, appConnection }` with a fresh
+token and expiry; the previous token hash is replaced at once. The App calls it
+when fewer than 7 days remain or after a day without renewal, so a phone that keeps
+using the App never re-scans the QR. A revoked or expired connection answers 401
+(`app_connection_inactive`); a non-App token answers 401 (`app_token_required`).
