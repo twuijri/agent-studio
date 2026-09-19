@@ -1,11 +1,11 @@
-# Hermes Studio Mobile — Android
+# Core Hub Mobile — Android
 
-An **unofficial, community-built** native Android client for
-[Hermes Studio](https://github.com/EKKOLearnAI/hermes-studio).
-Not affiliated with EKKOLearnAI.
-
-The Studio web UI is built for the desktop, so this app talks to the same HTTP API
-directly and renders a native, phone-shaped interface instead of wrapping a web view.
+The native Android client of Core Hub (twuijri's personal fork of
+[Hermes Studio](https://github.com/EKKOLearnAI/hermes-studio); see the root
+`LICENSE` and `docs/PERSONAL-FORK.md`). It talks to the same HTTP and Socket.IO API
+as the web client and renders a native, phone-shaped interface instead of wrapping a
+web view — with the web app's design system and navigation, so it feels like the
+same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
 
 ## What works today (v1.4.0)
 
@@ -19,10 +19,15 @@ directly and renders a native, phone-shaped interface instead of wrapping a web 
 - **Manage profiles**: create, rename and delete them from the profiles screen
 - **Group chat is writable**: create a room, choose which agents are in it, post
   into it over the room socket and watch replies arrive, or delete the room
-- **Agent tools have their own bottom tab**, beside Chats and Groups. Jobs,
-  Kanban, Channels, Skills, Plugins, MCP, Pets, Memory and Models now have one
-  predictable home. Every one opens a native Android screen; none sends you to
-  the desktop website
+- **Navigation is the web app's** (M2): the app bar hamburger opens an off-canvas
+  drawer with the primary rail (New Chat, Search, Device connections, Agent Manager
+  for super-admins, Models), the four-segment switch (Chat, Group Chat, Workflow,
+  History), the grouped session list and the footer (profile, model, sign out,
+  connection status, `Core Hub v{server version}`, language). Every agent tool —
+  Jobs, Kanban, Channels, Skills, Plugins, MCP, Runtimes, Workflows, Ekko hub, Files,
+  Logs, Connections, Journey, Webhooks, Insights, Memory, Models — lives under the
+  Agent Manager; every one opens a native Android screen, none sends you to the
+  website
 - **Mobile Kanban inspired by modern task apps**: switch boards, search, create a
   task, inspect its result and runs, assign it, and comment. Hold a card and drag
   left or right to move it between stages, or use its Move menu for precise and
@@ -42,19 +47,22 @@ directly and renders a native, phone-shaped interface instead of wrapping a web 
   limit; pause or resume it, run it immediately, delete it, and read its run output.
   Every call uses the same profile-scoped endpoints and `X-Hermes-Profile` header
   as Studio.
-- **Settings no longer contains another confusing settings menu**: the main page
-  carries device preferences and About, while one clearly named **More settings**
-  entry contains account security, IP locks, super-admin user management, context
-  compression, session reset and approvals, privacy, proxy, and Studio display.
-  Agent-specific configuration lives in the Agent tab. Every native value is read
-  from and saved to the active profile through the same contracts as the web UI
+- **Settings mirror the web's settings sidebar and page** (M2): the settings
+  drawer lists Logs, Usage, Performance (super-admin), Skills Usage, Theme, Pets,
+  Profiles (super-admin) and Settings; the Settings page carries the web's tabs in
+  order — Current Account, Account Management, Webhooks, Display, Proxy, Compression,
+  Privacy, Models — plus *This device* (appearance, language, reasoning, voice input,
+  logo) and *About*. Agent, session and compression configuration sits in the Agent
+  Manager. Every native value is read from and saved to the active profile through
+  the same contracts as the web UI
 - **Agent settings**: max turns, gateway timeout, restart drain timeout, tool
   enforcement, and **gateway auto-start where Studio keeps it** — including the
   profile policy, so a server with several profiles can start only the ones that
   actually answer on a channel
-- **The system back button behaves**: it walks back through the app — a conversation,
-  a room, an Agent tool, More settings, settings, or the groups tab — and only
-  closes the app from the chat list
+- **The system back button behaves**: it closes the drawer, walks back through the
+  app — a conversation, a room, an Agent Manager tool, a settings page — returns the
+  Group Chat, Workflow and History sections to Chat, and only closes the app from
+  the Chat section
 - **Confirmation before anything you cannot undo**: signing out and restarting a
   profile's gateway both ask first, naming the profile that will stop answering
 - **Ready for other languages**: every string lives in one file, adding a language is
@@ -73,8 +81,12 @@ directly and renders a native, phone-shaped interface instead of wrapping a web 
   you actually need to sign in
 - Sign in with your Studio server address, username and password (or the QR code above)
 - Bearer token stored in `EncryptedSharedPreferences`, backed by the Android Keystore
-- **Your existing Studio conversations**, with the same list shape as the web sidebar:
-  title, timestamp, profile badge and model
+- **Your existing conversations in the web's session list**: RECENT (count gear,
+  1–100), Pinned, categories and Uncategorized groups with collapsible headers;
+  two-line rows with pin, unread dot, title, `HH:mm` or `Sep 18`, the runtime avatar
+  (Hermes, Ekko, Claude, Codex, Pi, Grok, OpenCode, DeepSeek), the profile chip and
+  the category tag; a 500 ms long-press menu to rename, pin, categorise, archive or
+  delete; search and bulk delete on the History page
 - **Open any conversation and read its real history** pulled from the server, then keep
   talking in the same session
 - **All profiles filter**, matching Studio's dropdown, or scope the list to one profile
@@ -103,7 +115,10 @@ directly and renders a native, phone-shaped interface instead of wrapping a web 
   the request retried; a revoked token sends you back to the login screen with a message
 - Profiles screen to switch which agent a new chat talks to
 - Start a fresh conversation at any time
-- Studio's dark palette, RTL-aware layout (Arabic reads correctly)
+- **Core Hub's "Pure Ink" light and dark palettes** from one token file
+  (`ui/theme/CoreHubTokens.kt`), following the system or the setting; RTL-aware
+  layout with per-string direction (Arabic titles and messages read correctly, code
+  and model ids stay left-to-right)
 
 ## Changed in M1 (Core Hub mobile branch)
 
@@ -122,7 +137,50 @@ directly and renders a native, phone-shaped interface instead of wrapping a web 
 - Network failures that used to vanish inside `runCatching { … }.getOrNull()` now reach
   the error bar
 
+## Changed in M2 (design system + navigation)
+
+- `ui/theme/CoreHubTokens.kt` is the single source of colours (light/dark), state
+  alphas, type ramp, radii, shadows and metrics from `docs/mobile/DESIGN-SPEC.md`;
+  `CoreHubTheme` maps them onto Material 3 so every component picks them up, and
+  `CoreHubIcons` carries the web's line icons
+- Off-canvas drawer + hamburger instead of three bottom tabs; Chat, Group Chat,
+  Workflow and History are sections of the same shell; Agent Manager (super-admin),
+  the settings drawer and the tabbed Settings page follow the web's order
+- The session list, chat header, message bubbles and composer surfaces use the tokens
+  (bubble radius 10, composer card 18 with the spec shadow, 16 sp input, pill buttons)
+- Branding: the app is "Core Hub", the launcher icon is the vector mark on the splash
+  colour, the bundled logo is the in-app mark until the server's is fetched, and the
+  coding-agent avatars are bundled
+
+## Project structure
+
+```
+app/src/main/java/us/i3u/hermesstudio/
+  AppViewModel.kt         state, navigation model (Screen, Tab), API orchestration
+  MainActivity.kt         app entry, login, groups/rooms, profiles, Agent Manager,
+                          settings group bodies, channels, shared pieces
+  HermesApi.kt            the HTTP contract (/api/studio/*, /api/hermes/*, /health)
+  ChatSocket.kt, GroupSocket.kt   Socket.IO /chat-run and /group-chat
+  ui/theme/               CoreHubTokens, CoreHubTheme (Material mapping), CoreHubIcons
+  ui/navigation/          drawer host + content, HomeShell (hamburger), settings drawer
+  ui/sessions/            session grouping, list rows and menus, History, time format,
+                          agent avatars
+  ui/chat/                conversation screen, chat header, message bubbles, composer
+  ui/settings/            the tabbed Settings page
+  AgentToolScreens.kt, CronJobs.kt, KanbanScreens.kt, Studio*Screens.kt   agent tools
+app/src/main/res/         strings (values, values-ar), Core Hub drawables, launcher
+app/src/test/             JVM tests (contract, translations, RTL, navigation structure,
+                          session grouping)
+tools/mock-studio.py      a REST stand-in for a Core Hub server
+```
+
 ## Screenshots
+
+The screenshots below predate M2 (they still show the bottom tabs) and are kept until
+the emulator captures are refreshed. To retake them on the new structure: sign in,
+then capture (1) the Chat section with the drawer open, (2) a reply streaming in,
+(3) the History page, (4) the Settings page tabs, (5) a group room, (6) Channels.
+Save them as `docs/screenshots/{drawer,streaming,history,settings,room,channels}.png`.
 
 | | |
 | --- | --- |
@@ -154,6 +212,7 @@ the installation and to allow this app as an update source once.
 
 | Purpose | Endpoint |
 | --- | --- |
+| Server version for the drawer footer | `GET /health` (`webui_version`) |
 | Sign in with a password | `POST /api/auth/login` |
 | Sign in by QR code | `POST /api/auth/app-login` |
 | Renew the device token | `POST /api/auth/app-refresh` |
@@ -265,10 +324,12 @@ app and the web UI draw the same face for the same profile. Avatars by
 [Multiavatar.com](https://multiavatar.com) — its license ships in
 `app/src/main/assets/multiavatar-LICENSE.txt`.
 
-Hermes Studio's own artwork is **not** bundled in this APK. The logo you see is read
-from the server you connect to, which is also why replacing `logo.png` on that server
-changes the mark here.
+The Core Hub logo, vector mark and the coding-agent avatars are bundled from
+`packages/client/public/` (same licence as the repository). The in-app mark still
+prefers the logo read from the server you connect to, so replacing `logo.png` on that
+server changes the mark here.
 
 ## License
 
-MIT — see [LICENSE](../LICENSE).
+Same as the repository — see the root [LICENSE](../../LICENSE) (BSL 1.1) and
+`docs/PERSONAL-FORK.md`.
