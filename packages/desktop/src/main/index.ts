@@ -22,6 +22,7 @@ import { mkdir } from 'node:fs/promises'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { syncLocalSharedApps } from './local-app-sync'
+import { isTestChannel } from './channel'
 import {
   getToken,
   setWebUiRestartRequestHandler,
@@ -88,7 +89,8 @@ configureDesktopIdentity(app)
 const PORT = Number(process.env.HERMES_DESKTOP_PORT) || 8748
 const START_HIDDEN = process.argv.includes('--hidden')
 const QUIT_EXISTING = process.argv.includes('--quit')
-const APP_USER_MODEL_ID = 'com.hermeswebui.studio'
+// The test-channel build gets its own id so Windows groups and notifies it separately.
+const APP_USER_MODEL_ID = isTestChannel() ? 'com.hermeswebui.studio.test' : 'com.hermeswebui.studio'
 const PET_WINDOW_DEFAULT_WIDTH = 300
 const PET_WINDOW_DEFAULT_HEIGHT = 320
 const PET_WINDOW_MIN_SIZE = 72
@@ -554,7 +556,7 @@ function createTray() {
         quality: 'best',
       })
   tray = new Tray(icon)
-  tray.setToolTip('Core Hub')
+  tray.setToolTip(app.getName())
   tray.on('click', () => {
     showMainWindow()
     updateTrayMenu()
@@ -568,7 +570,7 @@ async function createWindow(): Promise<void> {
     height: 820,
     minWidth: 769,
     minHeight: 600,
-    title: 'Core Hub',
+    title: app.getName(),
     backgroundColor: '#1a1a1a',
     autoHideMenuBar: true,
     show: false,
@@ -689,7 +691,7 @@ async function openChatWindow(sessionIdInput: unknown, profileInput?: unknown): 
     height: 760,
     minWidth: 620,
     minHeight: 480,
-    title: 'Core Hub',
+    title: app.getName(),
     backgroundColor: '#1a1a1a',
     autoHideMenuBar: true,
     show: false,
@@ -1337,7 +1339,7 @@ ipcMain.handle('hermes-desktop:notify-completion', (_event, payload?: { title?: 
 
   const title = typeof payload?.title === 'string' && payload.title.trim()
     ? payload.title.trim()
-    : 'Core Hub'
+    : app.getName()
   const body = typeof payload?.body === 'string' ? payload.body.trim().slice(0, 240) : ''
   const icon = resolveNotificationIcon(payload?.icon)
   const clickUrl = safeNotificationClickUrl(payload?.clickUrl)
@@ -2208,7 +2210,7 @@ function runDesktopApp() {
     })
   }).catch(error => {
     console.error('[desktop] failed during Electron startup:', error)
-    dialog.showErrorBox('Core Hub', String(error instanceof Error ? error.message : error))
+    dialog.showErrorBox(app.getName(), String(error instanceof Error ? error.message : error))
     quitApp()
   })
 

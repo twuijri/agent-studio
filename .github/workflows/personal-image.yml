@@ -28,6 +28,14 @@ on:
         default: ""
         required: false
         type: string
+      image_repo:
+        description: GHCR package to publish to. core-hub is the public deployment image; core-hub-test is the owner's private test track.
+        default: core-hub
+        required: false
+        type: choice
+        options:
+          - core-hub
+          - core-hub-test
 
 permissions:
   contents: read
@@ -52,6 +60,11 @@ jobs:
       - name: Resolve immutable source revision
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Refuse to promote the test-track package to latest
+        if: ${{ inputs.image_repo != 'core-hub' && (inputs.publish_latest || inputs.promote_latest) }}
+        run: |
+          echo "::error::latest is reserved for the public core-hub package; the test track never publishes latest." >&2
+          exit 1
       - name: Require successful CI for this exact commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,7 +93,7 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           const headers = {Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json'};
-          const pkg = await fetch('https://api.github.com/users/twuijri/packages/container/core-hub', {headers});
+          const pkg = await fetch('https://api.github.com/users/twuijri/packages/container/${{ inputs.image_repo }}', {headers});
           if (pkg.status === 404) console.log('No existing package yet; GHCR packages start private until the owner changes their visibility.');
           else if (!pkg.ok) console.log(`Package visibility could not be read (HTTP ${pkg.status}).`);
           else console.log(`Existing package visibility: ${(await pkg.json()).visibility}`);
@@ -99,14 +112,14 @@ jobs:
           platforms: linux/amd64
           load: true
           push: false
-          tags: ghcr.io/twuijri/core-hub:sha-${{ steps.source.outputs.sha }}
+          tags: ghcr.io/twuijri/${{ inputs.image_repo }}:sha-${{ steps.source.outputs.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
             org.opencontainers.image.licenses=BSL-1.1
       - name: Smoke-test the same image before publishing
         if: ${{ !inputs.verify_only }}
-        run: node scripts/smoke-personal-image.mjs ghcr.io/twuijri/core-hub:sha-${{ steps.source.outputs.sha }} --install-agents
+        run: node scripts/smoke-personal-image.mjs ghcr.io/twuijri/${{ inputs.image_repo }}:sha-${{ steps.source.outputs.sha }} --install-agents
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -115,7 +128,7 @@ jobs:
       - name: Publish the tested image
         if: ${{ !inputs.verify_only }}
         env:
-          IMAGE: ghcr.io/twuijri/core-hub:sha-${{ steps.source.outputs.sha }}
+          IMAGE: ghcr.io/twuijri/${{ inputs.image_repo }}:sha-${{ steps.source.outputs.sha }}
         run: |
           docker push "$IMAGE"
           docker image inspect "$IMAGE" --format '{{json .RepoDigests}}' >> "$GITHUB_STEP_SUMMARY"
@@ -125,7 +138,7 @@ jobs:
       - name: Pull and verify the published image from the registry
         if: ${{ inputs.verify_only }}
         env:
-          IMAGE: ghcr.io/twuijri/core-hub:sha-${{ steps.source.outputs.sha }}
+          IMAGE: ghcr.io/twuijri/${{ inputs.image_repo }}:sha-${{ steps.source.outputs.sha }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           docker pull "$IMAGE"
@@ -138,25 +151,26 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           const headers = {Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json'};
-          const response = await fetch('https://api.github.com/users/twuijri/packages/container/core-hub', {headers});
+          const response = await fetch('https://api.github.com/users/twuijri/packages/container/${{ inputs.image_repo }}', {headers});
           if (!response.ok) { console.log(`Package visibility could not be read (HTTP ${response.status}).`); }
           else {
             const visibility = (await response.json()).visibility;
             console.log(`Published package visibility: ${visibility}`);
-            if (visibility !== 'public') console.log('::warning::The image package is not public; users cannot pull it without a token. Change it under Package settings → Danger zone.');
+            const expected = '${{ inputs.image_repo }}' === 'core-hub' ? 'public' : 'private';
+            if (visibility !== expected) console.log(`::warning::The ${'${{ inputs.image_repo }}'} package is ${visibility}; expected ${expected}. Change it under Package settings → Danger zone.`);
           }
           NODE
       - name: Tag the published image with the preview tag
         if: ${{ !inputs.verify_only && inputs.preview_tag != '' }}
         env:
-          IMAGE: ghcr.io/twuijri/core-hub:sha-${{ steps.source.outputs.sha }}
+          IMAGE: ghcr.io/twuijri/${{ inputs.image_repo }}:sha-${{ steps.source.outputs.sha }}
           PREVIEW_TAG: ${{ inputs.preview_tag }}
         run: |
           case "$PREVIEW_TAG" in
             latest|main|sha-*) echo "preview_tag must not be latest, main or a sha tag" >&2; exit 1 ;;
           esac
           printf '%s' "$PREVIEW_TAG" | grep -Eq '^[a-z0-9][a-z0-9._-]{0,63}$' || { echo "invalid preview_tag" >&2; exit 1; }
-          PREVIEW="ghcr.io/twuijri/core-hub:$PREVIEW_TAG"
+          PREVIEW="ghcr.io/twuijri/${{ inputs.image_repo }}:$PREVIEW_TAG"
           expected_digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
           docker tag "$IMAGE" "$PREVIEW"
           docker push "$PREVIEW"
@@ -167,8 +181,8 @@ jobs:
       - name: Promote the tested image to latest
         if: ${{ (!inputs.verify_only && inputs.publish_latest) || (inputs.verify_only && inputs.promote_latest) }}
         env:
-          IMAGE: ghcr.io/twuijri/core-hub:sha-${{ steps.source.outputs.sha }}
-          LATEST: ghcr.io/twuijri/core-hub:latest
+          IMAGE: ghcr.io/twuijri/${{ inputs.image_repo }}:sha-${{ steps.source.outputs.sha }}
+          LATEST: ghcr.io/twuijri/${{ inputs.image_repo }}:latest
         run: |
           expected_digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
           docker tag "$IMAGE" "$LATEST"
