@@ -14,6 +14,10 @@ name: Update open pull requests
 on:
   push:
     branches: [main]
+  # Arming a PR after main already moved on: update that PR right away instead
+  # of waiting for the next merge.
+  pull_request:
+    types: [auto_merge_enabled]
   workflow_dispatch:
 
 permissions:
@@ -32,14 +36,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PR_UPDATE_TOKEN }}
           REPO: ${{ github.repository }}
+          ONLY_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
             echo "::notice::PR_UPDATE_TOKEN is not set; open pull requests were not updated. Add the secret or press 'Update branch' manually."
             exit 0
           fi
-          gh api --paginate "repos/$REPO/pulls?state=open&base=main&per_page=100" \
-            --jq '.[] | select(.draft == false and .auto_merge != null) | "\(.number) \(.head.sha) \(.head.repo.full_name // "")"' \
-          | while read -r number sha head_repo; do
+          if [ -n "$ONLY_PR" ]; then
+            candidates=$(gh api "repos/$REPO/pulls/$ONLY_PR" --jq 'select(.state == "open" and .base.ref == "main" and .draft == false) | "\(.number) \(.head.sha) \(.head.repo.full_name // "")"')
+          else
+            candidates=$(gh api --paginate "repos/$REPO/pulls?state=open&base=main&per_page=100" \
+              --jq '.[] | select(.draft == false and .auto_merge != null) | "\(.number) \(.head.sha) \(.head.repo.full_name // "")"')
+          fi
+          printf '%s\n' "$candidates" | sed '/^$/d' | while read -r number sha head_repo; do
               if [ "$head_repo" != "$REPO" ]; then
                 echo "PR #$number comes from a fork; skipping (the author updates it)."
                 continue
