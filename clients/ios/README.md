@@ -29,7 +29,20 @@ The Settings page (`Features/SettingsView.swift`) follows the web order — Curr
 
 Session list rows follow `SessionListItem.vue`: pin, unread dot, title with per-string direction, time (`SessionTimeFormatter`: same day → `HH:mm`, else "Sep 18"), 18 pt agent avatar, profile chip and category tag; long-press context menu (rename, pin, category, archive, session settings, delete), swipe to delete/archive and a 50 % ✕. Groups: RECENT (count 1–100, default 10, gear to change) → Pinned → categories → Uncategorized (`SessionGrouping`, `SessionBrowserPrefs`; pins, collapse state and the recent count are local to the device like the web's localStorage prefs).
 
-The chat header shows the title (16/600, per-string direction) with the workspace chip (last path segment) and a ⋯ menu (refresh, new conversation, new conversation with agent, fork, rename, session settings, archive, delete). Bubbles use `msg.user`/`msg.assistant` with radius 10; the composer is a radius-18 card with the spec shadow, 16 pt input and pill buttons. Bubble internals are M3.
+The chat header shows the title (16/600, per-string direction) with the workspace chip (last path segment) and a ⋯ menu (refresh, new conversation, new conversation with agent, fork, rename, session settings, archive, delete).
+
+## Chat (M3)
+
+`Features/ConversationView.swift` owns one conversation; everything below it lives in `Features/Chat/`.
+
+- **Socket.** `Core/SocketIO.swift` keeps one `/chat-run` connection open for the whole conversation (`auth: { token }`, `query: { profile, platform: 'ios' }` — the platform registers the phone as a mobile device target), emits `app.resume` on every connect, reconnects with exponential backoff (≤ 30 s) and immediately when the app returns to the foreground. `ChatSocket.events(for:json:sessionID:)` is the pure server→client mapping (`message.delta/interim`, `reasoning.*`, `tool.started/completed/failed` with truncation flags, `subagent.*`, `run.*`, `approval.*`, `clarify.*`, `compression.*`, `abort.*`, `usage.updated`, `session.command`, `session.title/workspace/settings.updated`, `resumed`, `location.requested`, `calendar/reminder/health.requested`). Client→server: `run`, `abort`, `approval.respond`, `clarify.respond`, `insert/steer/cancel_queued_run`, `location.respond`; calendar/reminder/health requests are answered `denied` for now.
+- **State.** `Core/ChatStream.swift` — `ChatStreamState` and the pure `ChatRunReducer` (lines of kind user/assistant/system/command/error/interaction, interim text, thinking timestamps, tool upserts, queue, compression, abort, peer messages, settings, location), plus `ToolSummary`, `ThinkingFormat`, `ReferenceQuote`, `ContextUsageFormat` and `ReasoningEffortOption`. All unit-tested in `HermesStudioTests/ChatParityTests.swift`.
+- **Rows.** `MessageRow.swift` (user ≤ 75 %, assistant with 22 pt agent avatar ≤ 80 %, system with a 3 pt warning border, command, error, streaming dots, attachment chips), `ToolSummaryCard.swift` (30 pt header, chevron, wrench, "N tools", ≤ 3 names + N, ✓/•••/Error; 11 pt mono lines with Thinking/Arguments/Result), `ThinkingBlock.swift` (💭 Thinking · Observed {duration} · {count} chars), `MessageActionRow.swift` (speech play/pause, copy, reference, fork, time), `InteractionCard.swift` (approval choices / clarification answer inline in the stream), `ChatBanners.swift` (queued runs, compression, abort, reconnecting, workspace changes).
+- **Composer.** `ChatComposer.swift`: radius-18 card, min 150 pt, reference chip, attachment strip with progress and cancel, 16 pt input with per-string direction (never auto-focused), toolbar [+ attach (camera / photo library / files)] [🧠 reasoning] [⚙ Voice mode · Show tool calls · Push] [model ≤ 190 pt] … [mic 30] [send / stop 30] and a queue button while a run streams; context indicator top-end ("45.0k / 256.0k · remaining 211.0k", amber above 80 %). Labels collapse to icons under 380 pt.
+- **Attachments.** `Core/AppUploads.swift`: chunked `/api/studio/app-uploads` (client id, ≤ 256 KiB raw chunks, complete → `{ name, path }` used in the content block, DELETE on cancel, 50 MB cap). Pickers in `AttachmentPickers.swift`.
+- **Media.** `Core/MediaLinks.swift` + `MediaPlayers.swift`: absolute paths and `device://<id>/<path>` links stream from `/api/studio/files/download?path=…` with the bearer header (`AVURLAsset` + `AVURLAssetHTTPHeaderFieldsKey`); video (mp4/webm/mov/m4v) and audio (mp3/wav/ogg/m4a/aac/flac) play inline, other files are download cards, device files carry the "On the device" badge.
+- **Speech.** `Core/MessageSpeaker.swift`: `POST /api/studio/tts/synthesize` (audio/mpeg) per message with play/pause, optional auto-play of replies (Voice mode), `AVSpeechSynthesizer` fallback when the server call fails.
+- **Consent.** `LocationConsentSheet.swift` + `Core/LocationConsent.swift`: `location.requested` → sheet with the purpose → one CoreLocation fix → `location.respond` (`success` with WGS-84 coordinates, `denied`, or `error`). Requires `NSLocationWhenInUseUsageDescription`.
 
 ## Connecting to Core Hub (M1)
 
@@ -45,7 +58,7 @@ The chat header shows the title (16/600, per-string direction) with the workspac
 - When on-device recognition is unavailable or its permission is denied, the app falls back to the server path for that attempt.
 - Mic button states: idle → listening → transcribing → error.
 
-Required Info.plist strings: `NSCameraUsageDescription`, `NSMicrophoneUsageDescription`, `NSSpeechRecognitionUsageDescription`.
+Required Info.plist strings: `NSCameraUsageDescription`, `NSMicrophoneUsageDescription`, `NSSpeechRecognitionUsageDescription`, `NSPhotoLibraryUsageDescription`, `NSLocationWhenInUseUsageDescription`.
 
 ## Branding and distribution
 
@@ -68,4 +81,4 @@ A free Personal Team installation normally needs to be signed again after seven 
 
 ## Project structure notes
 
-`HermesStudio.xcodeproj` uses Xcode 16 synchronized folders (`PBXFileSystemSynchronizedRootGroup`), so every `.swift` file under `HermesStudio/` and `HermesStudioTests/` is part of the matching target automatically; no `PBXBuildFile` entries are needed when adding files. Unit tests for pure logic live in `HermesStudioTests/` (`HermesStudioTests.swift`: contracts, QR pairing, refresh policy, STT; `CoreHubDesignTests.swift`: tokens, icon path parser, session grouping, time formatter, avatar mapping, browser prefs).
+`HermesStudio.xcodeproj` uses Xcode 16 synchronized folders (`PBXFileSystemSynchronizedRootGroup`), so every `.swift` file under `HermesStudio/` and `HermesStudioTests/` is part of the matching target automatically; no `PBXBuildFile` entries are needed when adding files. Unit tests for pure logic live in `HermesStudioTests/` (`HermesStudioTests.swift`: contracts, QR pairing, refresh policy, STT; `CoreHubDesignTests.swift`: tokens, icon path parser, session grouping, time formatter, avatar mapping, browser prefs; `ChatParityTests.swift`: socket event mapping, stream reducer, tool/thinking/context formatting, chunked uploads, media links, location payload).

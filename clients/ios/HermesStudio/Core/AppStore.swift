@@ -15,6 +15,8 @@ final class AppStore: ObservableObject {
     @Published var appearance = Preferences.appearance
     @Published var reasoningEffort = Preferences.reasoningEffort
     @Published var voiceInput = Preferences.voiceInput
+    @Published var showToolCalls = Preferences.showToolCalls
+    @Published var autoSpeakReplies = Preferences.autoSpeakReplies
     @Published var errorMessage: String?
     @Published var successMessage: String?
     @Published var busy = false
@@ -363,6 +365,8 @@ final class AppStore: ObservableObject {
     func setAppearance(_ value: String) { appearance = value; Preferences.appearance = value }
     func setReasoning(_ value: String) { reasoningEffort = value; Preferences.reasoningEffort = value }
     func setVoiceInput(_ value: String) { voiceInput = value; Preferences.voiceInput = value }
+    func setShowToolCalls(_ value: Bool) { showToolCalls = value; Preferences.showToolCalls = value }
+    func setAutoSpeakReplies(_ value: Bool) { autoSpeakReplies = value; Preferences.autoSpeakReplies = value }
 
     func notify(_ text: String) { successMessage = text; Task { try? await Task.sleep(for: .seconds(2)); if self.successMessage == text { self.successMessage = nil } } }
 

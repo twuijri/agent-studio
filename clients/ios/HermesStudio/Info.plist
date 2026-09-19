@@ -65,6 +65,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Scan the Core Hub pairing QR code and attach photos to conversations.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Share your location with an agent only when you approve its request in a conversation.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Record your voice so it can be turned into text for the composer.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

@@ -25,7 +25,7 @@ enum ChatFiles {
             case "file", "image":
                 recognized = true
                 let path = block.string("path")
-                guard path.hasPrefix("/") || path.hasPrefix("~") else { continue }
+                guard isFilePath(path) else { continue }
                 let name = block.string("name").nilIfEmpty ?? URL(fileURLWithPath: path).lastPathComponent
                 if !files.contains(where: { $0.path == path }) {
                     files.append(DownloadLink(label: name, path: path))
@@ -54,15 +54,21 @@ enum ChatFiles {
                 guard let labelRange = Range(match.range(at: 1), in: text), let pathRange = Range(match.range(at: 2), in: text) else { continue }
                 let label = String(text[labelRange]).trimmingCharacters(in: .whitespacesAndNewlines)
                 let path = String(text[pathRange]).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "<>")))
-                guard path.hasPrefix("/") || path.hasPrefix("~") else { continue }
+                guard isFilePath(path) else { continue }
                 if !result.contains(where: { $0.path == path }) { result.append(DownloadLink(label: label, path: path)) }
             }
         }
         return result
     }
 
+    /// Absolute server paths, `~` paths and `device://<id>/<path>` links.
+    static func isFilePath(_ path: String) -> Bool {
+        path.hasPrefix("/") || path.hasPrefix("~") || DeviceFileLink.parse(path) != nil
+    }
+
     static func fileName(for link: DownloadLink) -> String {
-        let pathName = URL(fileURLWithPath: link.path).lastPathComponent
+        let raw = DeviceFileLink.parse(link.path)?.path ?? link.path
+        let pathName = URL(fileURLWithPath: raw).lastPathComponent
         return pathName.isEmpty ? link.label : pathName
     }
 }
