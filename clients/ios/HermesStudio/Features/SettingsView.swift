@@ -203,7 +203,7 @@ struct EkkoHubView: View {
     }.navigationTitle("Ekko").listStyle(.insetGrouped) }
 }
 
-private struct EkkoConfigurationView: View {
+struct EkkoConfigurationView: View {
     @EnvironmentObject private var store: AppStore
     @State private var root: JSON = [:]; @State private var loading = true
     var body: some View { Form { if !loading { Section("Runtime") { Stepper("Maximum steps: \(int("runtime", "maxSteps", 30))", value: intBinding("runtime", "maxSteps", 30), in: 1...500) }; Section("Model") { TextField("Default provider", text: stringBinding("model", "defaultProvider")); TextField("Default model", text: stringBinding("model", "defaultModel")); Picker("Reasoning", selection: stringBinding("model", "reasoningEffort")) { ForEach(["none", "minimal", "low", "medium", "high", "xhigh", "max"], id: \.self) { Text($0).tag($0) } } }; Section("Capabilities") { Toggle("Tools enabled", isOn: boolBinding(["tools", "enabled"], true)); Toggle("Tool approvals", isOn: boolBinding(["tools", "approvals", "enabled"], true)); Toggle("Memory enabled", isOn: boolBinding(["memory", "enabled"], true)); Toggle("Skills enabled", isOn: boolBinding(["skills", "enabled"], true)); Toggle("Background delegation", isOn: boolBinding(["delegation", "backgroundEnabled"], true)) }; Button("Save settings") { Task { await save() } } } }.navigationTitle("Ekko configuration").overlay { if loading { ProgressView() } }.task { await load() } }
@@ -218,7 +218,7 @@ private struct EkkoConfigurationView: View {
     private func save() async { do { try await store.api.saveEkkoConfig(config); store.notify(String(localized: "Settings saved")); await load() } catch { store.errorMessage = error.localizedDescription } }
 }
 
-private struct EkkoMemoryView: View {
+struct EkkoMemoryView: View {
     @EnvironmentObject private var store: AppStore
     @State private var items: [EkkoMemoryItem] = []; @State private var query = ""; @State private var editing: EkkoMemoryItem?
     var body: some View { List { SearchBar(text: $query); ForEach(items) { item in Button { editing = item } label: { VStack(alignment: .leading, spacing: 5) { Text(item.title.nilIfEmpty ?? item.content).font(.headline).foregroundStyle(.primary).lineLimit(2); Text(item.content).font(.caption).foregroundStyle(.secondary).lineLimit(3); StatusPill(text: item.status, color: item.status == "active" ? .green : .gray) } }.swipeActions { Button(role: .destructive) { Task { await store.attempt({ try await store.api.deleteEkkoMemory(item) }); await load() } } label: { Label("Delete", systemImage: "trash") } } } }.navigationTitle("Ekko memory").task(id: query) { try? await Task.sleep(for: .milliseconds(250)); await load() }.sheet(item: $editing) { EkkoMemoryEditor(item: $0) { await load() } } }
