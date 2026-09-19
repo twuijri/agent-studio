@@ -29,7 +29,7 @@ directory; `CORE_HUB_RELEASE_API_URL` overrides the source for testing.
 
 Every green `test` branch commit produces owner-only builds through
 `.github/workflows/test-track.yml`: desktop apps named **Core Hub Test** (app id
-`us.i3u.agentstudio.test`, own data folder, version `<pkg>-test.<run>`) uploaded
+`com.twuijri.corehub.test`, own data folder, version `<pkg>-test.<run>`) uploaded
 as private workflow artifacts, and the image `ghcr.io/twuijri/core-hub-test:test`
 in a private package. The apps are also published to the owner's private repository
 `twuijri/core-hub-test-builds` as the rolling release `latest-test` (needs the

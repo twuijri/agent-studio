@@ -13,7 +13,7 @@ describe('Core Hub branding without a data or deployment migration', () => {
     expect(read('NOTICE.personal.md')).toContain('EKKOLearnAI')
     expect(JSON.parse(read('packages/desktop/package.json')).name).toBe('hermes-studio')
     const desktop = parse(read('packages/desktop/electron-builder.yml'))
-    expect(desktop.appId).toBe('us.i3u.agentstudio')
+    expect(desktop.appId).toBe('com.twuijri.corehub')
     expect(desktop.productName).toBe('Core Hub')
     const migration = read('packages/desktop/src/main/login-item-migration.ts')
     expect(migration).toContain("['Agent Studio.exe', 'Ekko Studio.exe', 'Hermes Studio.exe']")
