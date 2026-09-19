@@ -126,69 +126,32 @@ struct PetsView: View {
     }
 }
 
-struct ModelsView: View {
-    @EnvironmentObject private var store: AppStore
-    @State private var models: [ModelOption] = []
-    @State private var search = ""
-    @State private var selected = ""
-    @State private var loading = true
+/// Provider sign-in — the phone's stand-in for the web's Anthropic / Codex /
+/// xAI / Nous login modals on the Models screen. Credentials, connection
+/// tests and model refresh live on the provider itself, in
+/// `ProviderCatalogView`, not here.
+struct ProviderSignInView: View {
+    private let providers = ["codex", "nous", "xai", "anthropic"]
 
     var body: some View {
         List {
-            Section { NavigationLink { ProvidersView() } label: { AgentToolRow(icon: "network", color: .blue, title: "Providers", detail: "Status, connection tests and model refresh") } }
             Section {
-                SearchBar(text: $search)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-            }
-            ForEach(groupedProviders, id: \.self) { provider in
-                Section(provider.isEmpty ? "Models" : provider) {
-                    ForEach(filtered.filter { $0.provider == provider }) { model in
-                        Button { Task { await select(model) } } label: {
-                            HStack {
-                                Image(systemName: model.id == selected ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(model.id == selected ? CoreHubTokens.Palette.accent : .secondary)
-                                VStack(alignment: .leading) {
-                                    Text(model.name).foregroundStyle(.primary)
-                                    Text(model.id).font(.caption2.monospaced()).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
+                ForEach(providers, id: \.self) { provider in
+                    NavigationLink { ProviderAuthView(provider: provider) } label: {
+                        Label(provider.capitalized, systemImage: "person.badge.key.fill")
                     }
                 }
+            } footer: {
+                Text("These providers use a browser sign-in instead of an API key. Core Hub keeps the token on the server.")
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Models")
-        .overlay { if loading { ProgressView() } }
-        .task(id: store.selectedProfile) { await load() }
+        .navigationTitle("Provider sign-in")
+        .navigationBarTitleDisplayMode(.inline)
     }
-    private var filtered: [ModelOption] { search.isEmpty ? models : models.filter { $0.name.localizedCaseInsensitiveContains(search) || $0.id.localizedCaseInsensitiveContains(search) } }
-    private var groupedProviders: [String] { Array(Set(filtered.map(\.provider))).sorted() }
-    private func load() async {
-        loading = true
-        async let modelRequest = store.api.models(profile: store.selectedProfile)
-        async let configRequest = store.api.config(profile: store.selectedProfile)
-        do {
-            models = try await modelRequest
-            let config = try await configRequest
-            selected = config.object("model").string("default")
-        } catch { store.errorMessage = error.localizedDescription }
-        loading = false
-    }
-    private func select(_ model: ModelOption) async { do { try await store.api.setDefaultModel(profile: store.selectedProfile, model: model.id, provider: model.provider.nilIfEmpty); selected = model.id; store.notify(String(localized: "Default model updated")) } catch { store.errorMessage = error.localizedDescription } }
 }
 
-struct ProvidersView: View {
-    @EnvironmentObject private var store: AppStore
-    @State private var providers: [ProviderSummary] = []; @State private var working: String?
-    var body: some View { List { Section("Provider sign-in") { ForEach(["codex", "nous", "xai", "anthropic"], id: \.self) { provider in NavigationLink { ProviderAuthView(provider: provider) } label: { Label(provider.capitalized, systemImage: "person.badge.key.fill") } } }; Section("Configured providers") { ForEach(providers) { provider in VStack(alignment: .leading, spacing: 9) { HStack { VStack(alignment: .leading) { Text(provider.label).font(.headline); Text(provider.id).font(.caption.monospaced()).foregroundStyle(.secondary) }; Spacer(); StatusPill(text: provider.credentialConfigured ? String(localized: "Configured") : String(localized: "Needs key"), color: provider.credentialConfigured ? .green : .orange) }; if !provider.baseURL.isEmpty { Text(provider.baseURL).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1) }; Text("\(provider.models.count) models").font(.caption).foregroundStyle(.secondary); HStack { Button("Test") { Task { await test(provider) } }.buttonStyle(.bordered); if provider.refreshable { Button("Refresh models") { Task { await refresh(provider) } }.buttonStyle(.bordered) }; if working == provider.id { ProgressView().controlSize(.small) } } }.padding(.vertical, 5) } } }.navigationTitle("Providers").refreshable { await load() }.task { await load() }.toolbar { Button("Refresh all") { Task { try? await store.api.refreshProviderCache(); await load() } } } }
-    private func load() async { providers = (try? await store.api.providers(profile: store.selectedProfile)) ?? providers }
-    private func test(_ item: ProviderSummary) async { working = item.id; do { let result = try await store.api.testProvider(item.id); store.notify(result.bool("success") ? String(localized: "Connection successful") : result.string("error").nilIfEmpty ?? String(localized: "Connection failed")) } catch { store.errorMessage = error.localizedDescription }; working = nil }
-    private func refresh(_ item: ProviderSummary) async { working = item.id; do { let result = try await store.api.refreshProviderModels(item.id); if result.bool("requires_confirmation") { _ = try await store.api.refreshProviderModels(item.id, confirm: true) }; await load() } catch { store.errorMessage = error.localizedDescription }; working = nil }
-}
-
-private struct ProviderAuthView: View { @EnvironmentObject var store: AppStore; let provider: String; @State var authenticated = false; @State var sessionID = ""; @State var userCode = ""; @State var url = ""; @State var submitCode = ""; @State var status = ""
+struct ProviderAuthView: View { @EnvironmentObject var store: AppStore; let provider: String; @State var authenticated = false; @State var sessionID = ""; @State var userCode = ""; @State var url = ""; @State var submitCode = ""; @State var status = ""
     var body: some View { Form { Section { LabeledContent("Status") { StatusPill(text: authenticated ? String(localized: "Authenticated") : String(localized: "Not authenticated"), color: authenticated ? .green : .orange) }; Button("Start sign-in") { Task { await start() } } }; if !url.isEmpty { Section("Authorization") { if let target = URL(string: url) { Link("Open authorization page", destination: target) }; if !userCode.isEmpty { LabeledContent("User code", value: userCode).textSelection(.enabled); QRImageView(value: url) }; if provider == "anthropic" { TextField("Authorization code", text: $submitCode); Button("Submit code") { Task { await submit() } } } else if !sessionID.isEmpty { Button("Check sign-in") { Task { await poll() } } }; if !status.isEmpty { Text(status).foregroundStyle(.secondary) } } } }.navigationTitle(provider.capitalized).task { await check() } }
     private func check() async { if let result = try? await store.api.providerAuthStatus(provider) { authenticated = result.bool("authenticated") || result.bool("has_token") } }
     private func start() async { do { let result = try await store.api.startProviderAuth(provider); sessionID = result.string("session_id"); userCode = result.string("user_code"); url = result.string("verification_url", "authorization_url"); status = String(localized: "Waiting for authorization") } catch { store.errorMessage = error.localizedDescription } }

@@ -32,9 +32,8 @@ struct SettingsView: View {
             Section("Compression") { NavigationLink { StudioSectionSettings(section: .compression) } label: { SettingsRow(icon: "arrow.down.right.and.arrow.up.left", color: CoreHubTokens.Palette.warning, title: "Compression") } }
             Section("Privacy") { NavigationLink { StudioSectionSettings(section: .privacy) } label: { SettingsRow(icon: "hand.raised.fill", color: CoreHubTokens.Palette.error, title: "Privacy") } }
             Section("Models") {
-                NavigationLink { ModelCatalogView() } label: { SettingsRow(icon: "cpu.fill", color: CoreHubTokens.Palette.accent, title: "Models and providers") }
-                NavigationLink { ModelsView() } label: { SettingsRow(icon: "checklist", color: CoreHubTokens.Palette.info, title: "Default model") }
-                NavigationLink { ProvidersView() } label: { SettingsRow(icon: "network", color: CoreHubTokens.Palette.info, title: "Provider status") }
+                NavigationLink { ModelsHomeView() } label: { SettingsRow(icon: "cpu.fill", color: CoreHubTokens.Palette.accent, title: "Models and providers") }
+                NavigationLink { ProviderSignInView() } label: { SettingsRow(icon: "person.badge.key.fill", color: CoreHubTokens.Palette.info, title: "Provider sign-in") }
             }
             Section("Voice") {
                 VoiceOutputSettingsRow()
@@ -50,7 +49,8 @@ struct SettingsView: View {
             }
             Section("Advanced") {
                 NavigationLink { StudioSectionSettings(section: .agent) } label: { SettingsRow(icon: "sparkles", color: CoreHubTokens.Palette.accent, title: "Agent") }
-                NavigationLink { StudioSectionSettings(section: .memory) } label: { SettingsRow(icon: "lightbulb.max.fill", color: CoreHubTokens.Palette.warning, title: "Memory") }
+                NavigationLink { HermesMemoryView() } label: { SettingsRow(icon: "brain", color: CoreHubTokens.Palette.warning, title: "Memory") }
+                NavigationLink { StudioSectionSettings(section: .memory) } label: { SettingsRow(icon: "lightbulb.max.fill", color: CoreHubTokens.Palette.warning, title: "Memory settings") }
                 NavigationLink { StudioSectionSettings(section: .session) } label: { SettingsRow(icon: "clock.arrow.circlepath", color: CoreHubTokens.Palette.info, title: "Session reset") }
                 NavigationLink { StudioSectionSettings(section: .approvals) } label: { SettingsRow(icon: "checkmark.shield.fill", color: CoreHubTokens.Palette.success, title: "Approvals") }
                 NavigationLink { StudioSectionSettings(section: .skills) } label: { SettingsRow(icon: "checkmark.shield", color: CoreHubTokens.Palette.info, title: "Skill approvals") }

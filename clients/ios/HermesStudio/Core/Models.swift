@@ -293,12 +293,21 @@ struct WorkflowRunNode: Identifiable, Hashable {
 }
 
 enum AgentIdentity {
+    /// The ids the server's own registry knows, in its order
+    /// (`AGENT_ORDER` in `modules/studio/public/agent-status-registry.ts`).
+    /// Grok, OpenCode and DeepSeek Harness used to fall through to `hermes`
+    /// here, which silently merged three real agents into one row.
+    static let knownIDs = ["hermes", "ekko-agent", "claude-code", "codex", "pi", "grok", "opencode", "dsh"]
+
     static func canonicalID(_ raw: String) -> String {
         switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "ekko", "ekko-agent": return "ekko-agent"
+        case "ekko", "ekko-agent", "ekko_agent": return "ekko-agent"
         case "claude", "claude-code": return "claude-code"
         case "codex": return "codex"
         case "pi": return "pi"
+        case "grok": return "grok"
+        case "opencode": return "opencode"
+        case "dsh", "deepseek", "deepseek-harness": return "dsh"
         default: return "hermes"
         }
     }
@@ -309,26 +318,171 @@ enum AgentIdentity {
         case "claude-code": return "Claude Code"
         case "codex": return "Codex"
         case "pi": return "Pi"
+        case "grok": return "Grok"
+        case "opencode": return "OpenCode"
+        case "dsh": return "DeepSeek Harness"
         default: return "Hermes"
         }
     }
+
+    /// A readable label for an id the app has never heard of, so a new
+    /// server-side agent appears with its own name instead of vanishing.
+    static func fallbackName(for id: String) -> String {
+        id.split(whereSeparator: { $0 == "-" || $0 == "_" })
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+            .nilIfEmpty ?? id
+    }
 }
 
+/// One row of `GET /api/agents/status`. The id is kept **verbatim**: the
+/// server owns the catalogue, and an id the app does not recognise must still
+/// be shown rather than folded into another agent.
 struct AgentRuntimeStatus: Identifiable, Hashable {
     let id: String
+    var name: String
+    var provider: String
+    /// `hermes` | `built-in` | `coding-agent`, straight from the registry.
+    var kind: String
     var installed: Bool
     var source: String
     var path: String
     var version: String
     var error: String
+    var installations: [AgentInstallation]
 
     init(_ json: JSON) {
-        id = AgentIdentity.canonicalID(json.string("id", "agent", "name"))
+        id = json.string("id", "agent", "name").trimmingCharacters(in: .whitespacesAndNewlines)
+        name = json.string("name").nilIfEmpty
+            ?? (AgentIdentity.knownIDs.contains(id) ? AgentIdentity.displayName(for: id) : AgentIdentity.fallbackName(for: id))
+        provider = json.string("provider")
+        kind = json.string("kind").nilIfEmpty ?? (id == "hermes" ? "hermes" : (id == "ekko-agent" ? "built-in" : "coding-agent"))
         installed = json.bool("installed")
         source = json.string("source").nilIfEmpty ?? (installed ? "user-cli" : "not-installed")
         path = json.string("path")
         version = json.string("version", "rawVersion")
         error = json.string("error")
+        installations = json.objects("installations").map(AgentInstallation.init)
+    }
+
+    var isCodingAgent: Bool { kind == "coding-agent" }
+}
+
+/// One `installations[]` entry: the same CLI found in more than one place.
+struct AgentInstallation: Hashable {
+    var path: String
+    var version: String
+    var source: String
+    var selected: Bool
+    var managedRuntimeVersion: String
+
+    init(_ json: JSON) {
+        path = json.string("path")
+        version = json.string("version")
+        source = json.string("source")
+        selected = json.bool("selected")
+        managedRuntimeVersion = json.string("managedRuntimeVersion", "managed_runtime_version")
+    }
+}
+
+/// One entry of `GET /api/coding-agents/update-policies`.
+struct AgentUpdatePolicy: Hashable {
+    let id: String
+    var autoUpdate: Bool
+    var autoUpdateSupported: Bool
+    /// `unknown` | `checking` | `current` | `available` | `waiting` | `updating` | `failed`
+    var status: String
+    var currentVersion: String
+    var latestVersion: String
+    var checkedAt: String
+    var error: String
+
+    init(id: String, _ json: JSON) {
+        self.id = id
+        autoUpdate = json.bool("autoUpdate")
+        // Absent means supported; only an explicit false disables the switch.
+        autoUpdateSupported = json.bool("autoUpdateSupported", default: true)
+        status = json.string("status").nilIfEmpty ?? "unknown"
+        currentVersion = json.string("currentVersion", "current_version")
+        latestVersion = json.string("latestVersion", "latest_version")
+        checkedAt = json.string("checkedAt", "checked_at")
+        error = json.string("error")
+    }
+
+    /// The version the web's "Update to vX" button offers, or "" when none
+    /// is known yet.
+    var offeredVersion: String {
+        (status == "available" || status == "waiting") ? latestVersion : ""
+    }
+}
+
+/// `GET /api/hermes/memory` — the three Markdown files the Hermes agent
+/// keeps for a profile. `§` is the server's paragraph separator, which the
+/// web expands back to a blank line before rendering.
+struct HermesMemory: Hashable {
+    var memory: String
+    var user: String
+    var soul: String
+
+    init(_ json: JSON) {
+        memory = HermesMemory.expand(json.string("memory"))
+        user = HermesMemory.expand(json.string("user"))
+        soul = HermesMemory.expand(json.string("soul"))
+    }
+
+    static func expand(_ raw: String) -> String { raw.replacingOccurrences(of: "§", with: "\n\n") }
+
+    func text(for section: String) -> String {
+        switch section {
+        case "user": return user
+        case "soul": return soul
+        default: return memory
+        }
+    }
+}
+
+/// `GET/PUT /api/coding-agents/{id}/config-files/{key}` — one of the agent's
+/// own files on the Core Hub host.
+struct CodingAgentConfigFile: Hashable {
+    var key: String
+    var path: String
+    var absolutePath: String
+    var language: String
+    var content: String
+    var exists: Bool
+
+    init(_ json: JSON) {
+        key = json.string("key")
+        path = json.string("path")
+        absolutePath = json.string("absolutePath", "absolute_path")
+        language = json.string("language")
+        content = json.string("content")
+        exists = json.bool("exists")
+    }
+}
+
+/// One entry of `GET /api/coding-agents/{id}/mcp/servers`.
+struct CodingAgentMcpServer: Identifiable, Hashable {
+    let id: String
+    var transport: String
+    var connected: Bool
+    var tools: Int
+    var toolNames: [String]
+    var managed: Bool
+    var error: String
+
+    var name: String { id }
+
+    init(_ json: JSON) {
+        id = json.string("name")
+        transport = json.string("transport").nilIfEmpty ?? "stdio"
+        connected = json.bool("connected")
+        tools = json.int("tools")
+        toolNames = json.strings("tool_names")
+        managed = json.bool("managed")
+        // The server sends JSON null here when there is no error, and
+        // `JSONSerialization` turns that into `NSNull`, not a missing key.
+        error = json["error"] is NSNull ? "" : json.string("error")
     }
 }
 
@@ -345,8 +499,9 @@ struct CodingAgentTool: Identifiable, Hashable {
     var error: String
 
     init(_ json: JSON) {
-        id = AgentIdentity.canonicalID(json.string("id"))
-        name = json.string("name").nilIfEmpty ?? AgentIdentity.displayName(for: id)
+        id = json.string("id").trimmingCharacters(in: .whitespacesAndNewlines)
+        name = json.string("name").nilIfEmpty
+            ?? (AgentIdentity.knownIDs.contains(id) ? AgentIdentity.displayName(for: id) : AgentIdentity.fallbackName(for: id))
         provider = json.string("provider")
         command = json.string("command")
         packageName = json.string("packageName", "package_name")

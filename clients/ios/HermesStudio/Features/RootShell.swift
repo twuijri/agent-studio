@@ -118,7 +118,7 @@ struct ShellDestinationView: View {
         switch destination {
         case .connections: StudioConnectionsView()
         case .agentManager: AgentManagerView()
-        case .models: ModelsView()
+        case .models: ModelsHomeView()
         case .logs: StudioLogsView()
         case .usage: InsightsView()
         case .performance: InsightsView()

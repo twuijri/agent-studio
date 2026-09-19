@@ -82,10 +82,14 @@ final class APIClient: @unchecked Sendable {
         return (data, http)
     }
 
-    func request(_ path: String, method: String = "GET", body: Any? = nil, profile: String? = nil) async throws -> Any {
+    func request(_ path: String, method: String = "GET", body: Any? = nil, profile: String? = nil, timeout: TimeInterval? = nil) async throws -> Any {
         var request = URLRequest(url: try url(path))
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // The session default is 60 s; a few server-side operations (a global
+        // npm install or uninstall of a coding agent) block for up to ten
+        // minutes with no progress stream, so they ask for their own budget.
+        if let timeout { request.timeoutInterval = timeout }
         if let header = (profile?.nilIfEmpty ?? activeProfile.nilIfEmpty) { request.setValue(header, forHTTPHeaderField: "X-Hermes-Profile") }
         if let body {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -96,8 +100,8 @@ final class APIClient: @unchecked Sendable {
         return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
     }
 
-    func object(_ path: String, method: String = "GET", body: Any? = nil, profile: String? = nil) async throws -> JSON {
-        let result = try await request(path, method: method, body: body, profile: profile)
+    func object(_ path: String, method: String = "GET", body: Any? = nil, profile: String? = nil, timeout: TimeInterval? = nil) async throws -> JSON {
+        let result = try await request(path, method: method, body: body, profile: profile, timeout: timeout)
         if let object = result as? JSON { return object }
         if let array = result as? [Any] { return ["data": array] }
         throw HermesError.malformedResponse
@@ -154,17 +158,45 @@ final class APIClient: @unchecked Sendable {
         try await array("/api/hermes/profiles", keys: ["profiles"]).map(Profile.init).filter { !$0.name.isEmpty }
     }
 
+    /// `npm install -g` / `npm uninstall -g` on the Core Hub host, with the
+    /// server's own ten-minute ceiling plus a little slack.
+    static let codingAgentInstallTimeout: TimeInterval = 11 * 60
+
+    /// `GET /api/agents/status` (super-admin) — the server's own inventory of
+    /// all eight agents, in its order. The phone never invents this list.
     func agentStatuses() async throws -> [AgentRuntimeStatus] {
         try await object("/api/agents/status").objects("agents").map(AgentRuntimeStatus.init)
     }
 
+    /// `GET /api/coding-agents` — the six CLI definitions with command,
+    /// package and a fresh `--version` probe. Available to any signed-in user,
+    /// so it is the fallback when `/api/agents/status` answers 403.
     func codingAgents() async throws -> [CodingAgentTool] {
         try await object("/api/coding-agents").objects("tools").map(CodingAgentTool.init)
     }
 
-    func installCodingAgent(_ id: String) async throws -> CodingAgentTool? {
-        let root = try await object("/api/coding-agents/\(id.urlEncoded)/install", method: "POST")
-        return root.object("tool").isEmpty ? nil : CodingAgentTool(root.object("tool"))
+    /// `GET /api/coding-agents/update-policies` (admin) — id → policy.
+    func agentUpdatePolicies() async throws -> [String: AgentUpdatePolicy] {
+        let agents = try await object("/api/coding-agents/update-policies").object("agents")
+        var result: [String: AgentUpdatePolicy] = [:]
+        for (id, raw) in agents {
+            guard let json = raw as? JSON else { continue }
+            // Keyed by the server's own id, never normalised: an id this
+            // build does not know must still reach its row.
+            result[id] = AgentUpdatePolicy(id: id, json)
+        }
+        return result
+    }
+
+    func setAgentAutoUpdate(_ id: String, enabled: Bool) async throws {
+        _ = try await object("/api/coding-agents/\(id.urlEncoded)/update-policy", method: "PUT", body: ["autoUpdate": enabled])
+    }
+
+    /// A failed npm run still answers HTTP 200 with `success: false`, so the
+    /// flag is returned rather than swallowed.
+    func installCodingAgent(_ id: String) async throws -> (tool: CodingAgentTool?, success: Bool, message: String) {
+        let root = try await object("/api/coding-agents/\(id.urlEncoded)/install", method: "POST", timeout: Self.codingAgentInstallTimeout)
+        return (root.object("tool").isEmpty ? nil : CodingAgentTool(root.object("tool")), root.bool("success"), root.string("message", "error"))
     }
 
     func checkCodingAgentUpdate(_ id: String) async throws -> (tool: CodingAgentTool?, available: Bool, latest: String) {
@@ -173,7 +205,30 @@ final class APIClient: @unchecked Sendable {
     }
 
     func deleteCodingAgent(_ id: String) async throws {
-        _ = try await object("/api/coding-agents/\(id.urlEncoded)", method: "DELETE")
+        _ = try await object("/api/coding-agents/\(id.urlEncoded)", method: "DELETE", timeout: Self.codingAgentInstallTimeout)
+    }
+
+    /// `GET /api/coding-agents/{id}/config-files/{key}` — one of the agent's
+    /// own files on the host (`~/.claude/settings.json` and friends).
+    func codingAgentConfigFile(_ id: String, key: String) async throws -> CodingAgentConfigFile {
+        CodingAgentConfigFile(try await object("/api/coding-agents/\(id.urlEncoded)/config-files/\(key.urlEncoded)"))
+    }
+
+    func saveCodingAgentConfigFile(_ id: String, key: String, content: String) async throws -> CodingAgentConfigFile {
+        CodingAgentConfigFile(try await object("/api/coding-agents/\(id.urlEncoded)/config-files/\(key.urlEncoded)", method: "PUT", body: ["content": content]))
+    }
+
+    func codingAgentMcpServers(_ id: String) async throws -> [CodingAgentMcpServer] {
+        let root = try await object("/api/coding-agents/\(id.urlEncoded)/mcp/servers")
+        return root.objects("servers").map(CodingAgentMcpServer.init)
+    }
+
+    func testCodingAgentMcpServer(_ id: String, name: String) async throws -> JSON {
+        try await object("/api/coding-agents/\(id.urlEncoded)/mcp/servers/\(name.urlEncoded)/test", method: "POST", body: [:])
+    }
+
+    func removeCodingAgentMcpServer(_ id: String, name: String) async throws {
+        _ = try await object("/api/coding-agents/\(id.urlEncoded)/mcp/servers/\(name.urlEncoded)", method: "DELETE")
     }
 
     func profileRuntimes(refresh: Bool = true) async throws -> [ProfileRuntime] { try await array("/api/hermes/profiles/runtime-statuses\(refresh ? "" : "?refresh=0")", keys: ["profiles"]).map(ProfileRuntime.init) }
@@ -187,6 +242,14 @@ final class APIClient: @unchecked Sendable {
         return data
     }
     func importProfile(data: Data, name: String) async throws { _ = try await multipart("/api/hermes/profiles/import", data: data, name: name, mime: "application/gzip", field: "file", profile: nil) }
+
+    /// `GET /api/hermes/memory` — the profile's three Markdown files
+    /// (`memory`, `user`, `soul`) as the web's Memory page reads them.
+    func hermesMemory() async throws -> HermesMemory { HermesMemory(try await object("/api/hermes/memory")) }
+    /// `POST /api/hermes/memory { section, content }`.
+    func saveHermesMemory(section: String, content: String) async throws {
+        _ = try await object("/api/hermes/memory", method: "POST", body: ["section": section, "content": content])
+    }
 
     func ekkoConfig() async throws -> JSON { try await object("/api/ekko/config") }
     func saveEkkoConfig(_ config: JSON) async throws { _ = try await object("/api/ekko/config", method: "PUT", body: ["config": config]) }
@@ -212,6 +275,8 @@ final class APIClient: @unchecked Sendable {
     func providers(profile: String) async throws -> [ProviderSummary] { let root = try await object("/api/hermes/available-models?profile=\(profile.urlEncoded)"); return (root.objects("groups") + root.objects("allProviders")).map(ProviderSummary.init).reduce(into: []) { result, item in if !result.contains(where: { $0.id == item.id }) { result.append(item) } } }
     func refreshProviderCache() async throws { _ = try await object("/api/hermes/provider-models/cache/refresh", method: "POST") }
     func refreshProviderModels(_ id: String, confirm: Bool = false) async throws -> JSON { try await object("/api/hermes/config/providers/\(id.urlEncoded)/models/refresh", method: "POST", body: ["confirm": confirm]) }
+    /// `POST …/models/restore` — puts back the catalogue a refresh trimmed.
+    func restoreProviderModels(_ id: String) async throws -> JSON { try await object("/api/hermes/config/providers/\(id.urlEncoded)/models/restore", method: "POST", body: [:]) }
     func testProvider(_ id: String) async throws -> JSON { try await object("/api/hermes/config/providers/\(id.urlEncoded)/editor/test", method: "POST", body: [:]) }
 
     static func sessionsPath(profile: String?, limit: Int = 80) -> String {
