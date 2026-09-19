@@ -803,4 +803,19 @@
     <string name="queued_run_insert">Run next</string>
     <string name="queued_run_cancel">Cancel queued message</string>
     <string name="background_agent_summary">%1$s · %2$s</string>
+    <!-- QR pairing and App token refresh -->
+    <string name="login_scan_qr">Scan QR code</string>
+    <string name="login_scan_qr_note">In Core Hub open Device connections → App → Direct connection and scan the code shown there. The server address is read from the code.</string>
+    <string name="login_scan_prompt">Point the camera at the Core Hub QR code</string>
+    <string name="login_or_password">Or sign in with a username and password</string>
+    <string name="error_qr_invalid">That code is not a Core Hub App connection code</string>
+    <string name="error_qr_expired">That QR code has expired. Open a fresh one in Core Hub.</string>
+    <string name="error_camera_permission">Camera access is needed to scan the code</string>
+    <string name="error_app_login_fields">The server rejected the pairing request: a required field was missing</string>
+    <string name="error_app_login_invalid_code">The server did not recognize that authorization code</string>
+    <string name="error_app_login_used">That authorization code was already used. Open a fresh one in Core Hub.</string>
+    <string name="error_app_login_expired">That authorization code has expired. Open a fresh one in Core Hub.</string>
+    <string name="error_app_login_disabled">The account that created this code is disabled</string>
+    <string name="error_token_revoked">This device\'s access was revoked or has expired. Sign in again.</string>
+    <string name="notice_token_refresh_failed">Could not refresh the device token: %1$s</string>
 </resources>

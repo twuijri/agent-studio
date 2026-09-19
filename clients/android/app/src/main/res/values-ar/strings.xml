@@ -802,4 +802,19 @@
     <string name="queued_run_insert">تشغيل تالياً</string>
     <string name="queued_run_cancel">إلغاء الرسالة من الطابور</string>
     <string name="background_agent_summary">%1$s · %2$s</string>
+    <!-- QR pairing and App token refresh -->
+    <string name="login_scan_qr">مسح رمز QR</string>
+    <string name="login_scan_qr_note">في Core Hub افتح «اتصالات الأجهزة ← التطبيق ← اتصال مباشر» وامسح الرمز المعروض هناك. يُقرأ عنوان السيرفر من الرمز.</string>
+    <string name="login_scan_prompt">وجّه الكاميرا نحو رمز QR الخاص بـ Core Hub</string>
+    <string name="login_or_password">أو سجّل الدخول باسم المستخدم وكلمة المرور</string>
+    <string name="error_qr_invalid">هذا الرمز ليس رمز اتصال تطبيق من Core Hub</string>
+    <string name="error_qr_expired">انتهت صلاحية رمز QR هذا. افتح رمزًا جديدًا في Core Hub.</string>
+    <string name="error_camera_permission">يلزم السماح بالكاميرا لمسح الرمز</string>
+    <string name="error_app_login_fields">رفض السيرفر طلب الربط: حقل مطلوب ناقص</string>
+    <string name="error_app_login_invalid_code">لم يتعرف السيرفر على رمز التفويض هذا</string>
+    <string name="error_app_login_used">رمز التفويض هذا مستخدم من قبل. افتح رمزًا جديدًا في Core Hub.</string>
+    <string name="error_app_login_expired">انتهت صلاحية رمز التفويض هذا. افتح رمزًا جديدًا في Core Hub.</string>
+    <string name="error_app_login_disabled">الحساب الذي أنشأ هذا الرمز معطّل</string>
+    <string name="error_token_revoked">أُلغي وصول هذا الجهاز أو انتهت صلاحيته. سجّل الدخول من جديد.</string>
+    <string name="notice_token_refresh_failed">تعذّر تجديد رمز الجهاز: %1$s</string>
 </resources>

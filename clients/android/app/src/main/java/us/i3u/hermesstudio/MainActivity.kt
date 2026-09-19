@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -108,6 +109,7 @@ import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -179,6 +181,8 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -332,6 +336,23 @@ private fun LoginScreen(state: UiState, viewModel: AppViewModel) {
     var url by rememberSaveable { mutableStateOf(state.baseUrl) }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
+    val scanPrompt = stringResource(R.string.login_scan_prompt)
+    val scanQr = rememberLauncherForActivityResult(ScanContract()) { result ->
+        result.contents?.let { viewModel.loginWithQr(it) }
+    }
+    val askCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            scanQr.launch(
+                ScanOptions()
+                    .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                    .setPrompt(scanPrompt)
+                    .setBeepEnabled(false)
+                    .setOrientationLocked(false),
+            )
+        } else {
+            viewModel.reportCameraDenied()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -345,11 +366,33 @@ private fun LoginScreen(state: UiState, viewModel: AppViewModel) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(20.dp)
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(stringResource(R.string.login_title), style = MaterialTheme.typography.titleMedium)
+            Button(
+                onClick = { askCamera.launch(Manifest.permission.CAMERA) },
+                enabled = !state.busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(if (state.busy) R.string.login_submitting else R.string.login_scan_qr))
+            }
+            Text(
+                stringResource(R.string.login_scan_qr_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            Text(
+                stringResource(R.string.login_or_password),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedTextField(
                 value = url,
                 onValueChange = { url = it },
@@ -375,14 +418,13 @@ private fun LoginScreen(state: UiState, viewModel: AppViewModel) {
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 modifier = Modifier.fillMaxWidth(),
             )
-            Button(
+            OutlinedButton(
                 onClick = { viewModel.login(url, username, password) },
                 enabled = !state.busy,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(if (state.busy) R.string.login_submitting else R.string.login_submit))
             }
-            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
             Text(
                 stringResource(R.string.login_note),
                 style = MaterialTheme.typography.bodySmall,

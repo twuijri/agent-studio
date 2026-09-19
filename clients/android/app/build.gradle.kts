@@ -114,6 +114,9 @@ dependencies {
     // Remote Petdex previews and active data-URI spritesheets.
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("com.google.zxing:core:3.5.3")
+    // Reads the Core Hub App-connection QR code on the login screen. Ships its
+    // own capture activity, so no CameraX or ML Kit payload is added to the APK.
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")

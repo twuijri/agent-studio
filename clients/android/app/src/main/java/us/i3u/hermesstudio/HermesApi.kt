@@ -28,12 +28,52 @@ class HermesApi(
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * Asked once when a request comes back 401. Returns a replacement token to
+     * retry with, or null to let the failure propagate. The App token refresh
+     * lives in the view model, which also owns persisting the result.
+     */
+    @Volatile
+    var onUnauthorized: (() -> String?)? = null
+    private val refreshLock = Any()
+
     fun update(baseUrl: String, token: String) {
         this.baseUrl = baseUrl.trimEnd('/')
         this.token = token
     }
 
     private fun url(path: String) = baseUrl.trimEnd('/') + path
+
+    /**
+     * Runs a request and decodes its JSON body. On a 401 the refresh hook is
+     * given one chance to supply a new token, after which the same request is
+     * sent once more with the new header; a second 401 is reported as is.
+     */
+    private fun execute(allowRefresh: Boolean = true, build: () -> Request): JSONObject {
+        val sentWith = token
+        client.newCall(build()).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (response.code == 401 && allowRefresh && sentWith.isNotBlank()) {
+                val replacement = synchronized(refreshLock) {
+                    // Another call may already have refreshed while this one waited.
+                    if (token != sentWith) token else onUnauthorized?.invoke()?.also { token = it }
+                }
+                if (!replacement.isNullOrBlank()) return execute(allowRefresh = false, build = build)
+            }
+            if (!response.isSuccessful) {
+                val detail = errorDetail(text)
+                throw HermesException(
+                    if (detail.isNullOrBlank()) "HTTP ${response.code}" else "HTTP ${response.code}: $detail",
+                    statusCode = response.code,
+                    code = errorCode(text),
+                )
+            }
+            if (text.isBlank()) return JSONObject()
+            return runCatching { JSONObject(text) }.getOrElse {
+                JSONObject().put("data", runCatching { JSONArray(text) }.getOrDefault(JSONArray()))
+            }
+        }
+    }
 
     private fun request(path: String, method: String, body: JSONObject?, profile: String? = null): Request {
         val builder = Request.Builder().url(url(path))
@@ -55,22 +95,7 @@ class HermesApi(
         method: String = "GET",
         body: JSONObject? = null,
         profile: String? = null,
-    ): JSONObject {
-        client.newCall(request(path, method, body, profile)).execute().use { response ->
-            val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                val detail = errorDetail(text)
-                throw HermesException(
-                    if (detail.isNullOrBlank()) "HTTP ${response.code}" else "HTTP ${response.code}: $detail",
-                    statusCode = response.code,
-                )
-            }
-            if (text.isBlank()) return JSONObject()
-            return runCatching { JSONObject(text) }.getOrElse {
-                JSONObject().put("data", runCatching { JSONArray(text) }.getOrDefault(JSONArray()))
-            }
-        }
-    }
+    ): JSONObject = execute { request(path, method, body, profile) }
 
     /** POST /api/auth/login — returns the bearer token used by every other call. */
     fun login(username: String, password: String): String {
@@ -79,6 +104,66 @@ class HermesApi(
         val issued = result.optString("token")
         if (issued.isBlank()) throw HermesException("Login succeeded but no token was returned")
         return issued
+    }
+
+    /**
+     * POST /api/auth/app-login — exchanges the one-time code from the Core Hub
+     * QR for a device-bound App token. The server answers 401 for an unknown
+     * code, 409 for one already used, 410 for an expired one and 403 when the
+     * authorizing user is disabled; the caller turns those into messages.
+     */
+    fun appLogin(
+        authorizationCode: String,
+        deviceCode: String,
+        deviceName: String,
+        deviceBrand: String,
+        deviceModel: String,
+    ): AppLoginResult {
+        val body = JSONObject()
+            .put("authorization_code", authorizationCode)
+            .put("device_code", deviceCode)
+            .put("device_name", deviceName)
+            .put("device_brand", deviceBrand)
+            .put("device_model", deviceModel)
+        // A refresh cannot help a login, and there is no token to refresh yet.
+        val result = execute(allowRefresh = false) { request("/api/auth/app-login", "POST", body) }
+        val issued = result.optString("token")
+        if (issued.isBlank()) throw HermesException("App login succeeded but no token was returned")
+        val connection = parseAppConnection(result.optJSONObject("appConnection"))
+        return AppLoginResult(
+            token = issued,
+            userId = result.optInt("userId", 0),
+            profiles = strings(result.optJSONArray("profiles")),
+            connection = connection,
+        )
+    }
+
+    /**
+     * POST /api/auth/app-refresh — bearer is the current App token, the body is
+     * empty. A 401 means the token was revoked or is otherwise invalid, which
+     * the caller treats as a sign-out.
+     */
+    fun appRefresh(): AppTokenRefresh {
+        val result = execute(allowRefresh = false) { request("/api/auth/app-refresh", "POST", JSONObject()) }
+        val issued = result.optString("token")
+        if (issued.isBlank()) throw HermesException("Token refresh returned no token")
+        val connection = parseAppConnection(result.optJSONObject("appConnection"))
+        val expiresAt = result.firstLong("token_expires_at", "tokenExpiresAt") ?: connection.tokenExpiresAt
+        return AppTokenRefresh(token = issued, expiresAt = expiresAt, connection = connection)
+    }
+
+    private fun parseAppConnection(item: JSONObject?): AppConnectionInfo {
+        val source = item ?: JSONObject()
+        return AppConnectionInfo(
+            id = source.optInt("id", 0),
+            deviceCode = source.optString("device_code"),
+            deviceName = source.optString("device_name"),
+            deviceBrand = source.optString("device_brand"),
+            deviceModel = source.optString("device_model"),
+            connectionType = source.optString("connection_type").ifBlank { "lan" },
+            cloudUserId = source.optInt("cloud_user_id", 0),
+            tokenExpiresAt = source.firstLong("token_expires_at", "tokenExpiresAt") ?: 0L,
+        )
     }
 
     /** GET /api/auth/me — cheap check that a stored token is still valid. */
@@ -1578,21 +1663,13 @@ class HermesApi(
             fields.forEach { (name, value) -> addFormDataPart(name, value) }
             addFormDataPart(field, filename, bytes.toRequestBody(mime.toMediaType()))
         }.build()
-        val builder = Request.Builder().url(url(path)).post(body)
-        if (token.isNotBlank()) builder.header("Authorization", "Bearer $token")
-        if (!profile.isNullOrBlank()) builder.header("X-Hermes-Profile", profile)
-        builder.header("Accept", "application/json")
-
-        client.newCall(builder.build()).execute().use { response ->
-            val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                val detail = errorDetail(text)
-                throw HermesException(
-                    if (detail.isNullOrBlank()) "HTTP ${response.code}" else "HTTP ${response.code}: $detail",
-                    statusCode = response.code,
-                )
-            }
-            return runCatching { JSONObject(text) }.getOrElse { JSONObject() }
+        // The body is byte-backed, so it can be replayed after a token refresh.
+        return execute {
+            val builder = Request.Builder().url(url(path)).post(body)
+            if (token.isNotBlank()) builder.header("Authorization", "Bearer $token")
+            if (!profile.isNullOrBlank()) builder.header("X-Hermes-Profile", profile)
+            builder.header("Accept", "application/json")
+            builder.build()
         }
     }
 
@@ -1863,6 +1940,12 @@ class HermesApi(
         }
     }.getOrNull()
 
+    /** Machine-readable `code` some Studio errors carry next to `error`. */
+    private fun errorCode(text: String): String? = runCatching {
+        val root = JSONObject(text)
+        firstNonBlank(root, "code") ?: (root.opt("error") as? JSONObject)?.let { firstNonBlank(it, "code") }
+    }.getOrNull()
+
     private fun optionalCount(source: JSONObject, key: String, arrayKey: String): Int? {
         if (source.has(key) && !source.isNull(key)) return source.optInt(key)
         return source.optJSONArray(arrayKey)?.length()
@@ -1877,7 +1960,38 @@ class HermesApi(
     }
 }
 
-class HermesException(message: String, val statusCode: Int? = null) : Exception(message)
+class HermesException(
+    message: String,
+    val statusCode: Int? = null,
+    /** Studio's machine-readable error code when the body carried one, e.g. `no_speech_detected`. */
+    val code: String? = null,
+) : Exception(message)
+
+data class AppConnectionInfo(
+    val id: Int,
+    val deviceCode: String,
+    val deviceName: String,
+    val deviceBrand: String,
+    val deviceModel: String,
+    val connectionType: String,
+    val cloudUserId: Int,
+    /** Epoch seconds. */
+    val tokenExpiresAt: Long,
+)
+
+data class AppLoginResult(
+    val token: String,
+    val userId: Int,
+    val profiles: List<String>,
+    val connection: AppConnectionInfo,
+)
+
+data class AppTokenRefresh(
+    val token: String,
+    /** Epoch seconds. */
+    val expiresAt: Long,
+    val connection: AppConnectionInfo,
+)
 
 data class CronJob(
     val id: String,

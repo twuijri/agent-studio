@@ -3,6 +3,7 @@ package us.i3u.hermesstudio
 import android.app.Application
 import android.app.DownloadManager
 import android.net.Uri
+import android.os.Build
 import android.media.MediaPlayer
 import android.os.Environment
 import android.webkit.MimeTypeMap
@@ -40,6 +41,8 @@ private data class SessionBootstrap(
     val user: CurrentUser,
     val profiles: List<Profile>,
     val sessions: List<SessionSummary>,
+    /** A non-fatal problem met while restoring, shown as a notice once signed in. */
+    val warning: String? = null,
 )
 
 private data class AccountSettingsData(
@@ -300,6 +303,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         // The cached mark is on disk, so the launch screen can show it at once.
         viewModelScope.launch { AppLogo.load(app) }
+        api.onUnauthorized = ::refreshAppTokenForRetry
         if (store.isConfigured) restoreSession()
     }
 
@@ -313,10 +317,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             api.update(store.baseUrl, store.token)
             chat.update(store.baseUrl, store.token)
             group.update(store.baseUrl, store.token)
+            val warning = refreshAppTokenIfDue()
             val user = api.currentUser()
-            SessionBootstrap(user, api.profiles(), api.sessions(null))
+            SessionBootstrap(user, api.profiles(), api.sessions(null), warning)
         },
-        onSuccess = { (user, profiles, sessions) ->
+        onSuccess = { (user, profiles, sessions, warning) ->
             _state.update {
                 it.copy(
                     screen = Screen.Chats,
@@ -326,6 +331,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     activeProfile = pickProfile(profiles),
                     sessions = sessions,
                     error = null,
+                    notice = warning,
                 )
             }
             syncBranding()
@@ -374,29 +380,149 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 api.update(normalized, "")
                 val token = api.login(username.trim(), password)
                 store.baseUrl = normalized
-                store.token = token
+                // A password token has no App expiry, so it is never refreshed.
+                store.saveAppToken(token, expiresAt = 0L, connectionId = 0)
                 api.update(normalized, token)
                 chat.update(normalized, token)
                 group.update(normalized, token)
                 val user = api.currentUser()
                 SessionBootstrap(user, api.profiles(), api.sessions(null))
             },
-            onSuccess = { (user, profiles, sessions) ->
-                _state.update {
-                    it.copy(
-                        screen = Screen.Chats,
-                        baseUrl = normalized,
-                        account = user.username,
-                        currentUser = user,
-                        profiles = profiles,
-                        activeProfile = pickProfile(profiles),
-                        sessions = sessions,
-                        error = null,
-                    )
-                }
-                syncBranding()
-            },
+            onSuccess = { bootstrap -> enterSignedIn(normalized, bootstrap) },
         )
+    }
+
+    /**
+     * Signs in with the JSON payload of the QR code Core Hub shows under
+     * Device connections → App → Direct connection.
+     */
+    fun loginWithQr(raw: String) {
+        val payload = AppConnectionPayload.parse(raw)
+        if (payload == null) {
+            _state.update { it.copy(error = str(R.string.error_qr_invalid)) }
+            return
+        }
+        if (payload.isExpired()) {
+            _state.update { it.copy(error = str(R.string.error_qr_expired)) }
+            return
+        }
+        val app = getApplication<Application>()
+        launchWork(
+            work = {
+                api.update(payload.backendUrl, "")
+                val result = try {
+                    api.appLogin(
+                        authorizationCode = payload.authorizationCode,
+                        deviceCode = store.deviceCode,
+                        deviceName = deviceDisplayName(app),
+                        deviceBrand = Build.BRAND.orEmpty(),
+                        deviceModel = Build.MODEL.orEmpty(),
+                    )
+                } catch (failure: HermesException) {
+                    throw HermesException(appLoginMessage(failure), failure.statusCode, failure.code)
+                }
+                store.baseUrl = payload.backendUrl
+                store.saveAppToken(result.token, result.connection.tokenExpiresAt, result.connection.id)
+                api.update(payload.backendUrl, result.token)
+                chat.update(payload.backendUrl, result.token)
+                group.update(payload.backendUrl, result.token)
+                val user = api.currentUser()
+                SessionBootstrap(user, api.profiles(), api.sessions(null))
+            },
+            onSuccess = { bootstrap -> enterSignedIn(payload.backendUrl, bootstrap) },
+        )
+    }
+
+    /** Camera permission was declined, so the QR path cannot start. */
+    fun reportCameraDenied() = _state.update { it.copy(error = str(R.string.error_camera_permission)) }
+
+    private fun enterSignedIn(baseUrl: String, bootstrap: SessionBootstrap) {
+        val (user, profiles, sessions, warning) = bootstrap
+        _state.update {
+            it.copy(
+                screen = Screen.Chats,
+                baseUrl = baseUrl,
+                account = user.username,
+                currentUser = user,
+                profiles = profiles,
+                activeProfile = pickProfile(profiles),
+                sessions = sessions,
+                error = null,
+                notice = warning,
+            )
+        }
+        syncBranding()
+    }
+
+    /** The server's own words are in English; these are the messages the user sees. */
+    private fun appLoginMessage(failure: HermesException): String = when (failure.statusCode) {
+        400 -> str(R.string.error_app_login_fields)
+        401 -> str(R.string.error_app_login_invalid_code)
+        403 -> str(R.string.error_app_login_disabled)
+        409 -> str(R.string.error_app_login_used)
+        410 -> str(R.string.error_app_login_expired)
+        else -> failure.readableMessage(localized)
+    }
+
+    private fun deviceDisplayName(app: Application): String {
+        val named = runCatching {
+            android.provider.Settings.Global.getString(app.contentResolver, android.provider.Settings.Global.DEVICE_NAME)
+        }.getOrNull()
+        return named?.trim()?.takeIf { it.isNotBlank() } ?: Build.MODEL.orEmpty().ifBlank { "Android" }
+    }
+
+    // ── App token refresh ─────────────────────────────────────────────────
+
+    /**
+     * Refreshes on launch when the token has under a week left or was last
+     * refreshed more than a day ago. Returns a warning to show when the server
+     * declined for a reason other than revocation; a 401 ends the session.
+     */
+    private fun refreshAppTokenIfDue(): String? {
+        if (!store.hasAppToken) return null
+        if (!AppTokenPolicy.shouldRefresh(store.tokenExpiresAt, store.tokenRefreshedAt)) return null
+        return try {
+            persistRefreshedToken(api.appRefresh())
+            null
+        } catch (failure: HermesException) {
+            if (failure.statusCode == 401) throw HermesException(str(R.string.error_token_revoked), 401, failure.code)
+            str(R.string.notice_token_refresh_failed, failure.readableMessage(localized))
+        } catch (failure: java.io.IOException) {
+            str(R.string.notice_token_refresh_failed, failure.readableMessage(localized))
+        }
+    }
+
+    /**
+     * Called by [HermesApi] on the request thread when a call returns 401.
+     * Returns the new token to retry with, or null so the 401 is reported.
+     */
+    private fun refreshAppTokenForRetry(): String? {
+        if (!store.hasAppToken) return null
+        return try {
+            persistRefreshedToken(api.appRefresh()).token
+        } catch (failure: HermesException) {
+            if (failure.statusCode == 401) signOutRevoked()
+            null
+        } catch (failure: java.io.IOException) {
+            // The original 401 is reported to the caller; nothing is hidden.
+            null
+        }
+    }
+
+    private fun persistRefreshedToken(refreshed: AppTokenRefresh): AppTokenRefresh {
+        store.saveAppToken(refreshed.token, refreshed.expiresAt, refreshed.connection.id.takeIf { it > 0 } ?: store.appConnectionId)
+        api.update(store.baseUrl, refreshed.token)
+        chat.update(store.baseUrl, refreshed.token)
+        group.update(store.baseUrl, refreshed.token)
+        return refreshed
+    }
+
+    /** The server no longer accepts this device's token: back to the login screen, saying why. */
+    private fun signOutRevoked() {
+        viewModelScope.launch {
+            signOut()
+            _state.update { it.copy(error = str(R.string.error_token_revoked)) }
+        }
     }
 
     /** Pulls the Studio logo from the connected server for the launch screen. */
