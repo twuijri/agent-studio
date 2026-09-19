@@ -132,6 +132,97 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  # Signed iOS build uploaded to TestFlight. Runs only when the Apple secrets
+  # exist (IOS_CSC_LINK/IOS_CSC_KEY_PASSWORD, APPLE_TEAM_ID, ASC_API_KEY_P8/ID/
+  # ISSUER_ID); otherwise it is skipped with a notice. Signing is automatic via
+  # the App Store Connect API key (-allowProvisioningUpdates), so no manual
+  # provisioning profiles are needed.
+  testflight:
+    needs: [version, ios]
+    if: needs.ios.result == 'success'
+    runs-on: macos-latest
+    env:
+      MARKETING_VERSION: ${{ needs.version.outputs.name }}
+      CURRENT_PROJECT_VERSION: ${{ needs.version.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the Apple secrets
+        id: secrets
+        env:
+          IOS_CSC_LINK: ${{ secrets.IOS_CSC_LINK }}
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$IOS_CSC_LINK" ] || [ -z "$ASC_API_KEY_P8" ] || [ -z "$ASC_API_KEY_ID" ] || [ -z "$ASC_API_ISSUER_ID" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "::notice::TestFlight upload skipped: IOS_CSC_LINK, ASC_API_KEY_P8, ASC_API_KEY_ID, ASC_API_ISSUER_ID and APPLE_TEAM_ID are all required."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Import the distribution certificate and API key
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          IOS_CSC_LINK: ${{ secrets.IOS_CSC_LINK }}
+          IOS_CSC_KEY_PASSWORD: ${{ secrets.IOS_CSC_KEY_PASSWORD }}
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+        run: |
+          set -e
+          KEYCHAIN="$RUNNER_TEMP/corehub-ios.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
+          echo "$IOS_CSC_LINK" | base64 -d > "$RUNNER_TEMP/dist.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/dist.p12" -P "$IOS_CSC_KEY_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$KEYCHAIN" | sed 's/[0-9A-F]\{40\}/<hash>/' | head -3
+          mkdir -p "$HOME/private_keys"
+          printf '%s\n' "$ASC_API_KEY_P8" > "$HOME/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
+          chmod 600 "$HOME/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
+          echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+      - name: Archive, sign and upload to TestFlight
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          KEY_PATH="$HOME/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
+          ARCHIVE="$RUNNER_TEMP/CoreHubMobile-signed.xcarchive"
+          xcodebuild -project clients/ios/HermesStudio.xcodeproj -scheme HermesStudio -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" \
+            -allowProvisioningUpdates -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_API_KEY_ID" -authenticationKeyIssuerID "$ASC_API_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="$MARKETING_VERSION" CURRENT_PROJECT_VERSION="$CURRENT_PROJECT_VERSION" \
+            archive > "$RUNNER_TEMP/archive.log" 2>&1 || { grep -E "error:|BUILD FAILED" "$RUNNER_TEMP/archive.log" | sort -u | head -40; tail -40 "$RUNNER_TEMP/archive.log"; exit 1; }
+          cat > "$RUNNER_TEMP/export.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist "$RUNNER_TEMP/export.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_API_KEY_ID" -authenticationKeyIssuerID "$ASC_API_ISSUER_ID" \
+            > "$RUNNER_TEMP/export.log" 2>&1 || { grep -E "error:|Error" "$RUNNER_TEMP/export.log" | sort -u | head -40; tail -40 "$RUNNER_TEMP/export.log"; exit 1; }
+          grep -E "EXPORT SUCCEEDED|Upload|uploaded" "$RUNNER_TEMP/export.log" | tail -3
+          echo "Uploaded Core Hub Mobile $MARKETING_VERSION (build $CURRENT_PROJECT_VERSION) to TestFlight" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove the signing keychain and API key
+        if: always()
+        run: |
+          [ -n "$KEYCHAIN" ] && security delete-keychain "$KEYCHAIN" || true
+          rm -rf "$HOME/private_keys" "$RUNNER_TEMP/dist.p12"
+
   publish:
     needs: [version, android, ios]
     if: always() && needs.android.result == 'success'
