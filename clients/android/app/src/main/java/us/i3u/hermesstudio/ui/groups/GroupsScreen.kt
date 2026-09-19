@@ -258,7 +258,7 @@ fun RoomAgentAvatar(agent: RoomAgent, size: Dp = CoreHubTokens.Metrics.agentAvat
 
 /** Name the room, pick its seats (presets or profiles) and an optional workspace. */
 @Composable
-private fun NewRoomDialog(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit) {
+internal fun NewRoomDialog(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit) {
     val palette = CoreHub.palette
     var name by remember { mutableStateOf("") }
     var workspace by remember { mutableStateOf("") }

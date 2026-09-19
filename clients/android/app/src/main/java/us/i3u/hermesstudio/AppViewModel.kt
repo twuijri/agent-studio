@@ -136,6 +136,13 @@ data class PendingRunAction(
 data class UiState(
     val screen: Screen = Screen.Login,
     val tab: Tab = Tab.Chat,
+    /**
+     * The off-canvas drawer, held here rather than inside `HomeShell`: every
+     * section builds its own shell, so a shell-local flag was reset the moment
+     * the conversation switch changed the screen and the drawer slid shut.
+     * iOS keeps the same flag on the store (`AppStore.drawerOpen`).
+     */
+    val drawerOpen: Boolean = false,
     val baseUrl: String = "",
     val busy: Boolean = false,
     val error: String? = null,
@@ -770,6 +777,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ── lists ─────────────────────────────────────────────────────────────
 
     /** The drawer's conversation switch: Chat, Group Chat, Workflow, History. */
+    /** Opens or closes the off-canvas drawer (iOS: `AppStore.drawerOpen`). */
+    fun setDrawerOpen(open: Boolean) {
+        if (_state.value.drawerOpen == open) return
+        _state.update { it.copy(drawerOpen = open) }
+    }
+
     fun showTab(tab: Tab) {
         if (_state.value.screen == Screen.Conversation && tab != Tab.Chat) cancelActiveRun(abort = false)
         if (tab != Tab.Workflow) stopListeningToWorkflows()

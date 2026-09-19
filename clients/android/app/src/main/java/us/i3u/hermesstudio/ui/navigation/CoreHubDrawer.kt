@@ -11,7 +11,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +31,9 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.unit.sp
@@ -67,13 +72,19 @@ import us.i3u.hermesstudio.ConfirmDialog
 import us.i3u.hermesstudio.LanguageAction
 import us.i3u.hermesstudio.ProfileAvatar
 import us.i3u.hermesstudio.R
+import us.i3u.hermesstudio.RoomInfo
 import us.i3u.hermesstudio.Screen
 import us.i3u.hermesstudio.SettingsGroup
+import us.i3u.hermesstudio.StudioWorkflow
 import us.i3u.hermesstudio.Tab
+import us.i3u.hermesstudio.TextPromptDialog
 import us.i3u.hermesstudio.UiState
 import us.i3u.hermesstudio.isSuperAdmin
 import us.i3u.hermesstudio.ui.chat.STUDIO_REPOSITORY_URL
+import us.i3u.hermesstudio.ui.groups.AgentAvatarStack
+import us.i3u.hermesstudio.ui.groups.NewRoomDialog
 import us.i3u.hermesstudio.ui.sessions.SessionListPane
+import us.i3u.hermesstudio.ui.sessions.formatStamp
 import us.i3u.hermesstudio.ui.theme.CoreHub
 import us.i3u.hermesstudio.ui.theme.CoreHubIcons
 import us.i3u.hermesstudio.ui.theme.CoreHubTextStyles
@@ -185,33 +196,45 @@ fun CoreHubDrawerContent(state: UiState, viewModel: AppViewModel, onClose: () ->
                 IconButton(onClick = onClose) { Icon(CoreHubIcons.Close, contentDescription = stringResource(R.string.action_dismiss), tint = palette.textSecondary) }
             }
 
-            // Rail, switch and session list share one scroll so a short screen
-            // (landscape) still reaches the sessions; the footer stays put.
-            SessionListPane(
-                state = state,
-                viewModel = viewModel,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                header = {
-                    item(key = "rail") {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            RailItem(CoreHubIcons.NewChat, stringResource(R.string.action_new_chat)) { go { viewModel.startNewConversation() } }
-                            RailItem(CoreHubIcons.Search, stringResource(R.string.nav_search), selected = state.screen == Screen.History) { go { viewModel.showTab(Tab.History) } }
-                            RailItem(CoreHubIcons.DeviceConnections, stringResource(R.string.nav_device_connections), selected = state.screen == Screen.Connections) { go { viewModel.openConnections() } }
-                            if (state.isSuperAdmin) {
-                                RailItem(CoreHubIcons.AgentManager, stringResource(R.string.nav_agent_manager), selected = state.screen == Screen.AgentHub) { go { viewModel.openAgentManager() } }
-                            }
-                            RailItem(CoreHubIcons.Models, stringResource(R.string.nav_models), selected = state.openGroup == SettingsGroup.Models && state.screen == Screen.SettingsGroup) { go { viewModel.openSettingsGroup(SettingsGroup.Models) } }
+            // Rail, switch and the list of the selected segment share one
+            // scroll so a short screen (landscape) still reaches the list; the
+            // footer stays put.
+            val drawerHeader: LazyListScope.() -> Unit = {
+                item(key = "rail") {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        RailItem(CoreHubIcons.NewChat, stringResource(R.string.action_new_chat)) { go { viewModel.startNewConversation() } }
+                        RailItem(CoreHubIcons.Search, stringResource(R.string.nav_search), selected = state.screen == Screen.History) { go { viewModel.showTab(Tab.History) } }
+                        RailItem(CoreHubIcons.DeviceConnections, stringResource(R.string.nav_device_connections), selected = state.screen == Screen.Connections) { go { viewModel.openConnections() } }
+                        if (state.isSuperAdmin) {
+                            RailItem(CoreHubIcons.AgentManager, stringResource(R.string.nav_agent_manager), selected = state.screen == Screen.AgentHub) { go { viewModel.openAgentManager() } }
                         }
+                        RailItem(CoreHubIcons.Models, stringResource(R.string.nav_models), selected = state.openGroup == SettingsGroup.Models && state.screen == Screen.SettingsGroup) { go { viewModel.openSettingsGroup(SettingsGroup.Models) } }
                     }
-                    item(key = "switch") {
-                        ConversationSwitch(
-                            selected = state.tab,
-                            modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 10.dp, bottom = 8.dp),
-                        ) { tab -> go { viewModel.showTab(tab) } }
+                }
+                item(key = "switch") {
+                    ConversationSwitch(
+                        selected = state.tab,
+                        modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 10.dp, bottom = 8.dp),
+                    ) { tab ->
+                        // iOS `AppStore.switchMode`: the segment picks what the
+                        // list underneath shows and the drawer stays open;
+                        // only History, a full page of its own, closes it.
+                        if (tab == Tab.History) go { viewModel.showTab(tab) } else viewModel.showTab(tab)
                     }
-                },
-                onOpen = { session -> go { viewModel.showTab(Tab.Chat); viewModel.openSession(session) } },
-            )
+                }
+            }
+            val listModifier = Modifier.weight(1f).fillMaxWidth()
+            when (state.tab) {
+                Tab.Group -> DrawerRoomList(state, viewModel, listModifier, drawerHeader, onOpen = { room -> go { viewModel.openRoom(room) } })
+                Tab.Workflow -> DrawerWorkflowList(state, viewModel, listModifier, drawerHeader, onOpen = { workflow -> go { viewModel.openWorkflow(workflow) } })
+                Tab.Chat, Tab.History -> SessionListPane(
+                    state = state,
+                    viewModel = viewModel,
+                    modifier = listModifier,
+                    header = drawerHeader,
+                    onOpen = { session -> go { viewModel.showTab(Tab.Chat); viewModel.openSession(session) } },
+                )
+            }
 
             HorizontalDivider(color = palette.borderLight)
             DrawerFooter(state, viewModel, onSignOut = { confirmSignOut = true }, onNavigate = ::go)
@@ -313,6 +336,174 @@ fun ConversationSwitch(selected: Tab, modifier: Modifier = Modifier, onSelect: (
                 )
             }
         }
+    }
+}
+
+/**
+ * The Group Chat segment's list, in the drawer itself (iOS `DrawerRoomList`):
+ * the room rows for the current account, under a "GROUP CHAT n" header that
+ * carries "New room" and "Join by code".
+ */
+@Composable
+private fun DrawerRoomList(
+    state: UiState,
+    viewModel: AppViewModel,
+    modifier: Modifier,
+    header: LazyListScope.() -> Unit,
+    onOpen: (RoomInfo) -> Unit,
+) {
+    val palette = CoreHub.palette
+    var creating by remember { mutableStateOf(false) }
+    var joining by remember { mutableStateOf(false) }
+    if (creating) NewRoomDialog(state, viewModel) { creating = false }
+    if (joining) {
+        TextPromptDialog(
+            title = stringResource(R.string.room_join_title),
+            initial = "",
+            hint = stringResource(R.string.room_join_hint),
+            action = stringResource(R.string.room_join),
+            onConfirm = { viewModel.joinRoomByCode(it); joining = false },
+            onDismiss = { joining = false },
+        )
+    }
+    LazyColumn(modifier = modifier, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+        header()
+        item(key = "rooms-header") {
+            DrawerSectionHeader(stringResource(R.string.segment_group_chat), state.rooms.size) {
+                DrawerSectionAction(CoreHubIcons.NewChat, stringResource(R.string.groups_new)) { creating = true }
+                DrawerSectionAction(CoreHubIcons.Link, stringResource(R.string.room_join_title)) { joining = true }
+            }
+        }
+        if (state.loadingRooms && state.rooms.isEmpty()) {
+            item { Text(stringResource(R.string.intro_restoring), style = CoreHubTextStyles.meta, color = palette.textMuted, modifier = Modifier.padding(10.dp)) }
+        }
+        if (!state.loadingRooms && state.rooms.isEmpty()) {
+            item { Text(stringResource(R.string.groups_empty), style = CoreHubTextStyles.meta, color = palette.textMuted, modifier = Modifier.padding(10.dp)) }
+        }
+        items(state.rooms, key = { it.id }) { room ->
+            DrawerRoomRow(room, selected = state.openRoom?.room?.id == room.id) { onOpen(room) }
+        }
+    }
+}
+
+/** Room row: avatar stack, name … time, then "n agents  n members". */
+@Composable
+private fun DrawerRoomRow(room: RoomInfo, selected: Boolean, onClick: () -> Unit) {
+    val palette = CoreHub.palette
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(CoreHubTokens.Radius.small))
+            .background(if (selected) palette.selected else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = CoreHubTokens.Metrics.sessionRowPaddingH, vertical = CoreHubTokens.Metrics.sessionRowPaddingV),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        AgentAvatarStack(room.agents, max = 3)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    room.name,
+                    style = CoreHubTextStyles.sessionTitle.copy(
+                        textDirection = TextDirection.Content,
+                        fontWeight = if (selected) CoreHubTokens.Type.selectedWeight else null,
+                    ),
+                    color = palette.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Text(
+                    formatStamp(room.lastActiveAt?.toString() ?: room.createdAt?.toString()),
+                    style = CoreHubTextStyles.meta,
+                    color = palette.textMuted,
+                    maxLines = 1,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.room_agent_count, room.agents.size), style = CoreHubTextStyles.meta, color = palette.textMuted, maxLines = 1)
+                Text(stringResource(R.string.room_member_count, room.memberCount), style = CoreHubTextStyles.meta, color = palette.textMuted, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** The Workflow segment's list (iOS `DrawerWorkflowList`): icon, name, node count. */
+@Composable
+private fun DrawerWorkflowList(
+    state: UiState,
+    viewModel: AppViewModel,
+    modifier: Modifier,
+    header: LazyListScope.() -> Unit,
+    onOpen: (StudioWorkflow) -> Unit,
+) {
+    val palette = CoreHub.palette
+    LazyColumn(modifier = modifier, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+        header()
+        item(key = "workflows-header") { DrawerSectionHeader(stringResource(R.string.segment_workflow), state.workflows.size) }
+        if (state.loadingWorkflows && state.workflows.isEmpty()) {
+            item { Text(stringResource(R.string.intro_restoring), style = CoreHubTextStyles.meta, color = palette.textMuted, modifier = Modifier.padding(10.dp)) }
+        }
+        if (!state.loadingWorkflows && state.workflows.isEmpty()) {
+            item { Text(stringResource(R.string.workflows_empty), style = CoreHubTextStyles.meta, color = palette.textMuted, modifier = Modifier.padding(10.dp)) }
+        }
+        items(state.workflows, key = { it.id }) { workflow ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(CoreHubTokens.Radius.small))
+                    .background(if (state.openWorkflow?.id == workflow.id) palette.selected else Color.Transparent)
+                    .clickable { onOpen(workflow) }
+                    .padding(horizontal = CoreHubTokens.Metrics.sessionRowPaddingH, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(CoreHubIcons.Workflow, contentDescription = null, tint = palette.textSecondary, modifier = Modifier.size(16.dp))
+                Text(
+                    workflow.name,
+                    style = CoreHubTextStyles.sessionTitle.copy(textDirection = TextDirection.Content),
+                    color = palette.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(workflow.nodeCount.toString(), style = CoreHubTextStyles.meta, color = palette.textMuted)
+            }
+        }
+    }
+}
+
+/**
+ * The 10/600 uppercase section header the whole drawer shares (iOS
+ * `GroupHeaderLabel`): title, muted count, then the section's own actions.
+ */
+@Composable
+private fun DrawerSectionHeader(title: String, count: Int, actions: @Composable RowScope.() -> Unit = {}) {
+    val palette = CoreHub.palette
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 2.dp, top = 6.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            title.uppercase(),
+            style = CoreHubTextStyles.groupHeader,
+            color = palette.textSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Text(count.toString(), style = CoreHubTextStyles.groupHeader.copy(fontWeight = null), color = palette.textMuted)
+        Spacer(Modifier.weight(1f))
+        actions()
+    }
+}
+
+@Composable
+private fun DrawerSectionAction(icon: ImageVector, label: String, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.size(24.dp)) {
+        Icon(icon, contentDescription = label, tint = CoreHub.palette.textMuted, modifier = Modifier.size(14.dp))
     }
 }
 

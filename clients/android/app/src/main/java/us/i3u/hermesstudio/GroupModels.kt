@@ -29,6 +29,8 @@ data class RoomInfo(
     val createdAt: Long?,
     /** Avatar-only agent summaries carried by the room list. */
     val agents: List<RoomAgent> = emptyList(),
+    /** Human members, as the room list reports them (iOS `Room.memberCount`). */
+    val memberCount: Int = 0,
 )
 
 /** `RoomAgent`: one agent seat in a room (a `gc_room_agents` row). */
@@ -229,6 +231,7 @@ object GroupJson {
             lastActiveAt = item.optLong("lastActiveAt", 0L).takeIf { it > 0 },
             createdAt = item.optLong("createdAt", 0L).takeIf { it > 0 },
             agents = agents(item.optJSONArray("agents")),
+            memberCount = item.optInt("memberCount", item.optInt("member_count", objects(item.optJSONArray("members")).size)),
         )
     }
 

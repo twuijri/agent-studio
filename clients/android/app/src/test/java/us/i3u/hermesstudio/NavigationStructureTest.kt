@@ -55,14 +55,17 @@ class NavigationStructureTest {
         assertTrue("Agent Manager is super-admin only", Regex("""if \(state\.isSuperAdmin\) \{\s*RailItem\(CoreHubIcons\.AgentManager""").containsMatchIn(drawer))
         assertFalse("Computer apps is desktop-only and must not appear on phones", drawer.contains("ComputerApps"))
 
-        // The rail and the switch are the header items of the session list's scroll,
-        // so on screen the order is rail → switch → sessions → footer.
+        // The rail and the switch are the header items of the selected
+        // segment's own scroll, so on screen the order is rail → switch →
+        // list → footer, whichever list the segment is showing.
+        val headerAt = drawer.indexOf("val drawerHeader: LazyListScope.() -> Unit = {")
         val switchAt = drawer.indexOf("ConversationSwitch(")
-        val listAt = drawer.indexOf("SessionListPane(")
-        val headerAt = drawer.indexOf("header = {", listAt)
         val footerAt = drawer.indexOf("DrawerFooter(state")
-        assertTrue("rail and switch live in the session list header", listAt < headerAt && headerAt < positions.first())
-        assertTrue("rail, then switch, then sessions, then footer", positions.last() < switchAt && switchAt < footerAt)
+        assertTrue("rail and switch live in one shared list header", headerAt in 0 until positions.first())
+        assertTrue("rail, then switch, then the list, then footer", positions.last() < switchAt && switchAt < footerAt)
+        listOf("SessionListPane(", "DrawerRoomList(", "DrawerWorkflowList(").forEach { list ->
+            assertTrue("every segment's list takes the same header", drawer.contains("$list") && drawer.indexOf("drawerHeader", switchAt) > switchAt)
+        }
 
         listOf(
             "viewModel.selectProfile(profile.name)",
