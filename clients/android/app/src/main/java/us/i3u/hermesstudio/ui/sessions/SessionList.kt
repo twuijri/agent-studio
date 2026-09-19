@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,6 +83,8 @@ fun SessionListPane(
     showSearch: Boolean = false,
     focusSearch: Boolean = false,
     contentPadding: PaddingValues = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+    /** Items rendered above the groups inside the same scroll (the drawer's rail and switch). */
+    header: (LazyListScope.() -> Unit)? = null,
     onOpen: (SessionSummary) -> Unit,
 ) {
     val palette = CoreHub.palette
@@ -179,6 +182,7 @@ fun SessionListPane(
     }
 
     LazyColumn(modifier = modifier, contentPadding = contentPadding) {
+        header?.invoke(this)
         if (showSearch) {
             item {
                 OutlinedTextField(

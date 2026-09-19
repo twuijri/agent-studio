@@ -599,7 +599,7 @@ internal fun MessageBubble(
     BoxWithConstraints(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
         val maxBubble = maxWidth * (if (line.fromUser) 0.75f else 0.80f)
         Row(
-            modifier = (if (wide) Modifier.fillMaxWidth() else Modifier).widthIn(max = if (wide) androidx.compose.ui.unit.Dp.Unspecified else maxBubble),
+            modifier = Modifier.widthIn(max = maxBubble).then(if (wide) Modifier.fillMaxWidth() else Modifier),
             verticalAlignment = if (wide) Alignment.Top else Alignment.Bottom,
         ) {
             // The agent's picture rides with its own replies, the way Studio

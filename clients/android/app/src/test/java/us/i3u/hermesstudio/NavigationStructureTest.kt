@@ -52,13 +52,17 @@ class NavigationStructureTest {
         val positions = rail.map { icon -> drawer.indexOf("RailItem($icon") }
         positions.forEachIndexed { index, position -> assertTrue("rail is missing ${rail[index]}", position >= 0) }
         assertEquals("rail order must be New Chat, Search, Device connections, Agent Manager, Models", positions, positions.sorted())
-        assertTrue("Agent Manager is super-admin only", drawer.contains("if (state.isSuperAdmin) {\n                    RailItem(CoreHubIcons.AgentManager"))
+        assertTrue("Agent Manager is super-admin only", Regex("""if \(state\.isSuperAdmin\) \{\s*RailItem\(CoreHubIcons\.AgentManager""").containsMatchIn(drawer))
         assertFalse("Computer apps is desktop-only and must not appear on phones", drawer.contains("ComputerApps"))
 
+        // The rail and the switch are the header items of the session list's scroll,
+        // so on screen the order is rail → switch → sessions → footer.
         val switchAt = drawer.indexOf("ConversationSwitch(")
         val listAt = drawer.indexOf("SessionListPane(")
+        val headerAt = drawer.indexOf("header = {", listAt)
         val footerAt = drawer.indexOf("DrawerFooter(state")
-        assertTrue("rail, then switch, then session list, then footer", positions.last() < switchAt && switchAt < listAt && listAt < footerAt)
+        assertTrue("rail and switch live in the session list header", listAt < headerAt && headerAt < positions.first())
+        assertTrue("rail, then switch, then sessions, then footer", positions.last() < switchAt && switchAt < footerAt)
 
         listOf(
             "viewModel.selectProfile(profile.name)",
@@ -68,6 +72,7 @@ class NavigationStructureTest {
             "if (state.connected) R.string.connected else R.string.disconnected",
             "R.string.footer_version, state.serverVersion ?: BuildConfig.VERSION_NAME",
             "LanguageAction(state, viewModel)",
+            "viewModel.openSettings()",
         ).forEach { needle -> assertTrue("footer lost $needle", drawer.contains(needle)) }
         assertTrue("250 ms slide", drawer.contains("tween(CoreHubTokens.Metrics.drawerSlideMs)"))
         assertTrue("40 % scrim", drawer.contains("CoreHubTokens.Metrics.scrimAlpha"))

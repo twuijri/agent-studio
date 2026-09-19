@@ -25,6 +25,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -154,40 +157,56 @@ fun CoreHubDrawerContent(state: UiState, viewModel: AppViewModel, onClose: () ->
                 IconButton(onClick = onClose) { Icon(CoreHubIcons.Close, contentDescription = stringResource(R.string.action_dismiss), tint = palette.textSecondary) }
             }
 
-            Column(Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                RailItem(CoreHubIcons.NewChat, stringResource(R.string.action_new_chat)) { go { viewModel.startNewConversation() } }
-                RailItem(CoreHubIcons.Search, stringResource(R.string.nav_search), selected = state.screen == Screen.History) { go { viewModel.showTab(Tab.History) } }
-                RailItem(CoreHubIcons.DeviceConnections, stringResource(R.string.nav_device_connections), selected = state.screen == Screen.Connections) { go { viewModel.openConnections() } }
-                if (state.isSuperAdmin) {
-                    RailItem(CoreHubIcons.AgentManager, stringResource(R.string.nav_agent_manager), selected = state.screen == Screen.AgentHub) { go { viewModel.openAgentManager() } }
-                }
-                RailItem(CoreHubIcons.Models, stringResource(R.string.nav_models), selected = state.openGroup == SettingsGroup.Models && state.screen == Screen.SettingsGroup) { go { viewModel.openSettingsGroup(SettingsGroup.Models) } }
-            }
-
-            Spacer(Modifier.height(10.dp))
-            ConversationSwitch(
-                selected = state.tab,
-                modifier = Modifier.padding(horizontal = 12.dp),
-            ) { tab -> go { viewModel.showTab(tab) } }
-            Spacer(Modifier.height(6.dp))
-
+            // Rail, switch and session list share one scroll so a short screen
+            // (landscape) still reaches the sessions; the footer stays put.
             SessionListPane(
                 state = state,
                 viewModel = viewModel,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
+                header = {
+                    item(key = "rail") {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            RailItem(CoreHubIcons.NewChat, stringResource(R.string.action_new_chat)) { go { viewModel.startNewConversation() } }
+                            RailItem(CoreHubIcons.Search, stringResource(R.string.nav_search), selected = state.screen == Screen.History) { go { viewModel.showTab(Tab.History) } }
+                            RailItem(CoreHubIcons.DeviceConnections, stringResource(R.string.nav_device_connections), selected = state.screen == Screen.Connections) { go { viewModel.openConnections() } }
+                            if (state.isSuperAdmin) {
+                                RailItem(CoreHubIcons.AgentManager, stringResource(R.string.nav_agent_manager), selected = state.screen == Screen.AgentHub) { go { viewModel.openAgentManager() } }
+                            }
+                            RailItem(CoreHubIcons.Models, stringResource(R.string.nav_models), selected = state.openGroup == SettingsGroup.Models && state.screen == Screen.SettingsGroup) { go { viewModel.openSettingsGroup(SettingsGroup.Models) } }
+                        }
+                    }
+                    item(key = "switch") {
+                        ConversationSwitch(
+                            selected = state.tab,
+                            modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 10.dp, bottom = 8.dp),
+                        ) { tab -> go { viewModel.showTab(tab) } }
+                    }
+                },
                 onOpen = { session -> go { viewModel.showTab(Tab.Chat); viewModel.openSession(session) } },
             )
 
             HorizontalDivider(color = palette.borderLight)
             DrawerFooter(state, viewModel, onSignOut = { confirmSignOut = true }, onNavigate = ::go)
+            // Status dot · version · GitHub · language, on one compact line.
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 2.dp, bottom = 6.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 4.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                Box(Modifier.size(8.dp).background(if (state.connected) palette.success else palette.error, CircleShape))
+                Text(
+                    stringResource(if (state.connected) R.string.connected else R.string.disconnected),
+                    style = CoreHubTextStyles.meta,
+                    color = palette.textMuted,
+                    maxLines = 1,
+                )
+                Text("·", style = CoreHubTextStyles.meta, color = palette.textMuted)
                 Text(
                     stringResource(R.string.footer_version, state.serverVersion ?: BuildConfig.VERSION_NAME),
                     style = CoreHubTextStyles.meta.copy(textDirection = TextDirection.Ltr),
                     color = palette.textMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(
@@ -253,14 +272,16 @@ fun ConversationSwitch(selected: Tab, modifier: Modifier = Modifier, onSelect: (
                     .clickable { onSelect(tab) },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    stringResource(label),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = if (active) CoreHubTokens.Type.selectedWeight else FontWeight.Normal,
-                    color = if (active) palette.textPrimary else palette.textSecondary,
+                BasicText(
+                    text = stringResource(label),
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = if (active) CoreHubTokens.Type.selectedWeight else FontWeight.Normal,
+                        color = if (active) palette.textPrimary else palette.textSecondary,
+                    ),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 2.dp),
+                    softWrap = false,
+                    autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = CoreHubTokens.Type.navTab, stepSize = 0.5.sp),
+                    modifier = Modifier.padding(horizontal = 3.dp),
                 )
             }
         }
@@ -284,7 +305,9 @@ private fun DrawerFooter(
         ?: state.profiles.firstOrNull { it.name == activeProfile }?.model?.takeIf { it.isNotBlank() }
         ?: stringResource(R.string.sheet_model)
 
-    Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(Modifier.padding(horizontal = 8.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        // The gear that opens the settings drawer (the web's AppSidebar).
+        RailItem(CoreHubIcons.Settings, stringResource(R.string.settings_title), selected = state.screen == Screen.Settings) { onNavigate { viewModel.openSettings() } }
         Box {
             FooterRow(
                 leading = { ProfileAvatar(activeProfile, profileAvatar, size = 20.dp) },
@@ -356,18 +379,6 @@ private fun DrawerFooter(
                 )
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Box(Modifier.size(8.dp).background(if (state.connected) palette.success else palette.error, CircleShape))
-            Text(
-                stringResource(if (state.connected) R.string.connected else R.string.disconnected),
-                style = CoreHubTextStyles.meta,
-                color = palette.textMuted,
-            )
-        }
     }
 }
 
@@ -385,7 +396,7 @@ private fun FooterRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(CoreHubTokens.Radius.small))
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {

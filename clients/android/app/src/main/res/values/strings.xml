@@ -39,10 +39,10 @@
     <!-- First run: launch screen and walkthrough -->
     <string name="intro_restoring">Restoring your session…</string>
     <string name="intro_chat_title">Your agents, on your phone</string>
-    <string name="intro_chat_body">A native client for Hermes Studio. Read your conversations, keep talking to your agents, attach photos and files, and dictate with your voice.</string>
+    <string name="intro_chat_body">A native client for Core Hub. Read your conversations, keep talking to your agents, attach photos and files, and dictate with your voice.</string>
     <string name="intro_server_title">You bring the server</string>
-    <string name="intro_server_body">This app is only the front end. It needs a Hermes Studio server that you run and control — there is no hosted service behind it.</string>
-    <string name="intro_server_step_install">Install Hermes Studio on a machine or VPS you own</string>
+    <string name="intro_server_body">This app is only the front end. It needs a Core Hub server that you run and control — there is no hosted service behind it.</string>
+    <string name="intro_server_step_install">Install Core Hub on a machine or VPS you own</string>
     <string name="intro_server_step_https">Make it reachable over HTTPS, for example https://hermes.example.com</string>
     <string name="intro_server_step_return">Come back here with that address and your login</string>
     <string name="intro_privacy_title">Nothing leaves your server</string>
@@ -201,9 +201,9 @@
     <string name="update_downloading">Downloading update…</string>
     <string name="update_failed">Could not download the update</string>
     <string name="update_permission">Allow updates from Hermes Studio, then return and tap Update now again.</string>
-    <string name="settings_about_note">Unofficial community client for Hermes Studio. Generated profile pictures: avatars by Multiavatar.com.</string>
-    <string name="settings_phone_name">Hermes Studio Mobile</string>
-    <string name="settings_phone_github">Hermes Studio Mobile</string>
+    <string name="settings_about_note">Core Hub Mobile, the native client of the Core Hub fork of Hermes Studio. Generated profile pictures: avatars by Multiavatar.com.</string>
+    <string name="settings_phone_name">Core Hub Mobile</string>
+    <string name="settings_phone_github">Core Hub Mobile</string>
     <string name="settings_studio_github">Hermes Studio</string>
 
     <string name="action_rename">Rename</string>

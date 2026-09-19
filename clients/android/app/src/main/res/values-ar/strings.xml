@@ -38,10 +38,10 @@
     <!-- أول تشغيل: شاشة الإقلاع وجولة التعريف -->
     <string name="intro_restoring">جارٍ استعادة جلستك…</string>
     <string name="intro_chat_title">وكلاؤك في جوالك</string>
-    <string name="intro_chat_body">تطبيق أصلي لهرمز استديو. اقرأ محادثاتك، وأكمل الحديث مع وكلائك، وأرفق الصور والملفات، وأملِ رسائلك بصوتك.</string>
+    <string name="intro_chat_body">عميل أصلي لـ Core Hub. اقرأ محادثاتك، وواصل الحديث مع وكلائك، وأرفق الصور والملفات، وأملِ بصوتك.</string>
     <string name="intro_server_title">السيرفر منك أنت</string>
-    <string name="intro_server_body">هذا التطبيق واجهة فقط. يحتاج سيرفر هرمز استديو تشغّله أنت وتتحكم فيه — ولا توجد خدمة مستضافة خلفه.</string>
-    <string name="intro_server_step_install">ثبّت هرمز استديو على جهاز أو خادم افتراضي تملكه</string>
+    <string name="intro_server_body">هذا التطبيق واجهة فقط. يحتاج إلى سيرفر Core Hub تشغّله وتتحكم فيه بنفسك — لا توجد خدمة مستضافة خلفه.</string>
+    <string name="intro_server_step_install">ثبّت Core Hub على جهاز أو خادم افتراضي تملكه</string>
     <string name="intro_server_step_https">اجعله متاحًا عبر HTTPS، مثل https://hermes.example.com</string>
     <string name="intro_server_step_return">ارجع هنا بذلك العنوان وبيانات دخولك</string>
     <string name="intro_privacy_title">لا شيء يغادر سيرفرك</string>
@@ -200,9 +200,9 @@
     <string name="update_downloading">جارٍ تنزيل التحديث…</string>
     <string name="update_failed">تعذّر تنزيل التحديث</string>
     <string name="update_permission">اسمح بالتحديث من Hermes Studio، ثم ارجع واضغط «حدّث الآن» مرة أخرى.</string>
-    <string name="settings_about_note">تطبيق مجتمعي غير رسمي لهرمز استديو. الصور الرمزية المولّدة من Multiavatar.com.</string>
-    <string name="settings_phone_name">هرمز استديو موبايل</string>
-    <string name="settings_phone_github">هرمز استديو موبايل</string>
+    <string name="settings_about_note">Core Hub Mobile، العميل الأصلي لنسخة Core Hub المشتقة من Hermes Studio. الصور الشخصية المولّدة: Multiavatar.com.</string>
+    <string name="settings_phone_name">Core Hub Mobile</string>
+    <string name="settings_phone_github">Core Hub Mobile</string>
     <string name="settings_studio_github">هرمز استديو</string>
 
     <string name="action_rename">إعادة تسمية</string>
