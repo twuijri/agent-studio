@@ -107,7 +107,9 @@ jobs:
               echo "::group::xcodebuild errors"; grep -E "error:|BUILD FAILED" "$RUNNER_TEMP/xcodebuild-build.log" | sort -u | head -80; echo "::endgroup::"
               tail -60 "$RUNNER_TEMP/xcodebuild-build.log"; exit 1; }
           tail -5 "$RUNNER_TEMP/xcodebuild-build.log"
-          dest=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [0-9A-Za-z ]+ \(' | sed 's/ ($//')
+          # `grep -m1` closes the pipe early, so guard the assignment: under the
+          # runner's `bash -e` a SIGPIPE here would kill the step silently.
+          dest=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [0-9A-Za-z ]+ \(' | sed 's/ ($//') || true
           xcodebuild -project clients/ios/HermesStudio.xcodeproj -scheme HermesStudio \
             -sdk iphonesimulator -destination "platform=iOS Simulator,name=${dest:-iPhone 16}" \
             CODE_SIGNING_ALLOWED=NO -resultBundlePath "$RUNNER_TEMP/tests.xcresult" test > "$RUNNER_TEMP/xcodebuild-test.log" 2>&1 || {
@@ -117,7 +119,10 @@ jobs:
               echo "::group::assertion messages"; xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/tests.xcresult" 2>/dev/null \
                 | python3 scripts/ci/xcresult-failures.py | head -80; echo "::endgroup::"
               tail -60 "$RUNNER_TEMP/xcodebuild-test.log"; exit 1; }
-          grep -E "Executed [0-9]+ tests" "$RUNNER_TEMP/xcodebuild-test.log" | tail -1
+          # The summary line is informational: never fail the step when the
+          # Xcode release changes its wording (`bash -e` plus pipefail would
+          # otherwise end a green test run with a silent exit 1).
+          grep -E "Executed [0-9]+ test|Test Suite .All tests. passed" "$RUNNER_TEMP/xcodebuild-test.log" | tail -2 || echo "tests passed (no summary line in this Xcode version)"
       - name: Unsigned .ipa for sideloading
         run: |
           set -o pipefail
