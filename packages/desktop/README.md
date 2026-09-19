@@ -31,7 +31,9 @@ Every green `test` branch commit produces owner-only builds through
 `.github/workflows/test-track.yml`: desktop apps named **Core Hub Test** (app id
 `us.i3u.agentstudio.test`, own data folder, version `<pkg>-test.<run>`) uploaded
 as private workflow artifacts, and the image `ghcr.io/twuijri/core-hub-test:test`
-in a private package. The channel is baked into the packaged `package.json`
+in a private package. The apps are also published to the owner's private repository
+`twuijri/core-hub-test-builds` as the rolling release `latest-test` (needs the
+`TEST_RELEASE_TOKEN` secret). The channel is baked into the packaged `package.json`
 (`corehubChannel: "test"`, read by `src/main/channel.ts`); test builds skip the
 new-version notice and never touch the stable app or its data.
 
