@@ -1,54 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Core Hub launcher mark: the vector master packages/client/public/core-hub-mark.svg
+  (1024 viewBox, #101010: outer C path + rounded 278 px core square), scaled so the
+  whole mark stays inside the adaptive-icon safe zone (66 dp circle) on the spec
+  splash colour (@color/ic_launcher_background = #f7f7f4).
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
-    <!-- Command and direction. -->
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M54,24 L54,47"
-        android:strokeColor="#FEFEFF"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="9" />
-
-    <!-- Independent agent inputs. -->
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M38,38 L38,52 L25,63"
-        android:strokeColor="#FEFEFF"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="9" />
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M70,38 L70,52 L83,63"
-        android:strokeColor="#FEFEFF"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="9" />
-
-    <!-- Unified result flow. -->
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M31,76 L50,64 L58,64 L77,76"
-        android:strokeColor="#FEFEFF"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="9" />
-
-    <!--
-        Intentional brand clearance: erase the strokes around the orchestration
-        core before drawing it, so the purple point stays visibly independent.
-    -->
-    <path
-        android:fillColor="@color/ic_launcher_background"
-        android:pathData="M54,44 A10,10 0,1 1,54,64 A10,10 0,1 1,54,44" />
-
-    <!-- Central intelligence. -->
-    <path
-        android:fillColor="#6547F5"
-        android:pathData="M54,48 A6,6 0,1 1,54,60 A6,6 0,1 1,54,48" />
+    <group
+        android:scaleX="0.056"
+        android:scaleY="0.056"
+        android:translateX="25.33"
+        android:translateY="25.33">
+        <path
+            android:fillColor="@color/core_hub_ink"
+            android:pathData="M302 110H738C847 110 922 180 922 286V425H713V328C713 287 687 263 648 263H381C326 263 287 299 287 353V671C287 725 326 761 381 761H648C687 761 713 737 713 696V599H922V738C922 844 847 914 738 914H302C180 914 102 840 102 720V304C102 184 180 110 302 110Z" />
+        <path
+            android:fillColor="@color/core_hub_ink"
+            android:pathData="M435 373H581C617.5 373 647 402.5 647 439V585C647 621.5 617.5 651 581 651H435C398.5 651 369 621.5 369 585V439C369 402.5 398.5 373 435 373Z" />
+    </group>
 </vector>

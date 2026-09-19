@@ -61,12 +61,26 @@ class IconSemanticsTest {
     }
 
     @Test
-    fun launcherKeepsThePurpleCoreVisuallySeparated() {
+    fun launcherIsTheCoreHubMarkOnTheSplashColour() {
         val foreground = File(drawableDir, "ic_launcher_foreground.xml").readText()
+        val monochrome = File(drawableDir, "ic_launcher_monochrome.xml").readText()
         val colors = File("src/main/res/values/colors.xml").readText()
 
-        assertTrue("launcher needs the brand clearance ring", foreground.contains("M54,44 A10,10"))
-        assertTrue("clearance must match the icon background", foreground.contains("@color/ic_launcher_background"))
-        assertTrue("launcher background must match the iOS master", colors.contains("#091125"))
+        // core-hub-mark.svg: the outer C path and the rounded core square.
+        assertTrue("launcher must carry the Core Hub C path", foreground.contains("M302 110H738C847 110 922 180 922 286V425H713V328"))
+        assertTrue("launcher must carry the core square", foreground.contains("M435 373H581"))
+        assertTrue("themed icon must carry the same mark", monochrome.contains("M302 110H738"))
+        assertTrue("launcher background is the spec splash colour", colors.contains("<color name=\"ic_launcher_background\">#f7f7f4</color>"))
+        assertTrue("mark ink is #101010", colors.contains("<color name=\"core_hub_ink\">#101010</color>"))
+    }
+
+    @Test
+    fun everyWebAgentAvatarHasABundledAsset() {
+        listOf("agent_claude_code.xml", "agent_pi.xml", "agent_grok.xml", "agent_deepseek.xml").forEach { name ->
+            assertTrue("missing vector $name", File(drawableDir, name).isFile)
+        }
+        listOf("agent_hermes.png", "agent_ekko.png", "agent_codex.png", "agent_opencode.png", "core_hub_logo.png").forEach { name ->
+            assertTrue("missing raster $name", File("src/main/res/drawable-nodpi", name).isFile)
+        }
     }
 }

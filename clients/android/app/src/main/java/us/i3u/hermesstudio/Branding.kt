@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -150,7 +148,7 @@ object AppLogo {
         runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull()
 }
 
-/** Rounded app mark: the Studio logo once it is known, a neutral glyph before. */
+/** Rounded app mark: the server's logo once it is known, the bundled Core Hub logo before. */
 @Composable
 fun AppMark(size: Dp = 76.dp, corner: Dp = size / 3.4f) {
     val logo = AppLogo.image
@@ -169,11 +167,13 @@ fun AppMark(size: Dp = 76.dp, corner: Dp = size / 3.4f) {
                 contentScale = ContentScale.Crop,
             )
         } else {
-            Icon(
-                Icons.Filled.AutoAwesome,
+            // The bundled Core Hub logo (packages/client/public/logo.png) until
+            // the connected server's own mark has been fetched.
+            Image(
+                painter = painterResource(R.drawable.core_hub_logo),
                 contentDescription = null,
-                modifier = Modifier.size(size / 2.2f),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
             )
         }
     }

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- In-app Core Hub mark from packages/client/public/core-hub-mark.svg; tinted at use. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <path
+        android:fillColor="#FF101010"
+        android:pathData="M302 110H738C847 110 922 180 922 286V425H713V328C713 287 687 263 648 263H381C326 263 287 299 287 353V671C287 725 326 761 381 761H648C687 761 713 737 713 696V599H922V738C922 844 847 914 738 914H302C180 914 102 840 102 720V304C102 184 180 110 302 110Z" />
+    <path
+        android:fillColor="#FF101010"
+        android:pathData="M435 373H581C617.5 373 647 402.5 647 439V585C647 621.5 617.5 651 581 651H435C398.5 651 369 621.5 369 585V439C369 402.5 398.5 373 435 373Z" />
+</vector>

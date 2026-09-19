@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- packages/client/public/coding-agents/pi.svg -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="128"
+    android:viewportHeight="128">
+    <path
+        android:fillColor="#FF111827"
+        android:pathData="M28 0H100C115.46 0 128 12.54 128 28V100C128 115.46 115.46 128 100 128H28C12.54 128 0 115.46 0 100V28C0 12.54 12.54 0 28 0Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M31 42h66v13H85v42H71V55H57v42H43V55H31z" />
+    <path
+        android:fillColor="#FFA78BFA"
+        android:pathData="M91 83A8 8 0 1 1 91 99A8 8 0 1 1 91 83Z" />
+</vector>

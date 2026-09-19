@@ -4,8 +4,8 @@
   TranslationsTest يرفض أي مفتاح ناقص أو زائد.
 -->
 <resources>
-    <string name="app_name">Hermes Studio</string>
-    <string name="launcher_name">H Studio</string>
+    <string name="app_name">Core Hub</string>
+    <string name="launcher_name">Core Hub</string>
 
     <!-- إجراءات وتسميات مشتركة -->
     <string name="action_back">رجوع</string>

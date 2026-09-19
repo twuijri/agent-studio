@@ -5,8 +5,8 @@
   See docs/adding-a-language.md.
 -->
 <resources>
-    <string name="app_name">Hermes Studio</string>
-    <string name="launcher_name">H Studio</string>
+    <string name="app_name">Core Hub</string>
+    <string name="launcher_name">Core Hub</string>
 
     <!-- Shared actions and labels -->
     <string name="action_back">Back</string>
