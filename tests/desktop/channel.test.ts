@@ -29,8 +29,10 @@ describe('desktop build channel', () => {
     expect(main).toContain("isTestChannel() ? 'com.hermeswebui.studio.test' : 'com.hermeswebui.studio'")
     expect(main).toContain('tray.setToolTip(app.getName())')
     expect(notice).toContain('if (isTestChannel()) return')
-    expect(workflow).toContain('--config.extraMetadata.productName="Core Hub Test"')
-    expect(workflow).toContain('--config.extraMetadata.corehubChannel=test')
-    expect(workflow).toContain('--config.appId=us.i3u.agentstudio.test')
+    // Overrides travel in a config file (CLI values with spaces break on Windows).
+    expect(workflow).toContain('extends: "./electron-builder.yml"')
+    expect(workflow).toContain('appId: "us.i3u.agentstudio.test"')
+    expect(workflow).toContain('extraMetadata: { productName: "Core Hub Test", version, corehubChannel: "test" }')
+    expect(workflow).toContain('--config electron-builder.test.json')
   })
 })

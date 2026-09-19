@@ -71,6 +71,27 @@ jobs:
     if: needs.gate.outputs.image == 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Wait for the rest of CI on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          # Playwright finishing triggered us, but the image workflow also
+          # requires Build and the license guard to have succeeded on the commit.
+          for attempt in $(seq 1 40); do
+            pending=0
+            for name in build.yml personal-license.yml; do
+              state=$(gh run list --repo ${{ github.repository }} --workflow "$name" --commit "$SHA" --limit 1 --json status,conclusion --jq '.[0] | "\(.status)/\(.conclusion)"')
+              case "$state" in
+                completed/success) ;;
+                completed/*) echo "::error::$name finished with ${state#completed/} on $SHA"; exit 1 ;;
+                *) pending=1 ;;
+              esac
+            done
+            [ "$pending" = 0 ] && { echo "CI is green on $SHA"; exit 0; }
+            sleep 30
+          done
+          echo "::error::CI did not finish on $SHA in time"; exit 1
       - name: Publish the test image through the image workflow
         env:
           GH_TOKEN: ${{ github.token }}
@@ -172,11 +193,19 @@ jobs:
           version="${base}-test.${RUN_NUMBER}"
           echo "TEST_VERSION=$version" >> "$GITHUB_ENV"
           if [ "${{ matrix.target_os }}" = "darwin" ]; then ulimit -n 10240 || true; fi
-          npm --prefix packages/desktop run dist -- ${{ matrix.electron_target }} ${MAC_BUILD_EXTRA_ARGS:-} --publish never \
-            --config.appId=us.i3u.agentstudio.test \
-            --config.extraMetadata.productName="Core Hub Test" \
-            --config.extraMetadata.version="$version" \
-            --config.extraMetadata.corehubChannel=test
+          # Values with spaces do not survive npm's argument escaping on Windows,
+          # so the test-channel overrides go through a config file that extends
+          # the normal one instead of CLI flags.
+          node -e '
+            const fs = require("node:fs");
+            const version = process.argv[1];
+            fs.writeFileSync("packages/desktop/electron-builder.test.json", JSON.stringify({
+              extends: "./electron-builder.yml",
+              appId: "us.i3u.agentstudio.test",
+              extraMetadata: { productName: "Core Hub Test", version, corehubChannel: "test" },
+            }, null, 2));
+          ' "$version"
+          npm --prefix packages/desktop run dist -- ${{ matrix.electron_target }} ${MAC_BUILD_EXTRA_ARGS:-} --publish never --config electron-builder.test.json
 
       - name: Remove macOS signing keychain
         if: always() && matrix.target_os == 'darwin'

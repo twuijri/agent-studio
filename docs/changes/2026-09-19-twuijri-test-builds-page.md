@@ -20,8 +20,15 @@
 - يحتاج السر `TEST_RELEASE_TOKEN` (رمز دقيق للمالك بصلاحية Contents: write على
   المستودع الخاص)؛ بدونه تطبع الوظيفة تنبيهًا وتبقى الملفات في Actions.
 
+- **إصلاحان من أول تشغيلين لمسار التست:** (1) بناء ويندوز فشل لأن قيمة
+  `productName` بمسافات لا تنجو من هروب وسائط npm على ويندوز؛ صارت التجاوزات في
+  ملف `electron-builder.test.json` يمتد من الإعداد الأصلي ويُكتب وقت البناء.
+  (2) نشر الصورة فشل لأن Playwright انتهى قبل Build؛ وظيفة الصورة تنتظر الآن
+  Build وحارس الرخصة على الالتزام قبل تشغيل `personal-image.yml`.
+
 ## الملفات والتأثير
-`.github/workflows/test-track.yml`، `docs/TEAM-RULES.md`، `packages/desktop/README.md`.
+`.github/workflows/test-track.yml`، `tests/desktop/channel.test.ts`، `docs/TEAM-RULES.md`،
+`packages/desktop/README.md`.
 
 ## الفحوص
 - تحليل YAML، `harness:check`، `git diff --check`. التحقق الفعلي: أول تشغيل بعد

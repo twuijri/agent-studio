@@ -764,6 +764,10 @@ class LanPeerConnection {
    */
   downloadFileStream(path: string, range: { offset?: number; length?: number } = {}, timeoutMs = 60000): LanPeerDownloadStream {
     const stream = new PassThrough()
+    // A refused or aborted transfer destroys the stream with its error; the
+    // consumer (Koa's response) reads that through pipe/iteration, so keep
+    // Node from treating an unconsumed 'error' event as an unhandled crash.
+    stream.on('error', () => undefined)
     if (this.ws.readyState !== WebSocket.OPEN) {
       const err = new Error('Peer connection is not open')
       stream.destroy(err)
