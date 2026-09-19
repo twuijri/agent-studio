@@ -109,10 +109,13 @@ data class UiState(
     val sending: Boolean = false,
     val attachments: List<Upload> = emptyList(),
     val attaching: Boolean = false,
-    val recording: Boolean = false,
-    val transcribing: Boolean = false,
-    /** Text produced by the last recording, consumed by the composer. */
-    val transcript: String? = null,
+    val voice: VoiceStatus = VoiceStatus.Idle,
+    /** True while the running take is a server recording rather than on-device dictation. */
+    val voiceViaServer: Boolean = false,
+    /** The latest dictation text for the composer to place at the caret; consumed by serial. */
+    val voiceSegment: VoiceSegment? = null,
+    /** Store.VOICE_INPUT_DEVICE or Store.VOICE_INPUT_SERVER, from Settings → Voice. */
+    val voiceInput: String = Store.VOICE_INPUT_DEVICE,
     /** The next submitted draft came from STT and should receive a spoken reply. */
     val voiceReplyPending: Boolean = false,
     val speaking: Boolean = false,
@@ -249,7 +252,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val api = HermesApi(store.baseUrl, store.token)
     private val chat = ChatSocket(store.baseUrl, store.token)
     private val group = GroupSocket(store.baseUrl, store.token)
-    private val recorder = Recorder(app)
+    private val recorder = Recorder()
+    private val speech = SpeechInput(app)
+    private var voiceSerial = 0L
+    private var lastPartial: String? = null
     private var speechPlayer: MediaPlayer? = null
     private var runJob: kotlinx.coroutines.Job? = null
     private var historyJob: kotlinx.coroutines.Job? = null
@@ -278,6 +284,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             reasoningEffort = store.reasoningEffort,
             language = store.language,
             appearance = store.appearance,
+            voiceInput = store.voiceInput,
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -436,6 +443,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Camera permission was declined, so the QR path cannot start. */
     fun reportCameraDenied() = _state.update { it.copy(error = str(R.string.error_camera_permission)) }
 
+    /** Microphone permission was declined, so no voice input can start. */
+    fun reportMicrophoneDenied() = _state.update {
+        it.copy(voice = VoiceStatus.Error, error = str(R.string.error_speech_permission))
+    }
+
     private fun enterSignedIn(baseUrl: String, bootstrap: SessionBootstrap) {
         val (user, profiles, sessions, warning) = bootstrap
         _state.update {
@@ -583,11 +595,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             delay(250)
             runCatching { withContext(Dispatchers.IO) { api.searchSessions(query.trim(), profile) } }
                 .onSuccess { results -> _state.update { it.copy(sessionSearchResults = results) } }
+                .onFailure { failure -> _state.update { it.copy(sessionSearchResults = emptyList(), error = failure.readableMessage(localized)) } }
         }
     }
 
     fun loadSessionCategories() {
-        viewModelScope.launch { runCatching { withContext(Dispatchers.IO) { api.sessionCategories() } }.onSuccess { categories -> _state.update { it.copy(sessionCategories = categories) } } }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.sessionCategories() } }
+                .onSuccess { categories -> _state.update { it.copy(sessionCategories = categories) } }
+                .onFailure { failure -> _state.update { it.copy(error = failure.readableMessage(localized)) } }
+        }
     }
 
     fun createSessionCategory(name: String) = launchWork(
@@ -615,9 +632,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { api.workflows(_state.value.profileFilter.ifBlank { null }) } }
                 .onSuccess { workflows ->
-                    val runs = withContext(Dispatchers.IO) { workflows.associate { it.id to runCatching { api.workflowRuns(it.id) }.getOrDefault(emptyList()) } }
-                    val schedules = withContext(Dispatchers.IO) { workflows.associate { it.id to runCatching { api.workflowSchedules(it.id) }.getOrDefault(emptyList()) } }
-                    _state.update { it.copy(workflows = workflows, workflowRuns = runs, workflowSchedules = schedules, loadingWorkflows = false) }
+                    val problems = mutableListOf<Throwable>()
+                    val runs = withContext(Dispatchers.IO) { workflows.associate { it.id to runCatching { api.workflowRuns(it.id) }.onFailure(problems::add).getOrDefault(emptyList()) } }
+                    val schedules = withContext(Dispatchers.IO) { workflows.associate { it.id to runCatching { api.workflowSchedules(it.id) }.onFailure(problems::add).getOrDefault(emptyList()) } }
+                    _state.update { it.copy(workflows = workflows, workflowRuns = runs, workflowSchedules = schedules, loadingWorkflows = false, error = problems.firstOrNull()?.readableMessage(localized)) }
                 }.onFailure { failure -> _state.update { it.copy(loadingWorkflows = false, error = failure.readableMessage(localized)) } }
         }
     }
@@ -689,7 +707,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openLog(log: StudioLogFile) = launchWork(work = { api.studioLog(log.name, currentProfile()) }, onSuccess = { entries -> _state.update { it.copy(openLog = log, logEntries = entries) } })
     fun closeLog() = _state.update { it.copy(openLog = null, logEntries = emptyList()) }
 
-    fun openConnections() = launchWork(work = { (Triple(api.appRelayStatus(), api.studioDevices(), api.appConnections())) to (runCatching { api.devicePairingLink() }.getOrDefault("") to runCatching { api.peerConnections() }.getOrDefault(emptyList())) }, onSuccess = { data -> val (primary, extra) = data; val (relay, devices, connections) = primary; _state.update { it.copy(screen = Screen.Connections, appRelay = relay, studioDevices = devices, appConnections = connections, pairingLink = extra.first, peerConnections = extra.second, error = null) } })
+    fun openConnections() = launchWork(
+        work = { Triple(api.appRelayStatus(), api.studioDevices(), api.appConnections()) to (api.devicePairingLink() to api.peerConnections()) },
+        onSuccess = { data ->
+            val (primary, extra) = data
+            val (relay, devices, connections) = primary
+            _state.update { it.copy(screen = Screen.Connections, appRelay = relay, studioDevices = devices, appConnections = connections, pairingLink = extra.first, peerConnections = extra.second, error = null) }
+        },
+    )
     fun connectRelay() = launchWork(work = { api.connectAppRelay() }, onSuccess = { relay -> _state.update { it.copy(appRelay = relay) } })
     fun refreshRelayCode() = launchWork(work = { api.refreshAppRelayCode() }, onSuccess = { relay -> _state.update { it.copy(appRelay = relay) } })
     fun disconnectRelay() = launchWork(work = { api.disconnectAppRelay() }, onSuccess = { relay -> _state.update { it.copy(appRelay = relay) } })
@@ -754,9 +779,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshProfiles() = launchWork(
-        work = { api.profiles() to runCatching { api.profileRuntimeStatuses() }.getOrDefault(emptyMap()) },
-        onSuccess = { (profiles, statuses) ->
-            _state.update { it.copy(profiles = profiles, activeProfile = pickProfile(profiles), profileRuntimeStatuses = statuses) }
+        work = {
+            val profiles = api.profiles()
+            // Statuses decorate the list; a failure is shown but must not hide the profiles.
+            val statuses = runCatching { api.profileRuntimeStatuses() }
+            Triple(profiles, statuses.getOrDefault(emptyMap()), statuses.exceptionOrNull())
+        },
+        onSuccess = { (profiles, statuses, problem) ->
+            _state.update {
+                it.copy(
+                    profiles = profiles,
+                    activeProfile = pickProfile(profiles),
+                    profileRuntimeStatuses = statuses,
+                    error = problem?.readableMessage(localized),
+                )
+            }
         },
     )
 
@@ -820,11 +857,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             runCatching {
                 withContext(Dispatchers.IO) {
                     val history = api.conversationHistory(session.id)
-                    val window = runCatching { api.contextLength(profile, session.provider, session.model) }.getOrDefault(0)
-                    history to window
+                    val window = runCatching { api.contextLength(profile, session.provider, session.model) }
+                    Triple(history, window.getOrDefault(0), window.exceptionOrNull())
                 }
             }
-                .onSuccess { (history, window) ->
+                .onSuccess { (history, window, problem) ->
                     _state.update { state ->
                         if (state.screen != Screen.Conversation || state.openSession?.id != session.id) {
                             return@update state
@@ -832,6 +869,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         state.copy(
                             loadingHistory = false,
                             loadingContext = false,
+                            error = problem?.readableMessage(localized),
                             contextTokens = history.contextTokens ?: 0,
                             contextWindow = window,
                             lines = history.messages.map { message ->
@@ -868,11 +906,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.IO) {
                     val profile = session.profile?.ifBlank { null } ?: currentProfile()
                     val history = api.conversationHistory(session.id)
-                    val window = runCatching { api.contextLength(profile, session.provider, session.model) }.getOrDefault(0)
-                    history to window
+                    val window = runCatching { api.contextLength(profile, session.provider, session.model) }
+                    Triple(history, window.getOrDefault(0), window.exceptionOrNull())
                 }
             }
-                .onSuccess { (history, window) ->
+                .onSuccess { (history, window, problem) ->
                     _state.update { state ->
                         if (state.screen != Screen.Conversation || state.openSession?.id != session.id) {
                             return@update state
@@ -880,6 +918,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         state.copy(
                             loadingHistory = false,
                             loadingContext = false,
+                            error = problem?.readableMessage(localized),
                             contextTokens = history.contextTokens ?: state.contextTokens,
                             contextWindow = window.takeIf { it > 0 } ?: state.contextWindow,
                             lines = history.messages.map { message ->
@@ -1428,46 +1467,167 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── voice ─────────────────────────────────────────────────────────────
 
-    fun startRecording() {
-        if (_state.value.recording) return
-        if (recorder.start()) {
-            _state.update { it.copy(recording = true, error = null) }
+    /** Settings → Voice: where speech becomes text. */
+    fun setVoiceInput(mode: String) {
+        val clean = if (mode == Store.VOICE_INPUT_SERVER) Store.VOICE_INPUT_SERVER else Store.VOICE_INPUT_DEVICE
+        store.voiceInput = clean
+        _state.update { it.copy(voiceInput = clean) }
+    }
+
+    /**
+     * Starts dictation. On-device recognition is the default and streams text
+     * live; the Core Hub server path records a WAV and transcribes it after the
+     * take. When the device has no recognizer the server path is used and the
+     * user is told so.
+     */
+    fun startVoiceInput() {
+        val current = _state.value.voice
+        if (current == VoiceStatus.Listening || current == VoiceStatus.Transcribing) return
+        val app = getApplication<Application>()
+        val wantsServer = _state.value.voiceInput == Store.VOICE_INPUT_SERVER
+        val available = SpeechInput.isAvailable(app)
+        if (wantsServer || !available) {
+            if (!wantsServer) _state.update { it.copy(notice = str(R.string.notice_voice_fallback_server)) }
+            startServerRecording()
         } else {
-            _state.update { it.copy(error = str(R.string.error_microphone)) }
+            startDeviceListening()
         }
     }
 
-    fun cancelRecording() {
-        recorder.cancel()
-        _state.update { it.copy(recording = false) }
+    /** Ends the take; the text arrives through the voice segment. */
+    fun stopVoiceInput() {
+        if (_state.value.voice != VoiceStatus.Listening) return
+        if (_state.value.voiceViaServer) {
+            stopRecordingAndTranscribe()
+        } else {
+            _state.update { it.copy(voice = VoiceStatus.Transcribing) }
+            speech.stop()
+        }
+    }
+
+    fun cancelVoiceInput() {
+        if (_state.value.voiceViaServer) recorder.cancel() else speech.cancel()
+        lastPartial = null
+        emitVoiceSegment("", VoiceSegmentKind.Discard)
+        _state.update { it.copy(voice = VoiceStatus.Idle) }
+    }
+
+    /** Clears the error state of the mic button after the message was seen. */
+    fun resetVoice() = _state.update { if (it.voice == VoiceStatus.Error) it.copy(voice = VoiceStatus.Idle, error = null) else it }
+
+    fun consumeVoiceSegment(serial: Long) = _state.update {
+        if (it.voiceSegment?.serial == serial) it.copy(voiceSegment = null) else it
+    }
+
+    private fun startDeviceListening() {
+        val languageTag = localized.resources.configuration.locales[0].toLanguageTag()
+        lastPartial = null
+        val started = speech.start(
+            languageTag,
+            object : SpeechInput.Listener {
+                override fun onPartial(text: String) {
+                    lastPartial = text
+                    emitVoiceSegment(text, VoiceSegmentKind.Partial)
+                }
+
+                override fun onFinal(text: String) {
+                    val spoken = text.ifBlank { lastPartial.orEmpty() }
+                    lastPartial = null
+                    if (spoken.isBlank()) {
+                        emitVoiceSegment("", VoiceSegmentKind.Discard)
+                        _state.update { it.copy(voice = VoiceStatus.Error, error = str(R.string.error_speech_no_match)) }
+                        return
+                    }
+                    emitVoiceSegment(spoken, VoiceSegmentKind.Final)
+                    _state.update { it.copy(voice = VoiceStatus.Idle, voiceReplyPending = true, error = null) }
+                }
+
+                override fun onError(code: Int) {
+                    val partial = lastPartial
+                    lastPartial = null
+                    if (SpeechInput.isNoSpeech(code) && !partial.isNullOrBlank()) {
+                        // The recognizer timed out after the user stopped talking; the
+                        // last hypothesis is what they said.
+                        emitVoiceSegment(partial, VoiceSegmentKind.Final)
+                        _state.update { it.copy(voice = VoiceStatus.Idle, voiceReplyPending = true, error = null) }
+                        return
+                    }
+                    if (!partial.isNullOrBlank()) emitVoiceSegment(partial, VoiceSegmentKind.Final)
+                    else emitVoiceSegment("", VoiceSegmentKind.Discard)
+                    _state.update { it.copy(voice = VoiceStatus.Error, error = speechErrorMessage(code)) }
+                }
+            },
+        )
+        if (!started) {
+            _state.update { it.copy(notice = str(R.string.notice_voice_fallback_server)) }
+            startServerRecording()
+            return
+        }
+        _state.update { it.copy(voice = VoiceStatus.Listening, voiceViaServer = false, voiceSegment = null, error = null) }
+    }
+
+    private fun startServerRecording() {
+        try {
+            recorder.start()
+        } catch (failure: Exception) {
+            _state.update {
+                it.copy(voice = VoiceStatus.Error, error = str(R.string.error_microphone_detail, failure.message ?: failure::class.java.simpleName))
+            }
+            return
+        }
+        _state.update { it.copy(voice = VoiceStatus.Listening, voiceViaServer = true, voiceSegment = null, error = null) }
     }
 
     /** Stops the take and turns it into text with the profile's STT provider. */
-    fun stopRecordingAndTranscribe() {
-        if (!_state.value.recording) return
-        val bytes = recorder.stop()
-        _state.update { it.copy(recording = false) }
-        if (bytes == null) {
-            _state.update { it.copy(error = str(R.string.error_recording_short)) }
+    private fun stopRecordingAndTranscribe() {
+        val wav = recorder.stop()
+        if (wav == null) {
+            _state.update { it.copy(voice = VoiceStatus.Error, error = str(R.string.error_recording_short)) }
             return
         }
-
         val profile = currentProfile()
-        _state.update { it.copy(transcribing = true, error = null) }
+        val language = localized.resources.configuration.locales[0].language.takeIf { it.isNotBlank() }
+        _state.update { it.copy(voice = VoiceStatus.Transcribing, error = null) }
         viewModelScope.launch {
             runCatching {
-                withContext(Dispatchers.IO) {
-                    api.transcribe(profile, bytes, "voice.m4a", "audio/mp4")
-                }
-            }.onSuccess { text ->
-                _state.update { it.copy(transcribing = false, transcript = text, voiceReplyPending = true) }
+                withContext(Dispatchers.IO) { api.transcribe(profile, wav, language) }
+            }.onSuccess { result ->
+                emitVoiceSegment(result.text, VoiceSegmentKind.Final)
+                _state.update { it.copy(voice = VoiceStatus.Idle, voiceReplyPending = true) }
             }.onFailure { failure ->
-                _state.update { it.copy(transcribing = false, error = failure.readableMessage(localized)) }
+                _state.update { it.copy(voice = VoiceStatus.Error, error = voiceErrorMessage(failure)) }
             }
         }
     }
 
-    fun consumeTranscript() = _state.update { it.copy(transcript = null) }
+    private fun emitVoiceSegment(text: String, kind: VoiceSegmentKind) {
+        voiceSerial += 1
+        val segment = VoiceSegment(text, kind, voiceSerial)
+        _state.update { it.copy(voiceSegment = segment) }
+    }
+
+    private fun voiceErrorMessage(failure: Throwable): String = when {
+        failure is SttNotConfiguredException -> str(R.string.error_stt_not_configured, failure.reason ?: "stt_not_configured")
+        (failure as? HermesException)?.code == "no_speech_detected" -> str(R.string.error_speech_no_match)
+        else -> failure.readableMessage(localized)
+    }
+
+    private fun speechErrorMessage(code: Int): String = when (code) {
+        android.speech.SpeechRecognizer.ERROR_NO_MATCH,
+        android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
+        -> str(R.string.error_speech_no_match)
+        android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> str(R.string.error_speech_permission)
+        android.speech.SpeechRecognizer.ERROR_NETWORK,
+        android.speech.SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
+        android.speech.SpeechRecognizer.ERROR_SERVER,
+        -> str(R.string.error_speech_network)
+        android.speech.SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> str(R.string.error_speech_busy)
+        android.speech.SpeechRecognizer.ERROR_AUDIO -> str(R.string.error_microphone)
+        android.speech.SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED,
+        android.speech.SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE,
+        -> str(R.string.error_speech_language)
+        else -> str(R.string.error_speech_generic, code)
+    }
 
     fun stopSpeaking() {
         runCatching { speechPlayer?.stop() }
@@ -2657,13 +2817,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
+                    // These enrich the form, but a missing optional endpoint
+                    // must not make the core job impossible to edit. The failure
+                    // is still shown, so a broken endpoint is not mistaken for
+                    // "no models / skills / targets".
+                    val problems = mutableListOf<Throwable>()
                     CronEditorData(
                         job = jobId?.let { api.cronJob(profile, it) },
-                        // These enrich the form, but a missing optional endpoint
-                        // must not make the core job impossible to edit.
-                        models = runCatching { api.availableModels(profile) }.getOrDefault(emptyList()),
-                        skills = runCatching { api.cronSkills(profile) }.getOrDefault(emptyList()),
-                        targets = runCatching { api.cronDeliveryTargets(profile) }.getOrDefault(emptyList()),
+                        models = runCatching { api.availableModels(profile) }.onFailure(problems::add).getOrDefault(emptyList()),
+                        skills = runCatching { api.cronSkills(profile) }.onFailure(problems::add).getOrDefault(emptyList()),
+                        targets = runCatching { api.cronDeliveryTargets(profile) }.onFailure(problems::add).getOrDefault(emptyList()),
+                        problem = problems.firstOrNull(),
                     )
                 }
             }.onSuccess { data ->
@@ -2675,6 +2839,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         cronSkills = data.skills,
                         cronDeliveryTargets = data.targets,
                         cronEditorLoading = false,
+                        error = data.problem?.readableMessage(localized),
                     )
                 }
             }.onFailure { failure ->
@@ -2939,7 +3104,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 delay(3_000)
                 val poll = runCatching {
                     withContext(Dispatchers.IO) { api.weixinQrStatus(profile, code.id) }
-                }.getOrNull() ?: return@repeat
+                }.getOrElse { failure ->
+                    // Keep polling: one failed poll is not a failed login, but say so.
+                    _state.update { it.copy(error = failure.readableMessage(localized)) }
+                    return@repeat
+                }
                 when (poll.status) {
                     "confirmed" -> {
                         runCatching {
@@ -3236,6 +3405,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 reasoningEffort = store.reasoningEffort,
                 language = store.language,
                 appearance = store.appearance,
+                voiceInput = store.voiceInput,
             )
         }
     }
@@ -3327,6 +3497,8 @@ private data class CronEditorData(
     val models: List<ModelOption>,
     val skills: List<String>,
     val targets: List<CronDeliveryTarget>,
+    /** The first optional lookup that failed, shown next to the form. */
+    val problem: Throwable? = null,
 )
 
 private fun List<CronJob>.upsert(job: CronJob): List<CronJob> =

@@ -1686,21 +1686,46 @@ class HermesApi(
     }
 
     /**
-     * POST /api/studio/stt/transcribe — turns a recording into text with the
-     * profile's configured provider, the same call the web composer makes.
+     * POST /api/studio/stt/transcribe — turns a 16 kHz mono PCM WAV recording
+     * into text with the profile's active provider. The multipart body carries
+     * `provider`, an optional `language` hint and the file part `audio`; the
+     * server answers `{ text, provider, model, language?, durationMs }` or
+     * `{ error, code }`, where a 400 with `no_speech_detected` means silence.
      */
-    fun transcribe(profile: String, bytes: ByteArray, filename: String, mime: String): String {
-        val provider = activeSttProvider(profile)
+    fun transcribe(profile: String, wav: ByteArray, language: String? = null): Transcription {
+        val status = sttProfileStatus(profile)
+        val provider = status.activeProvider
+        if (!status.configured || provider.isNullOrBlank() || provider == "browser") {
+            throw SttNotConfiguredException(status.reason)
+        }
+        val fields = linkedMapOf("provider" to provider)
+        language?.takeIf { it.isNotBlank() }?.let { fields["language"] = it }
         val result = multipart(
             path = "/api/studio/stt/transcribe?profile=${enc(profile)}",
             field = "audio",
-            bytes = bytes,
-            filename = filename,
-            mime = mime,
-            fields = provider?.let { mapOf("provider" to it) }.orEmpty(),
+            bytes = wav,
+            filename = "voice.wav",
+            mime = "audio/wav",
+            fields = fields,
         )
-        return firstNonBlank(result, "text", "transcript", "output")
-            ?: throw HermesException("The provider returned no text")
+        val text = firstNonBlank(result, "text") ?: throw HermesException("The provider returned no text")
+        return Transcription(
+            text = text,
+            provider = result.optString("provider").ifBlank { provider },
+            model = firstNonBlank(result, "model"),
+            language = firstNonBlank(result, "language"),
+            durationMs = result.optLong("durationMs", 0L),
+        )
+    }
+
+    /** GET /api/studio/stt/profile-status — whether the profile can transcribe on the server. */
+    fun sttProfileStatus(profile: String): SttProfileStatus {
+        val status = call("/api/studio/stt/profile-status?profile=${enc(profile)}")
+        return SttProfileStatus(
+            configured = status.optBoolean("configured", false),
+            activeProvider = firstNonBlank(status, "activeProvider"),
+            reason = firstNonBlank(status, "reason"),
+        )
     }
 
     /** Turns an assistant reply into audio using the profile's Studio TTS settings. */
@@ -1734,18 +1759,6 @@ class HermesApi(
             }
             return SynthesizedAudio(bytes, detectedMime)
         }
-    }
-
-    /**
-     * GET /api/studio/stt/profile-status — Studio requires the selected provider
-     * in the multipart request, so it is read from the profile status first.
-     */
-    private fun activeSttProvider(profile: String): String? {
-        val status = call("/api/studio/stt/profile-status?profile=${enc(profile)}")
-        val provider = firstNonBlank(status, "activeProvider")
-        if (status.optBoolean("configured", true) && provider != null && provider != "browser") return provider
-        val reason = firstNonBlank(status, "reason") ?: "no server-backed STT provider is configured"
-        throw HermesException("STT unavailable: $reason", statusCode = 409)
     }
 
     /**
@@ -1960,12 +1973,26 @@ class HermesApi(
     }
 }
 
-class HermesException(
+open class HermesException(
     message: String,
     val statusCode: Int? = null,
     /** Studio's machine-readable error code when the body carried one, e.g. `no_speech_detected`. */
     val code: String? = null,
 ) : Exception(message)
+
+/** The profile has no server-backed STT provider; [reason] is the server's explanation, if any. */
+class SttNotConfiguredException(val reason: String?) :
+    HermesException("STT unavailable: ${reason ?: "no server-backed STT provider is configured"}", statusCode = 409)
+
+data class SttProfileStatus(val configured: Boolean, val activeProvider: String?, val reason: String?)
+
+data class Transcription(
+    val text: String,
+    val provider: String,
+    val model: String?,
+    val language: String?,
+    val durationMs: Long,
+)
 
 data class AppConnectionInfo(
     val id: Int,

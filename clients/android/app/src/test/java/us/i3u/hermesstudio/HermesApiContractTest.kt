@@ -340,20 +340,55 @@ class HermesApiContractTest {
     }
 
     @Test
-    fun `transcription discovers and posts the active provider`() {
+    fun `transcription discovers the active provider and posts a wav with a language hint`() {
         enqueue("""{"profile":"manager","configured":true,"activeProvider":"openai","reason":null}""")
-        enqueue("""{"text":"hello from audio","provider":"openai","model":"whisper-1"}""")
+        enqueue("""{"text":"hello from audio","provider":"openai","model":"whisper-1","language":"ar","durationMs":812}""")
 
-        val text = api.transcribe("manager", byteArrayOf(1, 2, 3), "voice.m4a", "audio/mp4")
+        val result = api.transcribe("manager", WavFormat.wrap(byteArrayOf(1, 2, 3, 4)), language = "ar")
 
-        assertEquals("hello from audio", text)
+        assertEquals("hello from audio", result.text)
+        assertEquals("openai", result.provider)
+        assertEquals("whisper-1", result.model)
+        assertEquals("ar", result.language)
+        assertEquals(812L, result.durationMs)
         assertEquals("/api/studio/stt/profile-status?profile=manager", server.takeRequest().path)
         val upload = server.takeRequest()
         assertEquals("/api/studio/stt/transcribe?profile=manager", upload.path)
         val multipart = upload.body.readUtf8()
         assertTrue(multipart.contains("name=\"provider\""))
         assertTrue(multipart.contains("\r\n\r\nopenai\r\n"))
-        assertTrue(multipart.contains("name=\"audio\"; filename=\"voice.m4a\""))
+        assertTrue(multipart.contains("name=\"language\""))
+        assertTrue(multipart.contains("\r\n\r\nar\r\n"))
+        assertTrue(multipart.contains("name=\"audio\"; filename=\"voice.wav\""))
+        assertTrue(multipart.contains("Content-Type: audio/wav"))
+        assertTrue(multipart.contains("RIFF"))
+    }
+
+    @Test
+    fun `an unconfigured STT profile is reported with the server reason before any upload`() {
+        enqueue("""{"profile":"manager","configured":false,"activeProvider":"browser","reason":"stt_not_configured"}""")
+
+        val failure = assertThrows(SttNotConfiguredException::class.java) {
+            api.transcribe("manager", WavFormat.wrap(byteArrayOf(1)), language = null)
+        }
+
+        assertEquals("stt_not_configured", failure.reason)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `silence is surfaced as the no_speech_detected code`() {
+        enqueue("""{"profile":"manager","configured":true,"activeProvider":"groq","reason":null}""")
+        enqueue("""{"error":"No speech detected","code":"no_speech_detected"}""", code = 400)
+
+        val failure = assertThrows(HermesException::class.java) {
+            api.transcribe("manager", WavFormat.wrap(byteArrayOf(1)), language = "en")
+        }
+
+        assertEquals(400, failure.statusCode)
+        assertEquals("no_speech_detected", failure.code)
+        server.takeRequest()
+        assertFalse(server.takeRequest().body.readUtf8().contains("name=\"language\"\r\n\r\n\r\n"))
     }
 
     @Test
@@ -376,7 +411,7 @@ class HermesApiContractTest {
         enqueue("""{"error":"Not found"}""", code = 404)
 
         val failure = assertThrows(HermesException::class.java) {
-            api.transcribe("default", byteArrayOf(7), "voice.m4a", "audio/mp4")
+            api.transcribe("default", WavFormat.wrap(byteArrayOf(7)))
         }
 
         assertEquals(404, failure.statusCode)

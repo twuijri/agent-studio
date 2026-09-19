@@ -818,4 +818,24 @@
     <string name="error_app_login_disabled">The account that created this code is disabled</string>
     <string name="error_token_revoked">This device\'s access was revoked or has expired. Sign in again.</string>
     <string name="notice_token_refresh_failed">Could not refresh the device token: %1$s</string>
+    <!-- Voice input: on-device dictation by default, Core Hub server as an option -->
+    <string name="settings_section_voice">Voice</string>
+    <string name="settings_voice_input">Voice input</string>
+    <string name="settings_voice_input_note">Where speech becomes text. This device uses Android speech recognition and shows the words as you speak; the Core Hub server records a clip and transcribes it with the STT provider configured in Studio.</string>
+    <string name="voice_input_device">This device</string>
+    <string name="voice_input_device_note">Android speech recognition, live text</string>
+    <string name="voice_input_server">Core Hub server</string>
+    <string name="voice_input_server_note">Studio STT provider, transcribed after the take</string>
+    <string name="composer_listening">Listening…</string>
+    <string name="composer_stop_listening">Stop listening</string>
+    <string name="composer_voice_failed">Voice input failed</string>
+    <string name="notice_voice_fallback_server">Speech recognition is not available on this device, so the Core Hub server is used instead.</string>
+    <string name="error_stt_not_configured">The Core Hub server has no speech-to-text provider ready: %1$s</string>
+    <string name="error_speech_no_match">No speech was recognized</string>
+    <string name="error_speech_permission">Microphone access is needed for voice input</string>
+    <string name="error_speech_network">Speech recognition needs a network connection right now</string>
+    <string name="error_speech_busy">Speech recognition is busy; try again in a moment</string>
+    <string name="error_speech_language">Speech recognition does not support the app language on this device</string>
+    <string name="error_speech_generic">Speech recognition failed (code %1$d)</string>
+    <string name="error_microphone_detail">Could not start the microphone: %1$s</string>
 </resources>

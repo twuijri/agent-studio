@@ -59,6 +59,9 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Psychology
@@ -1063,13 +1066,6 @@ private fun ConversationScreen(state: UiState, viewModel: AppViewModel) {
         }
     }
 
-    LaunchedEffect(state.transcript) {
-        state.transcript?.let { text ->
-            draft = if (draft.isBlank()) text else "$draft $text"
-            viewModel.consumeTranscript()
-        }
-    }
-
     val profile = state.openSession?.profile ?: state.activeProfile
     val avatar = state.avatarOf(profile)
     val pullRefreshState = rememberPullRefreshState(
@@ -1820,7 +1816,37 @@ private fun Composer(
         }
     }
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) viewModel.startRecording()
+        if (granted) viewModel.startVoiceInput() else viewModel.reportMicrophoneDenied()
+    }
+    // The field keeps its own selection so dictation can land at the caret and
+    // an interim hypothesis can be replaced in place while the user speaks.
+    var field by remember { mutableStateOf(TextFieldValue(draft, TextRange(draft.length))) }
+    LaunchedEffect(draft) {
+        if (field.text != draft) field = TextFieldValue(draft, TextRange(draft.length))
+    }
+    var voiceAnchor by remember { mutableStateOf<Int?>(null) }
+    var voiceLength by remember { mutableStateOf(0) }
+    LaunchedEffect(state.voiceSegment) {
+        val segment = state.voiceSegment ?: return@LaunchedEffect
+        val anchor = voiceAnchor ?: field.selection.end.coerceIn(0, field.text.length)
+        val edit = applyVoiceSegment(field.text, anchor, voiceLength, segment.text, segment.kind)
+        field = TextFieldValue(edit.text, TextRange(edit.caret))
+        onDraftChange(edit.text)
+        if (segment.kind == VoiceSegmentKind.Partial) {
+            voiceAnchor = anchor
+            voiceLength = edit.segmentLength
+        } else {
+            voiceAnchor = null
+            voiceLength = 0
+        }
+        viewModel.consumeVoiceSegment(segment.serial)
+    }
+    LaunchedEffect(state.voice) {
+        // A take that ended without a final segment leaves nothing to replace.
+        if (state.voice != VoiceStatus.Listening) {
+            voiceAnchor = null
+            voiceLength = 0
+        }
     }
 
     when (sheet) {
@@ -1893,7 +1919,7 @@ private fun Composer(
         null -> Unit
     }
 
-    if (!composerExpanded && draft.isBlank() && state.attachments.isEmpty() && !state.recording && !state.transcribing) {
+    if (!composerExpanded && draft.isBlank() && state.attachments.isEmpty() && state.voice == VoiceStatus.Idle) {
         Surface(
             modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
             shape = RoundedCornerShape(18.dp),
@@ -1946,20 +1972,52 @@ private fun Composer(
             }
         }
 
-        if (state.recording || state.transcribing) {
+        if (state.voice != VoiceStatus.Idle) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp))
-                Text(
-                    stringResource(if (state.recording) R.string.composer_recording else R.string.composer_transcribing),
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.weight(1f),
-                )
-                if (state.recording) {
-                    TextButton(onClick = { viewModel.cancelRecording() }) { Text(stringResource(R.string.action_cancel)) }
+                when (state.voice) {
+                    VoiceStatus.Listening -> {
+                        Icon(
+                            Icons.Filled.Mic,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            stringResource(if (state.voiceViaServer) R.string.composer_recording else R.string.composer_listening),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { viewModel.cancelVoiceInput() }) { Text(stringResource(R.string.action_cancel)) }
+                    }
+                    VoiceStatus.Transcribing -> {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp))
+                        Text(
+                            stringResource(R.string.composer_transcribing),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    VoiceStatus.Error -> {
+                        Icon(
+                            Icons.Filled.ErrorOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            state.error ?: stringResource(R.string.composer_voice_failed),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { viewModel.resetVoice() }) { Text(stringResource(R.string.action_dismiss)) }
+                    }
+                    VoiceStatus.Idle -> Unit
                 }
             }
         }
@@ -1968,8 +2026,11 @@ private fun Composer(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
         ) {
             OutlinedTextField(
-                value = draft,
-                onValueChange = onDraftChange,
+                value = field,
+                onValueChange = { value ->
+                    field = value
+                    if (value.text != draft) onDraftChange(value.text)
+                },
                 placeholder = { Text(stringResource(R.string.composer_hint)) },
                 modifier = Modifier.fillMaxWidth().onFocusChanged {
                     if (fieldFocused && !it.isFocused && draft.isBlank() && state.attachments.isEmpty()) {
@@ -2081,6 +2142,16 @@ private val REASONING_LEVELS = listOf(
     "xhigh" to R.string.reasoning_extra_high,
 )
 
+private val VOICE_INPUT_MODES = listOf(
+    Store.VOICE_INPUT_DEVICE to R.string.voice_input_device,
+    Store.VOICE_INPUT_SERVER to R.string.voice_input_server,
+)
+
+@Composable
+private fun voiceInputLabel(mode: String): String = stringResource(
+    VOICE_INPUT_MODES.firstOrNull { it.first == mode }?.second ?: R.string.voice_input_device,
+)
+
 private val APPEARANCE_LEVELS = listOf(
     "system" to R.string.appearance_system,
     "light" to R.string.appearance_light,
@@ -2109,7 +2180,8 @@ private fun ComposerActionButton(
     onRecord: () -> Unit,
 ) {
     val hasPayload = draft.isNotBlank() || state.attachments.isNotEmpty()
-    val active = hasPayload || state.recording || state.sending
+    val listening = state.voice == VoiceStatus.Listening
+    val active = hasPayload || listening || state.sending
     val background = if (active) {
         MaterialTheme.colorScheme.primary
     } else {
@@ -2129,17 +2201,32 @@ private fun ComposerActionButton(
         contentAlignment = Alignment.Center,
     ) {
         when {
-            state.recording -> IconButton(onClick = { viewModel.stopRecordingAndTranscribe() }) {
-                Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.composer_stop), tint = tint, modifier = Modifier.size(20.dp))
+            listening -> IconButton(onClick = { viewModel.stopVoiceInput() }) {
+                Icon(
+                    Icons.Filled.Stop,
+                    contentDescription = stringResource(if (state.voiceViaServer) R.string.composer_stop else R.string.composer_stop_listening),
+                    tint = tint,
+                    modifier = Modifier.size(20.dp),
+                )
             }
+            state.voice == VoiceStatus.Transcribing -> CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
             state.sending -> IconButton(onClick = { viewModel.stopRun() }) {
                 Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.conversation_stop), tint = tint, modifier = Modifier.size(20.dp))
             }
             hasPayload -> IconButton(onClick = onSend) {
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.composer_send), tint = tint, modifier = Modifier.size(20.dp))
             }
-            else -> IconButton(onClick = onRecord, enabled = !state.transcribing) {
-                Icon(Icons.Filled.Mic, contentDescription = stringResource(R.string.composer_record), tint = tint, modifier = Modifier.size(20.dp))
+            else -> IconButton(onClick = onRecord) {
+                Icon(
+                    Icons.Filled.Mic,
+                    contentDescription = stringResource(R.string.composer_record),
+                    tint = if (state.voice == VoiceStatus.Error) MaterialTheme.colorScheme.error else tint,
+                    modifier = Modifier.size(20.dp),
+                )
             }
         }
     }
@@ -2706,7 +2793,30 @@ private fun SettingsScreen(state: UiState, viewModel: AppViewModel) {
     var appearanceSheet by remember { mutableStateOf(false) }
     var languageSheet by remember { mutableStateOf(false) }
     var reasoningSheet by remember { mutableStateOf(false) }
+    var voiceSheet by remember { mutableStateOf(false) }
     var confirmSignOut by remember { mutableStateOf(false) }
+
+    if (voiceSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { voiceSheet = false },
+            sheetState = rememberModalBottomSheetState(),
+        ) {
+            PickerSheet(
+                title = stringResource(R.string.settings_voice_input),
+                loading = false,
+                rows = VOICE_INPUT_MODES.map { (value, label) ->
+                    PickerRow(
+                        label = stringResource(label),
+                        detail = stringResource(if (value == Store.VOICE_INPUT_SERVER) R.string.voice_input_server_note else R.string.voice_input_device_note),
+                        selected = state.voiceInput == value,
+                    ) {
+                        voiceSheet = false
+                        viewModel.setVoiceInput(value)
+                    }
+                },
+            )
+        }
+    }
 
     if (appearanceSheet) {
         ModalBottomSheet(
@@ -2861,6 +2971,27 @@ private fun SettingsScreen(state: UiState, viewModel: AppViewModel) {
                         onClick = { reasoningSheet = true },
                     )
                 }
+            }
+
+            item { StudioSectionTitle(stringResource(R.string.settings_section_voice)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(
+                        icon = Icons.Filled.Mic,
+                        color = Color(0xFFE85262),
+                        title = stringResource(R.string.settings_voice_input),
+                        subtitle = voiceInputLabel(state.voiceInput),
+                        onClick = { voiceSheet = true },
+                    )
+                }
+            }
+            item {
+                Text(
+                    stringResource(R.string.settings_voice_input_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+                )
             }
 
             item { Spacer(Modifier.height(16.dp)) }
