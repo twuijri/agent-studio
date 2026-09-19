@@ -14,7 +14,7 @@ final class ChatParityTests: XCTestCase {
     func testHandshakeRegistersPhoneAsMobileTarget() throws {
         let url = try XCTUnwrap(SocketIOConnection.handshakeURL(baseURL: "https://hub.example", profile: "main", platform: "ios"))
         XCTAssertEqual(url.scheme, "wss")
-        XCTAssertEqual(url.path, "/socket.io/")
+        XCTAssertTrue(url.absoluteString.hasPrefix("wss://hub.example/socket.io/?"), url.absoluteString)
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         XCTAssertEqual(items.first { $0.name == "EIO" }?.value, "4")
         XCTAssertEqual(items.first { $0.name == "transport" }?.value, "websocket")
