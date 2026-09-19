@@ -1,37 +1,77 @@
 import SwiftUI
 import PhotosUI
 
+/// Settings page in the web's section order: Current Account, Account
+/// Management (sa), Webhooks (sa), Display, Proxy, Compression, Privacy,
+/// Models — plus Advanced and Workspace tools so every existing screen stays
+/// reachable after the tab bar was removed.
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     var body: some View {
         List {
-            Section {
-                NavigationLink { AccountView() } label: { HStack(spacing: 13) { ProfileAvatar(name: store.currentUser?.username ?? "Account", avatar: store.currentUser?.avatar, size: 48); VStack(alignment: .leading, spacing: 3) { Text(store.currentUser?.username ?? "Account").font(.headline); Text(store.currentUser?.role.capitalized ?? "").font(.caption).foregroundStyle(.secondary) } } }
-                NavigationLink { ProfilesView() } label: { SettingsRow(icon: "person.2.fill", color: .blue, title: "Profiles", subtitle: store.selectedProfile) }
-                NavigationLink { ServerView() } label: { SettingsRow(icon: "server.rack", color: .green, title: "Studio connection", subtitle: store.baseURL) }
+            Section("Current Account") {
+                NavigationLink { AccountView() } label: { HStack(spacing: 13) { ProfileAvatar(name: store.currentUser?.username ?? "Account", avatar: store.currentUser?.avatar, size: 48); VStack(alignment: .leading, spacing: 3) { Text(store.currentUser?.username ?? "Account").font(.headline); Text(store.currentUser?.role.replacingOccurrences(of: "_", with: " ").capitalized ?? "").font(.caption).foregroundStyle(.secondary) } } }
+                NavigationLink { ServerView() } label: { SettingsRow(icon: "server.rack", color: CoreHubTokens.Palette.success, title: "Core Hub connection", subtitle: store.baseURL) }
+                Button(role: .destructive) { store.signOut() } label: { Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") }
             }
-            Section("App") {
-                Picker(selection: Binding(get: { store.appearance }, set: store.setAppearance)) { Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark") } label: { SettingsRow(icon: "circle.lefthalf.filled", color: .indigo, title: "Appearance") { EmptyView() } }
-                Picker(selection: Binding(get: { store.language }, set: store.setLanguage)) { Text("System").tag("system"); Text("العربية").tag("ar"); Text("English").tag("en") } label: { SettingsRow(icon: "globe", color: .teal, title: "Language") { EmptyView() } }
-                Picker(selection: Binding(get: { store.reasoningEffort }, set: store.setReasoning)) { Text("Default").tag(""); Text("Low").tag("low"); Text("Medium").tag("medium"); Text("High").tag("high"); Text("Extra high").tag("xhigh") } label: { SettingsRow(icon: "brain.head.profile", color: .purple, title: "Reasoning effort") { EmptyView() } }
+            if store.isSuperAdmin {
+                Section("Account Management") {
+                    NavigationLink { ComingLaterView(title: "Account Management") } label: { SettingsRow(icon: "person.2.badge.gearshape", color: CoreHubTokens.Palette.info, title: "Account Management", subtitle: String(localized: "Coming in a later milestone")) }
+                }
+                Section("Webhooks") {
+                    NavigationLink { WebhooksView() } label: { SettingsRow(icon: "arrow.triangle.branch", color: CoreHubTokens.Palette.warning, title: "Webhooks") }
+                }
             }
-            Section {
-                Picker(selection: Binding(get: { store.voiceInput }, set: store.setVoiceInput)) { Text("This device").tag(Preferences.voiceInputDevice); Text("Core Hub server").tag(Preferences.voiceInputServer) } label: { SettingsRow(icon: "mic.fill", color: .pink, title: "Voice input") { EmptyView() } }
-            } header: { Text("Voice") } footer: { Text("Speech is turned into text on this iPhone by default. Choose the Core Hub server to use the speech provider configured in Studio.") }
-            Section {
-                NavigationLink { MoreSettingsView() } label: { SettingsRow(icon: "slider.horizontal.3", color: .orange, title: "More Settings", subtitle: String(localized: "All Hermes Studio settings in one place")) }
-            } footer: { Text("Agent tools stay in the Agent tab. Studio configuration is collected here to keep navigation simple.") }
+            Section("Display") {
+                Picker(selection: Binding(get: { store.appearance }, set: store.setAppearance)) { Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark") } label: { SettingsRow(icon: "circle.lefthalf.filled", color: CoreHubTokens.Palette.accent, title: "Appearance") { EmptyView() } }
+                Picker(selection: Binding(get: { store.language }, set: store.setLanguage)) { Text("System").tag("system"); Text("العربية").tag("ar"); Text("English").tag("en") } label: { SettingsRow(icon: "globe", color: CoreHubTokens.Palette.info, title: "Language") { EmptyView() } }
+                Picker(selection: Binding(get: { store.reasoningEffort }, set: store.setReasoning)) { Text("Default").tag(""); Text("Low").tag("low"); Text("Medium").tag("medium"); Text("High").tag("high"); Text("Extra high").tag("xhigh") } label: { SettingsRow(icon: "brain.head.profile", color: CoreHubTokens.Palette.accent, title: "Reasoning effort") { EmptyView() } }
+                Picker(selection: Binding(get: { store.voiceInput }, set: store.setVoiceInput)) { Text("This device").tag(Preferences.voiceInputDevice); Text("Core Hub server").tag(Preferences.voiceInputServer) } label: { SettingsRow(icon: "mic.fill", color: CoreHubTokens.Palette.error, title: "Voice input") { EmptyView() } }
+                NavigationLink { StudioSectionSettings(section: .display) } label: { SettingsRow(icon: "rectangle.on.rectangle", color: CoreHubTokens.Palette.info, title: "Chat display") }
+                NavigationLink { ThemeStudioView() } label: { SettingsRow(icon: "paintpalette.fill", color: CoreHubTokens.Palette.accent, title: "Theme") }
+            }
+            Section("Proxy") { NavigationLink { StudioSectionSettings(section: .proxy) } label: { SettingsRow(icon: "network", color: CoreHubTokens.Palette.info, title: "Proxy") } }
+            Section("Compression") { NavigationLink { StudioSectionSettings(section: .compression) } label: { SettingsRow(icon: "arrow.down.right.and.arrow.up.left", color: CoreHubTokens.Palette.warning, title: "Compression") } }
+            Section("Privacy") { NavigationLink { StudioSectionSettings(section: .privacy) } label: { SettingsRow(icon: "hand.raised.fill", color: CoreHubTokens.Palette.error, title: "Privacy") } }
+            Section("Models") {
+                NavigationLink { ModelsView() } label: { SettingsRow(icon: "cpu.fill", color: CoreHubTokens.Palette.accent, title: "Models") }
+                NavigationLink { ProvidersView() } label: { SettingsRow(icon: "network", color: CoreHubTokens.Palette.info, title: "Providers") }
+            }
+            Section("Advanced") {
+                NavigationLink { StudioSectionSettings(section: .agent) } label: { SettingsRow(icon: "sparkles", color: CoreHubTokens.Palette.accent, title: "Agent") }
+                NavigationLink { StudioSectionSettings(section: .memory) } label: { SettingsRow(icon: "lightbulb.max.fill", color: CoreHubTokens.Palette.warning, title: "Memory") }
+                NavigationLink { StudioSectionSettings(section: .session) } label: { SettingsRow(icon: "clock.arrow.circlepath", color: CoreHubTokens.Palette.info, title: "Session reset") }
+                NavigationLink { StudioSectionSettings(section: .approvals) } label: { SettingsRow(icon: "checkmark.shield.fill", color: CoreHubTokens.Palette.success, title: "Approvals") }
+                NavigationLink { StudioSectionSettings(section: .skills) } label: { SettingsRow(icon: "checkmark.shield", color: CoreHubTokens.Palette.info, title: "Skill approvals") }
+                NavigationLink { StudioSectionSettings(section: .voice) } label: { SettingsRow(icon: "waveform", color: CoreHubTokens.Palette.error, title: "Voice") }
+                NavigationLink { StudioSectionSettings(section: .gateway) } label: { SettingsRow(icon: "power", color: CoreHubTokens.Palette.success, title: "Gateway auto-start") }
+                NavigationLink { EkkoHubView() } label: { SettingsRow(icon: "sparkles", color: CoreHubTokens.Palette.accent, title: "Ekko") }
+                NavigationLink { RuntimeVersionsView() } label: { SettingsRow(icon: "shippingbox.and.arrow.backward.fill", color: CoreHubTokens.Palette.info, title: "Runtime Versions") }
+            }
+            Section("Workspace tools") {
+                NavigationLink { GlobalAgentView() } label: { SettingsRow(icon: "globe.desk.fill", color: CoreHubTokens.Palette.success, title: "Global Agent") }
+                NavigationLink { StudioFilesView() } label: { SettingsRow(icon: "folder.fill", color: CoreHubTokens.Palette.info, title: "Files") }
+                NavigationLink { JourneyView() } label: { SettingsRow(icon: "point.3.filled.connected.trianglepath.dotted", color: CoreHubTokens.Palette.accent, title: "Journey") }
+                NavigationLink { CronJobsView() } label: { SettingsRow(icon: "calendar.badge.clock", color: CoreHubTokens.Palette.info, title: "Scheduled Jobs") }
+                NavigationLink { KanbanView() } label: { SettingsRow(icon: "rectangle.3.group", color: CoreHubTokens.Palette.warning, title: "Kanban") }
+                NavigationLink { ChannelsView() } label: { SettingsRow(icon: "antenna.radiowaves.left.and.right", color: CoreHubTokens.Palette.success, title: "Channels") }
+                NavigationLink { SkillsView() } label: { SettingsRow(icon: "square.stack.3d.up.fill", color: CoreHubTokens.Palette.accent, title: "Skills") }
+                NavigationLink { PluginsView() } label: { SettingsRow(icon: "puzzlepiece.extension.fill", color: CoreHubTokens.Palette.accent, title: "Plugins") }
+                NavigationLink { MCPView() } label: { SettingsRow(icon: "server.rack", color: CoreHubTokens.Palette.info, title: "MCP") }
+                NavigationLink { StudioConnectionsView() } label: { SettingsRow(icon: "point.3.connected.trianglepath.dotted", color: CoreHubTokens.Palette.success, title: "Connections") }
+            }
             Section("About") {
-                HStack { SettingsRow(icon: "app.badge.fill", color: HermesTheme.purple, title: "Hermes Studio Mobile") { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.4.0").foregroundStyle(.secondary) } }
-                Link(destination: URL(string: "https://github.com/twuijri/hermes-studio-mobile")!) { RepositorySettingsRow(title: "Hermes Studio Mobile") }.foregroundStyle(.primary)
-                Link(destination: URL(string: "https://github.com/EKKOLearnAI/hermes-studio")!) { RepositorySettingsRow(title: "Hermes Studio") }.foregroundStyle(.primary)
+                HStack { SettingsRow(icon: "app.badge.fill", color: CoreHubTokens.Palette.accent, title: "Core Hub for iOS") { Text(verbatim: "v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")").foregroundStyle(.secondary) } }
+                if !store.serverVersion.isEmpty { LabeledContent("Core Hub server") { Text(verbatim: "v\(store.serverVersion)") } }
+                Link(destination: URL(string: "https://github.com/twuijri/core-hub")!) { RepositorySettingsRow(title: "Core Hub on GitHub") }.foregroundStyle(.primary)
+                Link(destination: URL(string: "https://github.com/EKKOLearnAI/hermes-studio")!) { RepositorySettingsRow(title: "Upstream: Hermes Studio") }.foregroundStyle(.primary)
             }
-            Section { Button(role: .destructive) { store.signOut() } label: { Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right").frame(maxWidth: .infinity) } }
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Settings")
-        // Rebuild this visible list together with the three root lists after
-        // UIKit's direction transform has settled (see AppStore.setLanguage).
+        .navigationBarTitleDisplayMode(.inline)
+        // Rebuild this visible list after UIKit's direction transform has
+        // settled (see AppStore.setLanguage).
         .id("\(store.language)-\(store.languageRefresh)")
     }
 }
@@ -101,7 +141,7 @@ struct ProfilesView: View {
     @EnvironmentObject private var store: AppStore
     @State private var creating = false; @State private var cloning = false; @State private var newName = ""; @State private var renaming: Profile?; @State private var renameText = ""; @State private var runtimes: [ProfileRuntime] = []
     var body: some View {
-        List { ForEach(store.profiles) { profile in NavigationLink { ProfileDetailView(profile: profile) } label: { HStack(spacing: 13) { ProfileAvatar(name: profile.name, avatar: profile.avatar, size: 45); VStack(alignment: .leading, spacing: 3) { Text(profile.name).font(.headline).foregroundStyle(.primary); Text(profile.model ?? "Default model").font(.caption).foregroundStyle(.secondary); if let runtime = runtimes.first(where: { $0.id == profile.name }) { Text(runtime.bridgeRunning ? "Runtime running" : "Runtime stopped").font(.caption2).foregroundStyle(runtime.bridgeRunning ? .green : .secondary) } }; Spacer(); if profile.name == store.selectedProfile { Image(systemName: "checkmark.circle.fill").foregroundStyle(HermesTheme.purple) } }.padding(.vertical, 3) }.swipeActions(edge: .leading) { Button { renameText = profile.name; renaming = profile } label: { Label("Rename", systemImage: "pencil") }.tint(.blue); Button { Task { await store.attempt({ try await store.api.restartProfileRuntime(profile.name) }); await loadRuntimes() } } label: { Label("Restart runtime", systemImage: "arrow.clockwise") }.tint(.orange) }.swipeActions(edge: .trailing) { if store.profiles.count > 1 { Button(role: .destructive) { Task { await store.attempt({ try await store.api.deleteProfile(profile.name) }); await store.refreshProfiles() } } label: { Label("Delete", systemImage: "trash") } } } } }.listStyle(.insetGrouped).navigationTitle("Profiles").toolbar { Menu { Button("New profile") { cloning = false; creating = true }; Button("Clone active profile") { cloning = true; creating = true } } label: { Image(systemName: "plus") } }.refreshable { await store.refreshProfiles(); await loadRuntimes() }.task { await loadRuntimes() }
+        List { ForEach(store.profiles) { profile in NavigationLink { ProfileDetailView(profile: profile) } label: { HStack(spacing: 13) { ProfileAvatar(name: profile.name, avatar: profile.avatar, size: 45); VStack(alignment: .leading, spacing: 3) { Text(profile.name).font(.headline).foregroundStyle(.primary); Text(profile.model ?? "Default model").font(.caption).foregroundStyle(.secondary); if let runtime = runtimes.first(where: { $0.id == profile.name }) { Text(runtime.bridgeRunning ? "Runtime running" : "Runtime stopped").font(.caption2).foregroundStyle(runtime.bridgeRunning ? .green : .secondary) } }; Spacer(); if profile.name == store.selectedProfile { Image(systemName: "checkmark.circle.fill").foregroundStyle(CoreHubTokens.Palette.accent) } }.padding(.vertical, 3) }.swipeActions(edge: .leading) { Button { renameText = profile.name; renaming = profile } label: { Label("Rename", systemImage: "pencil") }.tint(.blue); Button { Task { await store.attempt({ try await store.api.restartProfileRuntime(profile.name) }); await loadRuntimes() } } label: { Label("Restart runtime", systemImage: "arrow.clockwise") }.tint(.orange) }.swipeActions(edge: .trailing) { if store.profiles.count > 1 { Button(role: .destructive) { Task { await store.attempt({ try await store.api.deleteProfile(profile.name) }); await store.refreshProfiles() } } label: { Label("Delete", systemImage: "trash") } } } } }.listStyle(.insetGrouped).navigationTitle("Profiles").toolbar { Menu { Button("New profile") { cloning = false; creating = true }; Button("Clone active profile") { cloning = true; creating = true } } label: { Image(systemName: "plus") } }.refreshable { await store.refreshProfiles(); await loadRuntimes() }.task { await loadRuntimes() }
             .alert(cloning ? "Clone active profile" : "New profile", isPresented: $creating) { TextField("Name", text: $newName); Button(cloning ? "Clone" : "Create") { Task { do { if cloning { try await store.api.cloneProfile(newName) } else { try await store.api.createProfile(newName) }; await store.refreshProfiles(); newName = "" } catch { store.errorMessage = error.localizedDescription } } }; Button("Cancel", role: .cancel) {} }
             .alert("Rename profile", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) { TextField("Name", text: $renameText); Button("Save") { guard let renaming else { return }; Task { do { try await store.api.renameProfile(renaming.name, to: renameText); await store.refreshProfiles() } catch { store.errorMessage = error.localizedDescription } } }; Button("Cancel", role: .cancel) {} }
     }
@@ -160,16 +200,6 @@ private struct EkkoMemoryView: View {
 
 private struct EkkoMemoryEditor: View { @EnvironmentObject var store: AppStore; @Environment(\.dismiss) var dismiss; @State var item: EkkoMemoryItem; let saved: () async -> Void
     var body: some View { NavigationStack { Form { TextField("Title", text: $item.title); TextField("Content", text: $item.content, axis: .vertical).lineLimit(5...15); TextField("Tags", text: Binding(get: { item.tags.joined(separator: ", ") }, set: { item.tags = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } })) }.navigationTitle("Edit memory").toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { Task { do { try await store.api.updateEkkoMemory(item); await saved(); dismiss() } catch { store.errorMessage = error.localizedDescription } } } } } } }
-}
-
-struct MoreSettingsView: View {
-    var body: some View {
-        List {
-            Section("Agent") { NavigationLink { StudioSectionSettings(section: .agent) } label: { SettingsRow(icon: "sparkles", color: .purple, title: "Agent") }; NavigationLink { StudioSectionSettings(section: .memory) } label: { SettingsRow(icon: "lightbulb.max.fill", color: .yellow, title: "Memory") }; NavigationLink { StudioSectionSettings(section: .compression) } label: { SettingsRow(icon: "arrow.down.right.and.arrow.up.left", color: .orange, title: "Compression") }; NavigationLink { ModelsView() } label: { SettingsRow(icon: "cpu.fill", color: .mint, title: "Models") } }
-            Section("Conversation") { NavigationLink { StudioSectionSettings(section: .display) } label: { SettingsRow(icon: "rectangle.on.rectangle", color: .blue, title: "Display") }; NavigationLink { StudioSectionSettings(section: .session) } label: { SettingsRow(icon: "clock.arrow.circlepath", color: .indigo, title: "Session reset") }; NavigationLink { StudioSectionSettings(section: .approvals) } label: { SettingsRow(icon: "checkmark.shield.fill", color: .green, title: "Approvals") }; NavigationLink { StudioSectionSettings(section: .skills) } label: { SettingsRow(icon: "checkmark.shield", color: .indigo, title: "Skill approvals") }; NavigationLink { StudioSectionSettings(section: .voice) } label: { SettingsRow(icon: "waveform", color: .pink, title: "Voice") } }
-            Section("Network & privacy") { NavigationLink { StudioSectionSettings(section: .proxy) } label: { SettingsRow(icon: "network", color: .teal, title: "Proxy") }; NavigationLink { StudioSectionSettings(section: .privacy) } label: { SettingsRow(icon: "hand.raised.fill", color: .red, title: "Privacy") }; NavigationLink { StudioSectionSettings(section: .gateway) } label: { SettingsRow(icon: "power", color: .green, title: "Gateway auto-start") } }
-        }.listStyle(.insetGrouped).navigationTitle("More Settings")
-    }
 }
 
 enum StudioSettingsSection: String {

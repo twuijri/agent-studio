@@ -48,6 +48,11 @@ enum Preferences {
         get { UserDefaults.standard.string(forKey: "appearance") ?? "system" }
         set { UserDefaults.standard.set(newValue, forKey: "appearance") }
     }
+    /// Default model id for new conversations (drawer footer model selector).
+    static var preferredModel: String {
+        get { UserDefaults.standard.string(forKey: "preferredModel") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "preferredModel") }
+    }
     static var reasoningEffort: String {
         get { UserDefaults.standard.string(forKey: "reasoningEffort") ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: "reasoningEffort") }

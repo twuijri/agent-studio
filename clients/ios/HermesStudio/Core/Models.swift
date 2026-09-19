@@ -615,6 +615,15 @@ struct CurrentUser: Hashable {
     let role: String
     let status: String
     let avatar: AvatarSpec?
+
+    /// Web `UserRole` is `'super_admin' | 'admin'`; only super-admins see
+    /// Agent Manager, Performance, Profiles, Account Management and Webhooks.
+    var isSuperAdmin: Bool { role == "super_admin" }
+}
+
+struct HealthStatus: Equatable {
+    let ok: Bool
+    let webUIVersion: String
 }
 
 struct Upload: Identifiable, Hashable {

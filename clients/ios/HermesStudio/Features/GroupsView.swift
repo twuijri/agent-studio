@@ -14,7 +14,7 @@ struct GroupsView: View {
                 List(rooms) { room in
                     NavigationLink { GroupRoomView(room: room) } label: {
                         HStack(spacing: 13) {
-                            ZStack { RoundedRectangle(cornerRadius: 15).fill(LinearGradient(colors: [HermesTheme.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)); Image(systemName: "person.3.fill").foregroundStyle(.white) }.frame(width: 50, height: 50)
+                            ZStack { RoundedRectangle(cornerRadius: 15).fill(LinearGradient(colors: [CoreHubTokens.Palette.accent, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)); Image(systemName: "person.3.fill").foregroundStyle(.white) }.frame(width: 50, height: 50)
                             VStack(alignment: .leading, spacing: 5) { Text(room.name).font(.headline); HStack { Label("\(room.agentCount) agents", systemImage: "sparkles"); Label("\(room.memberCount) members", systemImage: "person.2") }.font(.caption).foregroundStyle(.secondary) }
                         }.padding(.vertical, 4)
                     }.swipeActions { Button(role: .destructive) { Task { await delete(room) } } label: { Label("Delete", systemImage: "trash") } }
@@ -43,7 +43,7 @@ private struct CreateGroupView: View {
         NavigationStack {
             Form {
                 Section("Group") { TextField("Name", text: $name); TextField("Invite code", text: $inviteCode).textInputAutocapitalization(.never) }
-                Section("Agents") { ForEach(store.profiles) { profile in Button { if selected.contains(profile.name) { selected.remove(profile.name) } else { selected.insert(profile.name) } } label: { HStack { ProfileAvatar(name: profile.name, avatar: profile.avatar, size: 36); Text(profile.name).foregroundStyle(.primary); Spacer(); if selected.contains(profile.name) { Image(systemName: "checkmark.circle.fill").foregroundStyle(HermesTheme.purple) } } } } }
+                Section("Agents") { ForEach(store.profiles) { profile in Button { if selected.contains(profile.name) { selected.remove(profile.name) } else { selected.insert(profile.name) } } label: { HStack { ProfileAvatar(name: profile.name, avatar: profile.avatar, size: 36); Text(profile.name).foregroundStyle(.primary); Spacer(); if selected.contains(profile.name) { Image(systemName: "checkmark.circle.fill").foregroundStyle(CoreHubTokens.Palette.accent) } } } } }
             }
             .navigationTitle("New group").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button(saving ? "Creating…" : "Create") { Task { await save() } }.disabled(name.isEmpty || inviteCode.isEmpty || saving) } }
@@ -72,7 +72,7 @@ struct GroupRoomView: View {
             Divider()
             HStack(alignment: .bottom, spacing: 9) {
                 TextField("Message the group…", text: $input, axis: .vertical).lineLimit(1...5).padding(.horizontal, 15).padding(.vertical, 11).background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20))
-                Button { send() } label: { Image(systemName: "arrow.up").font(.headline).foregroundStyle(.white).frame(width: 44, height: 44).background((input.isEmpty || !connected ? Color.gray : HermesTheme.purple).gradient, in: Circle()) }.disabled(input.isEmpty || !connected)
+                Button { send() } label: { Image(systemName: "arrow.up").font(.headline).foregroundStyle(.white).frame(width: 44, height: 44).background((input.isEmpty || !connected ? Color.gray : CoreHubTokens.Palette.accent).gradient, in: Circle()) }.disabled(input.isEmpty || !connected)
             }.padding(10).background(.ultraThinMaterial)
         }
         .navigationTitle(room.name).navigationBarTitleDisplayMode(.inline)
@@ -98,7 +98,7 @@ struct GroupRoomView: View {
         HStack(alignment: .bottom, spacing: 8) {
             if !message.isAgent { Spacer(minLength: 42) }
             if message.isAgent { ProfileAvatar(name: message.sender, avatar: store.profiles.first { $0.name == message.sender }?.avatar, size: 29) }
-            VStack(alignment: .leading, spacing: 5) { if message.isAgent { Text(message.sender).font(.caption.weight(.semibold)).foregroundStyle(HermesTheme.purple) }; MarkdownText(text: message.content); if let timestamp = message.timestamp { Text(timestamp.relativeDate).font(.caption2).foregroundStyle(.secondary) } }.padding(12).background(message.isAgent ? Color(uiColor: .secondarySystemBackground) : HermesTheme.purple.opacity(0.17), in: RoundedRectangle(cornerRadius: 19)).frame(maxWidth: 550, alignment: .leading)
+            VStack(alignment: .leading, spacing: 5) { if message.isAgent { Text(message.sender).font(.caption.weight(.semibold)).foregroundStyle(CoreHubTokens.Palette.accent) }; MarkdownText(text: message.content); if let timestamp = message.timestamp { Text(timestamp.relativeDate).font(.caption2).foregroundStyle(.secondary) } }.padding(12).background(message.isAgent ? Color(uiColor: .secondarySystemBackground) : CoreHubTokens.Palette.accent.opacity(0.17), in: RoundedRectangle(cornerRadius: 19)).frame(maxWidth: 550, alignment: .leading)
             if message.isAgent { Spacer(minLength: 28) }
         }.frame(maxWidth: .infinity)
     }

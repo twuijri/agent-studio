@@ -18,7 +18,25 @@ final class AppStore: ObservableObject {
     @Published var errorMessage: String?
     @Published var successMessage: String?
     @Published var busy = false
-    @Published var selectedRootTab = 0
+
+    // MARK: Shell navigation (M2: drawer + conversation switch, like the web)
+
+    @Published var drawerOpen = false
+    @Published var drawerPage: DrawerPage = .navigation
+    @Published var conversationMode: ConversationMode = .chat
+    @Published var selectedSession: SessionSummary?
+    @Published var selectedRoom: Room?
+    @Published var selectedWorkflow: WorkflowItem?
+    @Published var shellDestination: ShellDestination?
+    /// Bumped whenever a session is created, renamed, archived or deleted so
+    /// the drawer list reloads.
+    @Published private(set) var sessionListVersion = 0
+    /// Default model for new conversations (drawer footer model selector).
+    @Published var preferredModel = Preferences.preferredModel
+    @Published private(set) var serverVersion = ""
+    @Published private(set) var connected = false
+    let browserPrefs = SessionBrowserPrefs()
+
     /// Present only for QR-paired (app-login) connections.
     @Published private(set) var appSession: AppSessionRecord? = AppSessionRecord.load()
 
@@ -28,6 +46,9 @@ final class AppStore: ObservableObject {
     let api: APIClient
 
     enum Phase { case launching, signedOut, signedIn }
+    enum DrawerPage { case navigation, settings }
+
+    var isSuperAdmin: Bool { currentUser?.isSuperAdmin == true }
 
     init() {
         api = APIClient(baseURL: Preferences.baseURL, token: "")
@@ -232,11 +253,78 @@ final class AppStore: ObservableObject {
         selectedProfile = name; Preferences.profile = name
     }
 
+    func setPreferredModel(_ model: String) { preferredModel = model; Preferences.preferredModel = model }
+
     func signOut(message: String? = nil) {
         SecureStore.remove("token"); AppSessionRecord.clear(); appSession = nil
         token = ""; currentUser = nil; profiles = []; phase = .signedOut
         api.update(baseURL: baseURL, token: "")
+        selectedSession = nil; selectedRoom = nil; selectedWorkflow = nil; shellDestination = nil
+        drawerOpen = false; drawerPage = .navigation; conversationMode = .chat
+        connected = false
         if let message { errorMessage = message }
+    }
+
+    // MARK: Shell helpers
+
+    /// `GET /health`: connection dot and "Core Hub v{version}" in the drawer.
+    func checkHealth() async {
+        do {
+            let status = try await api.health()
+            connected = status.ok
+            if !status.webUIVersion.isEmpty { serverVersion = status.webUIVersion }
+        } catch {
+            connected = false
+        }
+    }
+
+    func sessionsChanged() { sessionListVersion &+= 1 }
+
+    /// Opens a local, not-yet-persisted conversation (web "New Chat").
+    func startNewChat(agent: String = "hermes") {
+        let session = SessionSummary([
+            "id": UUID().uuidString,
+            "title": String(localized: "New conversation"),
+            "profile": selectedProfile,
+            "agent": agent,
+            "source": AgentIdentity.canonicalID(agent) == "hermes" ? "cli" : "coding_agent",
+            "model": preferredModel,
+        ], profile: selectedProfile)
+        open(session)
+    }
+
+    func open(_ session: SessionSummary) {
+        shellDestination = nil
+        conversationMode = .chat
+        selectedSession = session
+        browserPrefs.markRead(session.id)
+        drawerOpen = false
+    }
+
+    func open(_ room: Room) {
+        shellDestination = nil
+        conversationMode = .group
+        selectedRoom = room
+        drawerOpen = false
+    }
+
+    func open(_ workflow: WorkflowItem) {
+        shellDestination = nil
+        conversationMode = .workflow
+        selectedWorkflow = workflow
+        drawerOpen = false
+    }
+
+    func show(_ destination: ShellDestination) {
+        drawerOpen = false
+        drawerPage = .navigation
+        shellDestination = destination
+    }
+
+    func switchMode(_ mode: ConversationMode) {
+        conversationMode = mode
+        shellDestination = nil
+        if mode == .history { drawerOpen = false }
     }
 
     func updateServer(_ server: String) async {

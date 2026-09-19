@@ -13,7 +13,14 @@ struct EmptyState: View {
 struct ErrorBanner: View {
     let message: String
     var body: some View {
-        Label(message, systemImage: "exclamationmark.triangle.fill").font(.footnote).foregroundStyle(.white).padding(12).frame(maxWidth: .infinity, alignment: .leading).background(.red.gradient, in: RoundedRectangle(cornerRadius: 14))
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.sidebarTab))
+            .foregroundStyle(CoreHubTokens.Palette.error)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CoreHubTokens.Palette.bgCard, in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.card))
+            .overlay(RoundedRectangle(cornerRadius: CoreHubTokens.Radius.card).stroke(CoreHubTokens.Palette.error.opacity(0.4)))
+            .coreHubShadow(CoreHubTokens.Shadow.card)
     }
 }
 
@@ -21,10 +28,16 @@ struct SearchBar: View {
     @Binding var text: String
     var body: some View {
         HStack(spacing: 9) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("Search", text: $text).textInputAutocapitalization(.never)
-            if !text.isEmpty { Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }.buttonStyle(.plain) }
-        }.padding(.horizontal, 12).frame(height: 42).background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+            CoreHubIconView(icon: .search, size: 16).foregroundStyle(CoreHubTokens.Palette.textMuted)
+            TextField("Search", text: $text)
+                .font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.inputMinimum))
+                .textInputAutocapitalization(.never)
+            if !text.isEmpty { Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(CoreHubTokens.Palette.textMuted) }.buttonStyle(.plain) }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 42)
+        .background(CoreHubTokens.Palette.bgInput, in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.control))
+        .overlay(RoundedRectangle(cornerRadius: CoreHubTokens.Radius.control).stroke(CoreHubTokens.Palette.inputBorderIdle))
     }
 }
 
@@ -75,12 +88,12 @@ struct FileDownloadCard: View {
     var body: some View {
         Button { Task { await download() } } label: {
             HStack(spacing: 12) {
-                Image(systemName: fileIcon).font(.title3).foregroundStyle(HermesTheme.purple).frame(width: 40, height: 40).background(HermesTheme.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 11))
+                Image(systemName: fileIcon).font(.title3).foregroundStyle(CoreHubTokens.Palette.accent).frame(width: 40, height: 40).background(CoreHubTokens.Palette.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 11))
                 VStack(alignment: .leading, spacing: 3) { Text(link.label).font(.subheadline.weight(.semibold)).lineLimit(2); Text(ChatFiles.fileName(for: link)).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-                Spacer(); if loading { ProgressView() } else { Image(systemName: "arrow.down.circle.fill").font(.title3).foregroundStyle(HermesTheme.purple) }
-            }.padding(11).background(.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 14))
+                Spacer(); if loading { ProgressView() } else { Image(systemName: "arrow.down.circle.fill").font(.title3).foregroundStyle(CoreHubTokens.Palette.accent) }
+            }.padding(11).background(CoreHubTokens.Palette.bgCard, in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.card)).overlay(RoundedRectangle(cornerRadius: CoreHubTokens.Radius.card).stroke(CoreHubTokens.Palette.borderLight))
         }.buttonStyle(.plain).quickLookPreview($localURL)
-        if let error { Text(error).font(.caption2).foregroundStyle(.red) }
+        if let error { Text(error).font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.error) }
     }
 
     private var fileIcon: String {

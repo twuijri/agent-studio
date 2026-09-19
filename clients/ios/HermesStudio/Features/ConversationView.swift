@@ -18,8 +18,15 @@ struct ConversationView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     let session: SessionSummary
+    /// True when shown as the shell's root (hamburger instead of back).
+    var embeddedInShell = false
     @State private var lines: [ChatLine] = []
+    @State private var showingNewSession = false
+    @State private var showingSessionSettings = false
+    @State private var showingRename = false
+    @State private var renameText = ""
     @State private var input = ""
     @State private var attachments: [Upload] = []
     @State private var loading = true
@@ -72,9 +79,11 @@ struct ConversationView: View {
                         } label: {
                             Image(systemName: "arrow.down")
                                 .font(.headline.weight(.semibold))
-                                .frame(width: 46, height: 46)
-                                .background(.ultraThinMaterial, in: Circle())
-                                .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
+                                .foregroundStyle(CoreHubTokens.Palette.textPrimary)
+                                .frame(width: 40, height: 40)
+                                .background(CoreHubTokens.Palette.bgCard, in: Circle())
+                                .overlay(Circle().stroke(CoreHubTokens.Palette.border))
+                                .coreHubShadow(CoreHubTokens.Shadow.card)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Jump to latest message")
@@ -87,32 +96,49 @@ struct ConversationView: View {
                 .task { await reload(); try? await Task.sleep(for: .milliseconds(120)); reader.scrollTo("bottom", anchor: .bottom) }
             }
             if !queuedRuns.isEmpty { queuedPanel }
-            if !workspaceChanges.isEmpty { HStack { Label("\(workspaceChanges.count) workspace changes", systemImage: "arrow.triangle.branch"); Spacer(); if !resumedWorkspace.isEmpty { Text(resumedWorkspace).lineLimit(1) } }.font(.caption).foregroundStyle(.secondary).padding(.horizontal, 14).padding(.vertical, 5) }
-            Divider(); composer
+            if !workspaceChanges.isEmpty { HStack { Label("\(workspaceChanges.count) workspace changes", systemImage: "arrow.triangle.branch"); Spacer(); if !resumedWorkspace.isEmpty { TechnicalText(text: resumedWorkspace) } }.font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textSecondary).padding(.horizontal, 14).padding(.vertical, 5) }
+            composer
         }
-        .background(Color(uiColor: .systemBackground))
-        .navigationTitle(session.title)
+        .background(CoreHubTokens.Palette.bgPrimary)
+        .navigationTitle(displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .tabBar)
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarBackground(CoreHubTokens.Palette.bgPrimary, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.backward").frame(width: 38, height: 38).background(.ultraThinMaterial, in: Circle())
-                }.buttonStyle(.plain)
+                if embeddedInShell {
+                    DrawerButton()
+                } else {
+                    Button { dismiss() } label: {
+                        CoreHubIconView(icon: .back, size: 22).foregroundStyle(CoreHubTokens.Palette.textPrimary).frame(width: 38, height: 38).contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityLabel("Back")
+                }
             }
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: 7) { ProfileAvatar(name: session.profile, avatar: profile?.avatar, size: 27); VStack(spacing: 0) { Text(session.title).font(.subheadline.weight(.semibold)).lineLimit(1); if session.agentID != "hermes" { Text(session.agentDisplayName).font(.caption2).foregroundStyle(.secondary) } } }
-                    .padding(.horizontal, 12).frame(height: 38).background(.ultraThinMaterial, in: Capsule())
-            }
+            ToolbarItem(placement: .principal) { ChatHeaderTitle(title: displayTitle, workspace: workspaceLabel, agent: session.agentDisplayName) }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button { Task { await reload() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                    Button { newConversation() } label: { Label("New conversation", systemImage: "plus.bubble") }
+                    Button { store.startNewChat(agent: session.agentID) } label: { Label("New conversation", systemImage: "plus.bubble") }
+                    Button { showingNewSession = true } label: { Label("New conversation with agent…", systemImage: "cpu") }
                     Button { input = "/fork"; send() } label: { Label("Fork conversation", systemImage: "arrow.triangle.branch") }
-                } label: { Image(systemName: "ellipsis").frame(width: 38, height: 38).background(.ultraThinMaterial, in: Circle()) }
+                    Divider()
+                    Button { renameText = displayTitle; showingRename = true } label: { Label("Rename", systemImage: "pencil") }
+                    Button { showingSessionSettings = true } label: { Label("Session settings", systemImage: "slider.horizontal.3") }
+                    Button { Task { await archiveSession() } } label: { Label("Archive", systemImage: "archivebox") }
+                    Button(role: .destructive) { Task { await deleteSession() } } label: { Label("Delete", systemImage: "trash") }
+                } label: {
+                    CoreHubIconView(icon: .more, size: 22).foregroundStyle(CoreHubTokens.Palette.textPrimary).frame(width: 38, height: 38).contentShape(Rectangle())
+                }
+                .accessibilityLabel("Conversation options")
             }
+        }
+        .sheet(isPresented: $showingNewSession) { NewCodingSessionView(categories: []).environmentObject(store) }
+        .sheet(isPresented: $showingSessionSettings) { SessionManagementView(session: session, categories: []) { store.sessionsChanged() }.environmentObject(store) }
+        .alert("Rename conversation", isPresented: $showingRename) {
+            TextField("Title", text: $renameText)
+            Button("Save") { Task { await renameSession(renameText) } }
+            Button("Cancel", role: .cancel) {}
         }
         .confirmationDialog("Message actions", isPresented: Binding(get: { actionLine != nil }, set: { if !$0 { actionLine = nil } }), presenting: actionLine) { line in
             Button("Copy") { UIPasteboard.general.string = line.text; actionLine = nil }
@@ -151,6 +177,29 @@ struct ConversationView: View {
     }
 
     private var profile: Profile? { store.profiles.first { $0.name == session.profile } }
+    /// The shell keeps the live title after a rename; a pushed copy uses its own.
+    private var displayTitle: String { (store.selectedSession?.id == session.id ? store.selectedSession?.title : nil) ?? session.title }
+    private var workspaceLabel: String { WorkspaceChip.label(for: resumedWorkspace.nilIfEmpty ?? session.workspace) }
+
+    private func renameSession(_ title: String) async {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        await store.attempt { try await store.api.renameSession(session.id, title: trimmed) }
+        if store.selectedSession?.id == session.id { store.selectedSession?.title = trimmed }
+        store.sessionsChanged()
+    }
+
+    private func archiveSession() async {
+        await store.attempt { try await store.api.setSessionArchived(session.id, archived: true) }
+        store.sessionsChanged()
+        if embeddedInShell { store.selectedSession = nil } else { dismiss() }
+    }
+
+    private func deleteSession() async {
+        await store.attempt { try await store.api.deleteSession(session.id) }
+        store.sessionsChanged()
+        if embeddedInShell { store.selectedSession = nil } else { dismiss() }
+    }
 
     private var composerIsEmpty: Bool {
         input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
@@ -164,9 +213,10 @@ struct ConversationView: View {
                     Button {
                         composerExpanded = true
                     } label: {
-                        Image(systemName: "plus")
-                            .font(.title3.weight(.medium))
+                        CoreHubIconView(icon: .plus, size: 20)
+                            .foregroundStyle(CoreHubTokens.Palette.textSecondary)
                             .frame(width: 40, height: 40)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Open message composer")
@@ -174,18 +224,24 @@ struct ConversationView: View {
                         composerExpanded = true
                         inputFocused = true
                     } label: {
-                        Text("Type a message…").foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                        Text("Type a message…")
+                            .font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.inputMinimum))
+                            .foregroundStyle(CoreHubTokens.Palette.textMuted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     Button { Task { await voice() } } label: {
-                        Image(systemName: "mic.fill").font(.title3).frame(width: 40, height: 40)
+                        Image(systemName: "mic.fill").font(.system(size: 16, weight: .medium)).foregroundStyle(CoreHubTokens.Palette.textSecondary).frame(width: 40, height: 40).contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Voice input")
                 }
                 .padding(.horizontal, 7)
                 .padding(.vertical, 5)
-                .background(.ultraThinMaterial, in: Capsule())
-                .shadow(color: .black.opacity(0.12), radius: 5, y: 2)
+                .background(CoreHubTokens.Palette.bgComposer, in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.composer, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: CoreHubTokens.Radius.composer, style: .continuous).stroke(CoreHubTokens.Palette.borderLight))
+                .coreHubShadow(CoreHubTokens.Shadow.composer(for: colorScheme))
                 .padding(.horizontal, 12)
                 .padding(.top, 7)
             } else {
@@ -199,37 +255,46 @@ struct ConversationView: View {
     }
 
     private var queuedPanel: some View {
-        ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 8) { ForEach(queuedRuns) { item in HStack(spacing: 7) { Image(systemName: queueInsertionID == item.id ? "arrow.down.to.line.compact" : "clock"); Text(item.text.nilIfEmpty ?? String(localized: "Queued message")).lineLimit(1); Button { socket.insertQueued(sessionID: session.id, queueID: item.id); queueInsertionID = item.id } label: { Image(systemName: "arrow.up.to.line.compact") }; Button { socket.cancelQueued(sessionID: session.id, queueID: item.id); queuedRuns.removeAll { $0.id == item.id } } label: { Image(systemName: "xmark.circle.fill") } }.font(.caption).padding(8).background(.thinMaterial, in: Capsule()) } }.padding(.horizontal, 12) }.padding(.vertical, 5)
+        ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 8) { ForEach(queuedRuns) { item in HStack(spacing: 7) { Image(systemName: queueInsertionID == item.id ? "arrow.down.to.line.compact" : "clock"); Text(item.text.nilIfEmpty ?? String(localized: "Queued message")).lineLimit(1); Button { socket.insertQueued(sessionID: session.id, queueID: item.id); queueInsertionID = item.id } label: { Image(systemName: "arrow.up.to.line.compact") }; Button { socket.cancelQueued(sessionID: session.id, queueID: item.id); queuedRuns.removeAll { $0.id == item.id } } label: { Image(systemName: "xmark.circle.fill") } }.font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textSecondary).padding(8).background(CoreHubTokens.Palette.bgSecondary, in: Capsule()) } }.padding(.horizontal, 12) }.padding(.vertical, 5)
     }
 
     private var expandedComposer: some View {
         VStack(spacing: 9) {
             if let replyingTo {
                 HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 2) { Text("Replying to").font(.caption.weight(.semibold)).foregroundStyle(HermesTheme.purple); Text(replyingTo.text).font(.caption).lineLimit(2) }
-                    Spacer(); Button { self.replyingTo = nil } label: { Image(systemName: "xmark.circle.fill") }
-                }.padding(10).background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14)).padding(.horizontal, 10)
+                    VStack(alignment: .leading, spacing: 2) { Text("Replying to").font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.author, weight: .semibold)).foregroundStyle(CoreHubTokens.Palette.accent); Text(replyingTo.text).font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textSecondary).lineLimit(2) }
+                    Spacer(); Button { self.replyingTo = nil } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(CoreHubTokens.Palette.textMuted) }
+                }.padding(10).background(CoreHubTokens.Palette.bgSecondary, in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.bubble)).padding(.horizontal, 10)
             }
             if !attachments.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) { HStack { ForEach(attachments) { item in HStack(spacing: 6) { Image(systemName: item.mime.hasPrefix("image/") ? "photo" : "doc"); Text(item.name).lineLimit(1); Button { attachments.removeAll { $0.id == item.id } } label: { Image(systemName: "xmark.circle.fill") } }.font(.caption).padding(8).background(.thinMaterial, in: Capsule()) } }.padding(.horizontal, 12) }
+                ScrollView(.horizontal, showsIndicators: false) { HStack { ForEach(attachments) { item in HStack(spacing: 6) { Image(systemName: item.mime.hasPrefix("image/") ? "photo" : "doc"); Text(item.name).lineLimit(1); Button { attachments.removeAll { $0.id == item.id } } label: { Image(systemName: "xmark.circle.fill") } }.font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textSecondary).padding(8).background(CoreHubTokens.Palette.bgSecondary, in: Capsule()) } }.padding(.horizontal, 12) }
             }
             if voiceState != .idle { voiceStatusRow }
             TextField("Type a message…", text: $input, axis: .vertical)
+                .font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.inputMinimum))
+                .foregroundStyle(CoreHubTokens.Palette.textPrimary)
                 .lineLimit(1...6)
                 .focused($inputFocused)
                 .padding(.horizontal, 15)
                 .padding(.vertical, 11)
                 .onSubmit { if !input.isEmpty { send() } }
                 .padding(.horizontal, 10)
-            HStack(alignment: .center, spacing: 9) {
+            HStack(alignment: .center, spacing: 8) {
                 Menu {
                     Button { importing = true } label: { Label("Attach files", systemImage: "paperclip") }
-                    Button { newConversation() } label: { Label("New conversation", systemImage: "plus.bubble") }
-                } label: { Image(systemName: uploading ? "hourglass" : "plus").font(.title3.weight(.medium)).frame(width: 42, height: 42).background(Color(uiColor: .secondarySystemBackground), in: Circle()) }.disabled(uploading)
+                    Button { store.startNewChat(agent: session.agentID) } label: { Label("New conversation", systemImage: "plus.bubble") }
+                } label: {
+                    Group { if uploading { ProgressView().controlSize(.small) } else { CoreHubIconView(icon: .plus, size: 18) } }
+                        .foregroundStyle(CoreHubTokens.Palette.textSecondary)
+                        .frame(width: CoreHubTokens.Layout.composerButton, height: CoreHubTokens.Layout.composerButton)
+                        .background(CoreHubTokens.Palette.bgCard, in: Circle())
+                        .overlay(Circle().stroke(CoreHubTokens.Palette.inputBorderIdle))
+                }.disabled(uploading).accessibilityLabel("Attach")
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 15) {
-                        Label(session.profile, systemImage: "person.crop.circle")
-                        Menu { Button("Default") { store.setReasoning("") }; ForEach(["low", "medium", "high", "xhigh"], id: \.self) { value in Button(value.capitalized) { store.setReasoning(value) } } } label: { Label(store.reasoningEffort.nilIfEmpty?.capitalized ?? String(localized: "Default"), systemImage: "brain.head.profile") }
+                    HStack(spacing: 6) {
+                        Menu { Button("Default") { store.setReasoning("") }; ForEach(["low", "medium", "high", "xhigh"], id: \.self) { value in Button(value.capitalized) { store.setReasoning(value) } } } label: {
+                            ComposerPill(symbol: "brain.head.profile", text: store.reasoningEffort.nilIfEmpty?.capitalized ?? String(localized: "Default"))
+                        }
                         Menu {
                             ForEach(models) { model in
                                 Button(model.name) {
@@ -238,12 +303,13 @@ struct ConversationView: View {
                                     Task { await refreshContextWindow() }
                                 }
                             }
-                        } label: { Label(selectedModel.nilIfEmpty ?? session.model.nilIfEmpty ?? String(localized: "Model"), systemImage: "cpu") }
-                        if speechPlayer.isPlaying { Button { speechPlayer.stop() } label: { Label("Stop voice", systemImage: "stop.fill") } }
+                        } label: {
+                            ComposerPill(symbol: "cpu", text: selectedModel.nilIfEmpty ?? session.model.nilIfEmpty ?? String(localized: "Model"), technical: true)
+                        }
+                        ComposerPill(symbol: "person.crop.circle", text: session.profile)
+                        if speechPlayer.isPlaying { Button { speechPlayer.stop() } label: { ComposerPill(symbol: "stop.fill", text: String(localized: "Stop voice")) } }
                         ContextUsageView(tokens: contextTokens, window: contextWindow, loading: loadingContext)
                     }
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
                 }
                 Button {
                     if voiceState == .listening { stopVoice() }
@@ -251,17 +317,20 @@ struct ConversationView: View {
                     else if sending && canSend { queueCurrentMessage() } else if canSend || sending { send() } else { Task { await voice() } }
                 } label: {
                     Image(systemName: composerButtonIcon)
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(composerButtonForeground)
-                        .frame(width: 40, height: 40)
-                        .background(composerButtonBackground.gradient, in: Circle())
+                        .frame(width: CoreHubTokens.Layout.composerButton, height: CoreHubTokens.Layout.composerButton)
+                        .background(composerButtonBackground, in: Circle())
                 }
                 .disabled(voiceState == .transcribing)
+                .accessibilityLabel(sending ? "Stop" : (canSend ? "Send" : "Voice input"))
             }.padding(.horizontal, 10)
         }
         .padding(.top, 9)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 25, style: .continuous))
-        .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+        .padding(.bottom, 9)
+        .background(CoreHubTokens.Palette.bgComposer, in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.composer, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: CoreHubTokens.Radius.composer, style: .continuous).stroke(inputFocused ? CoreHubTokens.Palette.accent : CoreHubTokens.Palette.borderLight))
+        .coreHubShadow(inputFocused ? CoreHubTokens.Shadow.focused : CoreHubTokens.Shadow.composer(for: colorScheme))
         .padding(.horizontal, 8)
     }
 
@@ -284,15 +353,15 @@ struct ConversationView: View {
     }
 
     private var composerButtonForeground: Color {
-        if voiceState == .listening || sending || canSend { return .white }
-        if voiceState == .error { return .red }
-        return .primary
+        if voiceState == .listening || sending || canSend { return CoreHubTokens.Palette.textOnAccent }
+        if voiceState == .error { return CoreHubTokens.Palette.error }
+        return CoreHubTokens.Palette.textPrimary
     }
 
     private var composerButtonBackground: Color {
-        if voiceState == .listening || sending { return .red }
-        if voiceState == .transcribing { return Color(uiColor: .secondarySystemBackground) }
-        return canSend ? HermesTheme.purple : Color(uiColor: .secondarySystemBackground)
+        if voiceState == .listening || sending { return CoreHubTokens.Palette.error }
+        if voiceState == .transcribing { return CoreHubTokens.Palette.bgSecondary }
+        return canSend ? CoreHubTokens.Palette.accent : CoreHubTokens.Palette.bgSecondary
     }
 
     private var voiceStatusRow: some View {
@@ -418,7 +487,7 @@ struct ConversationView: View {
 
     private func loadModels() async {
         models = (await store.attempt({ try await store.api.models(profile: session.profile) })) ?? []
-        selectedModel = session.model.nilIfEmpty ?? profile?.model ?? models.first?.id ?? ""
+        selectedModel = session.model.nilIfEmpty ?? store.preferredModel.nilIfEmpty ?? profile?.model ?? models.first?.id ?? ""
         selectedProvider = models.first { $0.id == selectedModel }?.provider ?? session.provider
         await refreshContextWindow()
     }
@@ -484,6 +553,8 @@ struct ConversationView: View {
                 await speak(reply)
             }
             sending = false; Preferences.setSession(session.id, profile: session.profile)
+            // The server may have created or retitled the session; refresh the drawer.
+            store.sessionsChanged()
         }
     }
 
@@ -513,37 +584,102 @@ struct ConversationView: View {
         }
     }
 
-    private func newConversation() { input = ""; attachments = []; lines = [] }
-
     private func speak(_ text: String) async {
         do { try speechPlayer.play(await store.api.synthesize(text: text, profile: session.profile)) }
         catch { store.errorMessage = error.localizedDescription }
     }
 }
 
-private struct ContextUsageView: View {
+/// Chat header: title 16/600 with per-string direction, workspace chip
+/// (folder 12, 11 pt muted, radius 4, last path segment).
+struct ChatHeaderTitle: View {
+    let title: String
+    var workspace: String = ""
+    var agent: String = ""
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(title)
+                .font(CoreHubTokens.Typography.titleFont)
+                .foregroundStyle(CoreHubTokens.Palette.textPrimary)
+                .lineLimit(1)
+                .environment(\.layoutDirection, MarkdownText.layoutDirection(for: title))
+            HStack(spacing: 6) {
+                if !workspace.isEmpty {
+                    HStack(spacing: 4) {
+                        CoreHubIconView(icon: .folder, size: 12)
+                        TechnicalText(text: workspace, font: CoreHubTokens.Typography.font(CoreHubTokens.Typography.workspaceChip), color: CoreHubTokens.Palette.textMuted)
+                    }
+                    .foregroundStyle(CoreHubTokens.Palette.textMuted)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(CoreHubTokens.Palette.hover, in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.tag))
+                } else if !agent.isEmpty {
+                    Text(agent).font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textMuted)
+                }
+            }
+        }
+        .frame(maxWidth: 240)
+    }
+}
+
+/// Toolbar pill of the composer (radius 999, 11 pt, icon + label).
+struct ComposerPill: View {
+    let symbol: String
+    let text: String
+    var technical = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol).font(.system(size: 11, weight: .medium))
+            if technical {
+                TechnicalText(text: text, font: CoreHubTokens.Typography.metaFont, color: CoreHubTokens.Palette.textSecondary)
+                    .frame(maxWidth: CoreHubTokens.Layout.modelPillMaxWidth)
+            } else {
+                Text(text).font(CoreHubTokens.Typography.metaFont).lineLimit(1)
+            }
+        }
+        .foregroundStyle(CoreHubTokens.Palette.textSecondary)
+        .padding(.horizontal, 9)
+        .frame(height: 26)
+        .background(CoreHubTokens.Palette.bgCard, in: Capsule())
+        .overlay(Capsule().stroke(CoreHubTokens.Palette.inputBorderIdle))
+    }
+}
+
+/// "45.0k / 256.0k · remaining 211.0k", 11 pt muted, amber above 80 %,
+/// bar 42×4 on phones.
+struct ContextUsageView: View {
     let tokens: Int
     let window: Int
     let loading: Bool
 
     private var ratio: Double { window > 0 ? min(1, max(0, Double(tokens) / Double(window))) : 0 }
-    private var color: Color { ratio > 0.8 ? .red : ratio > 0.6 ? .orange : .secondary }
+    private var color: Color { ratio > 0.8 ? CoreHubTokens.Palette.contextWarning : CoreHubTokens.Palette.textMuted }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(loading ? String(localized: "Context…") : window > 0 ? "\(String(localized: "Context")) \(compact(tokens)) / \(compact(window))" : String(localized: "Context —"))
-                .font(.caption2)
+            Text(loading ? String(localized: "Context…") : label)
+                .font(CoreHubTokens.Typography.metaFont)
                 .lineLimit(1)
-            ProgressView(value: ratio)
-                .tint(color)
-                .frame(width: 88)
+                .environment(\.layoutDirection, .leftToRight)
+            ZStack(alignment: .leading) {
+                Capsule().fill(CoreHubTokens.Palette.border)
+                Capsule().fill(color).frame(width: CoreHubTokens.Layout.contextBarWidthPhone * ratio)
+            }
+            .frame(width: CoreHubTokens.Layout.contextBarWidthPhone, height: CoreHubTokens.Layout.contextBarHeight)
         }
         .foregroundStyle(color)
     }
 
-    private func compact(_ value: Int) -> String {
-        if value >= 1_000_000 { return String(format: "%.1fM", Double(value) / 1_000_000).replacingOccurrences(of: ".0", with: "") }
-        if value >= 1_000 { return String(format: "%.1fK", Double(value) / 1_000).replacingOccurrences(of: ".0", with: "") }
+    private var label: String {
+        guard window > 0 else { return String(localized: "Context —") }
+        return "\(Self.compact(tokens)) / \(Self.compact(window)) · \(String(localized: "remaining")) \(Self.compact(max(0, window - tokens)))"
+    }
+
+    static func compact(_ value: Int) -> String {
+        if value >= 1_000_000 { return String(format: "%.1fM", Double(value) / 1_000_000) }
+        if value >= 1_000 { return String(format: "%.1fk", Double(value) / 1_000) }
         return String(value)
     }
 }
@@ -557,39 +693,48 @@ private struct MessageBubble: View {
     @State private var reasoningExpanded = true
     var body: some View {
         let parsed = ChatFiles.parse(line.text)
-        HStack(alignment: .bottom, spacing: 8) {
-            if line.fromUser { Spacer(minLength: 45) } else { ProfileAvatar(name: sessionProfile, avatar: profile?.avatar, size: 30) }
+        HStack(alignment: .top, spacing: 8) {
+            if line.fromUser { Spacer(minLength: 45) } else { ProfileAvatar(name: sessionProfile, avatar: profile?.avatar, size: CoreHubTokens.Layout.assistantAvatar) }
             VStack(alignment: .leading, spacing: 9) {
+                if !line.fromUser, let sender = line.sender, !sender.isEmpty {
+                    Text(sender).font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.author, weight: .medium)).foregroundStyle(CoreHubTokens.Palette.textSecondary)
+                }
                 if !line.reasoning.isEmpty || !line.tools.isEmpty || line.isStreaming {
                     DisclosureGroup(isExpanded: $reasoningExpanded) {
                         VStack(alignment: .leading, spacing: 7) {
-                            if !line.reasoning.isEmpty { Text(line.reasoning).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+                            if !line.reasoning.isEmpty { Text(line.reasoning).font(CoreHubTokens.Typography.thinkingFont).foregroundStyle(CoreHubTokens.Palette.textSecondary.opacity(CoreHubTokens.Alpha.thinkingText)).textSelection(.enabled) }
                             ForEach(line.tools) { tool in ToolStepRow(tool: tool) }
                         }.padding(.top, 7)
                     } label: {
-                        HStack { Image(systemName: line.isStreaming ? "brain.filled.head.profile" : "brain.head.profile"); Text(line.isStreaming ? "Thinking" : "Thinking details").fontWeight(.semibold); if line.isStreaming { ProgressView().controlSize(.mini) } }
-                    }.font(.subheadline)
+                        HStack { Text(verbatim: "💭"); Text(line.isStreaming ? "Thinking" : "Thinking details"); if line.isStreaming { ProgressView().controlSize(.mini) } }
+                            .font(CoreHubTokens.Typography.thinkingFont).foregroundStyle(CoreHubTokens.Palette.textSecondary)
+                    }
                 }
-                if !parsed.text.isEmpty { MarkdownText(text: parsed.text).font(.body).foregroundStyle(line.isError ? .red : .primary) }
+                if !parsed.text.isEmpty { MarkdownText(text: parsed.text).font(CoreHubTokens.Typography.messageFont).foregroundStyle(line.isError ? CoreHubTokens.Palette.error : CoreHubTokens.Palette.textPrimary) }
                 ForEach(parsed.files) { link in FileDownloadCard(link: link, fetch: { try await api.downloadFile(path: link.path, name: ChatFiles.fileName(for: link), profile: sessionProfile) }) }
-                HStack(spacing: 5) { if line.isStreaming { ProgressView().controlSize(.mini) }; if let timestamp = line.timestamp { Text(timestamp.chatTime) } }.font(.caption2).foregroundStyle(.secondary)
+                HStack(spacing: 5) { if line.isStreaming { ProgressView().controlSize(.mini) }; if let timestamp = line.timestamp { Text(timestamp.chatTime) } }.font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textMuted)
             }
             // Assistant replies need a real proposed width so an RTL paragraph
             // can align against the bubble's right edge. User bubbles remain
             // compact and grow only as much as their own content needs.
             .frame(maxWidth: line.fromUser ? nil : .infinity, alignment: .leading)
-            .padding(.horizontal, 14).padding(.vertical, 10)
-            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding(.horizontal, CoreHubTokens.Layout.bubblePaddingHorizontal).padding(.vertical, CoreHubTokens.Layout.bubblePaddingVertical)
+            .background(bubbleBackground, in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.bubble, style: .continuous))
             .frame(maxWidth: line.fromUser ? 560 : .infinity, alignment: .leading)
             if !line.fromUser { Spacer(minLength: 24) }
         }.frame(maxWidth: .infinity).contentShape(Rectangle()).onTapGesture(perform: onTap)
+    }
+
+    private var bubbleBackground: Color {
+        if line.isError { return CoreHubTokens.Palette.error.opacity(CoreHubTokens.Alpha.hover) }
+        return line.fromUser ? CoreHubTokens.Palette.msgUser : CoreHubTokens.Palette.msgAssistant
     }
 }
 
 private struct ToolStepRow: View {
     let tool: ToolStep
     var body: some View {
-        HStack(spacing: 9) { ToolIcon(name: tool.name); VStack(alignment: .leading, spacing: 2) { Text(tool.name).font(.caption.weight(.semibold)).lineLimit(1); if let detail = tool.detail { Text(detail).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(2) } }; Spacer(); if let duration = tool.duration { Text("\(duration, specifier: "%.1f")s").font(.caption2.monospacedDigit()).foregroundStyle(.secondary) }; Group { switch tool.status { case .running: ProgressView(); case .done: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green); case .error: Image(systemName: "xmark.circle.fill").foregroundStyle(.red) } }.controlSize(.small) }
-            .padding(7).background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+        HStack(spacing: 9) { ToolIcon(name: tool.name); VStack(alignment: .leading, spacing: 2) { Text(tool.name).font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.meta, weight: .semibold)).lineLimit(1); if let detail = tool.detail { TechnicalText(text: detail, font: CoreHubTokens.Typography.mono(CoreHubTokens.Typography.meta)) } }; Spacer(); if let duration = tool.duration { Text("\(duration, specifier: "%.1f")s").font(CoreHubTokens.Typography.metaFont.monospacedDigit()).foregroundStyle(CoreHubTokens.Palette.textMuted) }; Group { switch tool.status { case .running: ProgressView(); case .done: Image(systemName: "checkmark.circle.fill").foregroundStyle(CoreHubTokens.Palette.success); case .error: Image(systemName: "xmark.circle.fill").foregroundStyle(CoreHubTokens.Palette.error) } }.controlSize(.small) }
+            .padding(7).background(CoreHubTokens.Palette.bgSecondary, in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.button))
     }
 }

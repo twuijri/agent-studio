@@ -27,7 +27,7 @@ struct SkillsView: View {
                 Section(category.capitalized) {
                     ForEach(filtered.filter { $0.category == category }) { skill in
                         NavigationLink { SkillEditorView(skill: skill) { await load() } } label: {
-                            HStack(spacing: 12) { Image(systemName: skill.pinned ? "pin.fill" : "square.stack.3d.up.fill").foregroundStyle(skill.enabled ? HermesTheme.purple : .gray).frame(width: 36, height: 36).background((skill.enabled ? HermesTheme.purple : .gray).opacity(0.11), in: RoundedRectangle(cornerRadius: 10)); VStack(alignment: .leading, spacing: 3) { Text(skill.name).font(.headline); if !skill.description.isEmpty { Text(skill.description).font(.caption).foregroundStyle(.secondary).lineLimit(2) } }; Spacer(); if !skill.enabled { StatusPill(text: String(localized: "Off"), color: .gray) } }.padding(.vertical, 3)
+                            HStack(spacing: 12) { Image(systemName: skill.pinned ? "pin.fill" : "square.stack.3d.up.fill").foregroundStyle(skill.enabled ? CoreHubTokens.Palette.accent : .gray).frame(width: 36, height: 36).background((skill.enabled ? CoreHubTokens.Palette.accent : .gray).opacity(0.11), in: RoundedRectangle(cornerRadius: 10)); VStack(alignment: .leading, spacing: 3) { Text(skill.name).font(.headline); if !skill.description.isEmpty { Text(skill.description).font(.caption).foregroundStyle(.secondary).lineLimit(2) } }; Spacer(); if !skill.enabled { StatusPill(text: String(localized: "Off"), color: .gray) } }.padding(.vertical, 3)
                         }.swipeActions(edge: .leading) { Button { Task { await pin(skill) } } label: { Label(skill.pinned ? "Unpin" : "Pin", systemImage: "pin") }.tint(.orange); Button { Task { await toggle(skill) } } label: { Label(skill.enabled ? "Disable" : "Enable", systemImage: "power") }.tint(skill.enabled ? .gray : .green) }
                     }
                 }
@@ -66,7 +66,7 @@ struct PluginsView: View {
     @State private var plugins: [PluginItem] = []; @State private var loading = true
     var body: some View {
         List(plugins) { plugin in
-            HStack(spacing: 13) { Image(systemName: "puzzlepiece.extension.fill").foregroundStyle(plugin.enabled ? HermesTheme.purple : .gray).frame(width: 42, height: 42).background((plugin.enabled ? HermesTheme.purple : .gray).opacity(0.12), in: RoundedRectangle(cornerRadius: 12)); VStack(alignment: .leading, spacing: 4) { Text(plugin.name).font(.headline); Text(plugin.description).font(.caption).foregroundStyle(.secondary).lineLimit(2); if !plugin.version.isEmpty { Text("v\(plugin.version)").font(.caption2.monospaced()).foregroundStyle(.tertiary) } }; Spacer(); Toggle("", isOn: Binding(get: { plugin.enabled }, set: { value in Task { await set(plugin, value) } })).labelsHidden() }.padding(.vertical, 4)
+            HStack(spacing: 13) { Image(systemName: "puzzlepiece.extension.fill").foregroundStyle(plugin.enabled ? CoreHubTokens.Palette.accent : .gray).frame(width: 42, height: 42).background((plugin.enabled ? CoreHubTokens.Palette.accent : .gray).opacity(0.12), in: RoundedRectangle(cornerRadius: 12)); VStack(alignment: .leading, spacing: 4) { Text(plugin.name).font(.headline); Text(plugin.description).font(.caption).foregroundStyle(.secondary).lineLimit(2); if !plugin.version.isEmpty { Text("v\(plugin.version)").font(.caption2.monospaced()).foregroundStyle(.tertiary) } }; Spacer(); Toggle("", isOn: Binding(get: { plugin.enabled }, set: { value in Task { await set(plugin, value) } })).labelsHidden() }.padding(.vertical, 4)
         }.listStyle(.insetGrouped).navigationTitle("Plugins").overlay { if loading { ProgressView() } }.refreshable { await load() }.task { await load() }
     }
     private func load() async { loading = true; do { plugins = try await store.api.plugins() } catch { store.errorMessage = error.localizedDescription }; loading = false }
@@ -100,7 +100,7 @@ struct PetsView: View {
     @EnvironmentObject private var store: AppStore
     @State private var pets: [Pet] = []; @State private var active: Set<String> = []; @State private var loading = true
     var body: some View {
-        ScrollView { LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), spacing: 12)], spacing: 12) { ForEach(pets) { pet in Button { Task { await toggle(pet) } } label: { VStack(spacing: 11) { Text(pet.emoji).font(.system(size: 44)); Text(pet.name).font(.headline).foregroundStyle(.primary); Text(pet.species).font(.caption).foregroundStyle(.secondary); Text(pet.description).font(.caption2).foregroundStyle(.secondary).lineLimit(3); StatusPill(text: active.contains(pet.id) ? String(localized: "Active") : String(localized: "Adopt"), color: active.contains(pet.id) ? .green : HermesTheme.purple) }.frame(maxWidth: .infinity).padding(14).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 19)).overlay(RoundedRectangle(cornerRadius: 19).stroke(active.contains(pet.id) ? Color.green.opacity(0.4) : .clear)) }.buttonStyle(.plain) } }.padding() }.background(Color(uiColor: .systemGroupedBackground)).navigationTitle("Pets").overlay { if loading { ProgressView() } }.refreshable { await load() }.task { await load() }
+        ScrollView { LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), spacing: 12)], spacing: 12) { ForEach(pets) { pet in Button { Task { await toggle(pet) } } label: { VStack(spacing: 11) { Text(pet.emoji).font(.system(size: 44)); Text(pet.name).font(.headline).foregroundStyle(.primary); Text(pet.species).font(.caption).foregroundStyle(.secondary); Text(pet.description).font(.caption2).foregroundStyle(.secondary).lineLimit(3); StatusPill(text: active.contains(pet.id) ? String(localized: "Active") : String(localized: "Adopt"), color: active.contains(pet.id) ? .green : CoreHubTokens.Palette.accent) }.frame(maxWidth: .infinity).padding(14).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 19)).overlay(RoundedRectangle(cornerRadius: 19).stroke(active.contains(pet.id) ? Color.green.opacity(0.4) : .clear)) }.buttonStyle(.plain) } }.padding() }.background(Color(uiColor: .systemGroupedBackground)).navigationTitle("Pets").overlay { if loading { ProgressView() } }.refreshable { await load() }.task { await load() }
     }
     private func load() async {
         loading = true
@@ -147,7 +147,7 @@ struct ModelsView: View {
                         Button { Task { await select(model) } } label: {
                             HStack {
                                 Image(systemName: model.id == selected ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(model.id == selected ? HermesTheme.purple : .secondary)
+                                    .foregroundStyle(model.id == selected ? CoreHubTokens.Palette.accent : .secondary)
                                 VStack(alignment: .leading) {
                                     Text(model.name).foregroundStyle(.primary)
                                     Text(model.id).font(.caption2.monospaced()).foregroundStyle(.secondary)

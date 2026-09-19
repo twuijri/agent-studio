@@ -20,9 +20,9 @@ struct LoginView: View {
             ScrollView {
                 VStack(spacing: 26) {
                     VStack(spacing: 14) {
-                        AppMark(size: 88).shadow(color: HermesTheme.purple.opacity(0.24), radius: 24, y: 10)
-                        Text("Hermes Studio").font(.largeTitle.bold())
-                        Text("Your Studio, native on iPhone").font(.subheadline).foregroundStyle(.secondary)
+                        AppMark(size: 88).coreHubShadow(CoreHubTokens.Shadow.card)
+                        Text("Core Hub").font(.largeTitle.bold())
+                        Text("Your agents, native on iPhone").font(.subheadline).foregroundStyle(.secondary)
                     }.padding(.top, 50)
 
                     VStack(spacing: 12) {
@@ -59,7 +59,7 @@ struct LoginView: View {
                     SurfaceCard {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: "lock.shield.fill").foregroundStyle(.green)
-                            VStack(alignment: .leading, spacing: 4) { Text("Private and direct").font(.subheadline.weight(.semibold)); Text("The app connects straight to your Hermes Studio. Your access token is kept in the iPhone Keychain.").font(.caption).foregroundStyle(.secondary) }
+                            VStack(alignment: .leading, spacing: 4) { Text("Private and direct").font(.subheadline.weight(.semibold)); Text("The app connects straight to your Core Hub server. Your access token is kept in the iPhone Keychain.").font(.caption).foregroundStyle(.secondary) }
                         }
                     }
                 }.padding(.horizontal, 22).padding(.bottom, 30)

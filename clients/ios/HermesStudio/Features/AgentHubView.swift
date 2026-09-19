@@ -3,57 +3,6 @@ import SwiftUI
 import CoreImage.CIFilterBuiltins
 import UniformTypeIdentifiers
 
-struct AgentHubView: View {
-    @EnvironmentObject private var store: AppStore
-    var body: some View {
-        List {
-            Section {
-                HStack(spacing: 14) { ProfileAvatar(name: store.selectedProfile, avatar: store.profile?.avatar, size: 58); VStack(alignment: .leading, spacing: 4) { Text(store.selectedProfile).font(.title3.bold()); Text(store.profile?.model ?? String(localized: "Hermes agent")).font(.subheadline).foregroundStyle(.secondary); StatusPill(text: store.profile?.active == true ? String(localized: "Active") : String(localized: "Ready"), color: .green) }; Spacer() }.padding(.vertical, 7)
-            }
-            Section("Work") {
-                NavigationLink { AgentManagerView() } label: { AgentToolRow(icon: "cpu", color: .blue, title: "Agents", detail: "Choose and manage every agent runtime") }
-                NavigationLink { GlobalAgentView() } label: { AgentToolRow(icon: "globe.desk.fill", color: .mint, title: "Global Agent", detail: "Global sessions and remote agent control") }
-                NavigationLink { WorkflowsView() } label: { AgentToolRow(icon: "point.3.connected.trianglepath.dotted", color: .orange, title: "Workflows", detail: "Run automations and review their history") }
-                NavigationLink { StudioFilesView() } label: { AgentToolRow(icon: "folder.fill", color: .blue, title: "Files", detail: "Browse and edit Studio workspace files") }
-                NavigationLink { StudioLogsView() } label: { AgentToolRow(icon: "doc.text.magnifyingglass", color: .gray, title: "Logs", detail: "Inspect Studio logs and errors") }
-                NavigationLink { StudioConnectionsView() } label: { AgentToolRow(icon: "point.3.connected.trianglepath.dotted", color: .green, title: "Connections", detail: "App Relay, paired apps and devices") }
-                NavigationLink { InsightsView() } label: { AgentToolRow(icon: "chart.xyaxis.line", color: .purple, title: "Insights", detail: "Token usage and Studio runtime") }
-                NavigationLink { JourneyView() } label: { AgentToolRow(icon: "point.3.filled.connected.trianglepath.dotted", color: .indigo, title: "Journey", detail: "Explore connected skills and memories") }
-                NavigationLink { SkillUsageView() } label: { AgentToolRow(icon: "chart.bar.xaxis", color: .cyan, title: "Skills Usage", detail: "See skill loads, edits and trends") }
-                NavigationLink { CronJobsView() } label: { AgentToolRow(icon: "calendar.badge.clock", color: .blue, title: "Scheduled Jobs", detail: "Automations, schedules and delivery") }
-                NavigationLink { KanbanView() } label: { AgentToolRow(icon: "rectangle.3.group", color: .orange, title: "Kanban", detail: "Plan work with a touch-first board") }
-                NavigationLink { ChannelsView() } label: { AgentToolRow(icon: "antenna.radiowaves.left.and.right", color: .green, title: "Channels", detail: "Connect every messaging platform") }
-                NavigationLink { WebhooksView() } label: { AgentToolRow(icon: "arrow.triangle.branch", color: .orange, title: "Webhooks", detail: "Deliver Studio chat events") }
-            }
-            Section("Capabilities") {
-                NavigationLink { SkillsView() } label: { AgentToolRow(icon: "square.stack.3d.up.fill", color: .indigo, title: "Skills", detail: "Manage and edit agent instructions") }
-                NavigationLink { PluginsView() } label: { AgentToolRow(icon: "puzzlepiece.extension.fill", color: .purple, title: "Plugins", detail: "Enable installed extensions") }
-                NavigationLink { MCPView() } label: { AgentToolRow(icon: "server.rack", color: .cyan, title: "MCP", detail: "Connect tools and external servers") }
-            }
-            Section("Intelligence") {
-                NavigationLink { EkkoHubView() } label: { AgentToolRow(icon: "sparkles", color: .purple, title: "Ekko", detail: "Built-in agent configuration, memory and tools") }
-                NavigationLink { StudioSectionSettings(section: .memory) } label: { AgentToolRow(icon: "lightbulb.max.fill", color: .yellow, title: "Memory", detail: "Control long-term context") }
-                NavigationLink { ModelsView() } label: { AgentToolRow(icon: "cpu.fill", color: .mint, title: "Models", detail: "Choose models and providers") }
-                NavigationLink { RuntimeVersionsView() } label: { AgentToolRow(icon: "shippingbox.and.arrow.backward.fill", color: .blue, title: "Runtime Versions", detail: "Download, activate and restart Studio") }
-                NavigationLink { ThemeStudioView() } label: { AgentToolRow(icon: "paintpalette.fill", color: .pink, title: "Appearance", detail: "Sync palette, text and background") }
-            }
-        }
-        .listStyle(.insetGrouped)
-        .navigationTitle("Agent")
-        .toolbar {
-            if #available(iOS 26.0, *) {
-                ToolbarItem(placement: .topBarLeading) { ProfileMenu() }
-                    .sharedBackgroundVisibility(.hidden)
-            } else {
-                ToolbarItem(placement: .topBarLeading) { ProfileMenu() }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink { SettingsView() } label: { Image(systemName: "gearshape") }
-            }
-        }
-    }
-}
-
 struct JourneyView: View {
     @EnvironmentObject private var store: AppStore
     @State private var journey: JourneyGraph?; @State private var mode = 0; @State private var query = ""; @State private var loading = true
@@ -289,7 +238,7 @@ private struct WorkflowEditor: View {
     private func save() async { do { _ = try await store.api.saveWorkflow(id: workflow?.id, name: name, profile: profile, workspace: workspace.nilIfEmpty, nodes: try decode(nodes), edges: try decode(edges), viewport: workflow?.viewport ?? [:]); await reload(); dismiss() } catch let failure { error = failure.localizedDescription } }
 }
 
-private struct WorkflowDetailView: View {
+struct WorkflowDetailView: View {
     @EnvironmentObject private var store: AppStore
     let workflow: WorkflowItem
     @State private var runs: [WorkflowRun] = []

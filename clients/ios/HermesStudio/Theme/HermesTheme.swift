@@ -1,14 +1,7 @@
 import SwiftUI
 
-enum HermesTheme {
-    static let purple = Color(uiColor: .label)
-    static let navy = Color(red: 0.071, green: 0.075, blue: 0.075)
-    static let cyan = Color(red: 0.20, green: 0.72, blue: 0.92)
-    static let green = Color(red: 0.24, green: 0.78, blue: 0.47)
-    static let amber = Color(red: 0.96, green: 0.64, blue: 0.20)
-    static let radius: CGFloat = 12
-}
-
+/// The in-app logo: the server's custom logo when Core Hub has one, else the
+/// vector Core Hub mark on the splash colour (#f7f7f4 / #1a1a1a).
 struct AppMark: View {
     var size: CGFloat = 58
     @ObservedObject private var logo = StudioLogoStore.shared
@@ -16,32 +9,19 @@ struct AppMark: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.23, style: .continuous)
-                .fill(LinearGradient(colors: [Color(red: 0.07, green: 0.11, blue: 0.23), HermesTheme.navy], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(CoreHubTokens.Palette.splash)
             if let image = logo.image {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
             } else {
-                Canvas { context, canvas in
-                    let scale = canvas.width / 108
-                    func line(_ points: [CGPoint]) {
-                        var path = Path(); guard let first = points.first else { return }; path.move(to: CGPoint(x: first.x * scale, y: first.y * scale))
-                        for point in points.dropFirst() { path.addLine(to: CGPoint(x: point.x * scale, y: point.y * scale)) }
-                        context.stroke(path, with: .color(.white), style: StrokeStyle(lineWidth: 9 * scale, lineCap: .round, lineJoin: .round))
-                    }
-                    line([.init(x: 54, y: 24), .init(x: 54, y: 47)])
-                    line([.init(x: 38, y: 38), .init(x: 38, y: 52), .init(x: 25, y: 63)])
-                    line([.init(x: 70, y: 38), .init(x: 70, y: 52), .init(x: 83, y: 63)])
-                    line([.init(x: 31, y: 76), .init(x: 50, y: 64), .init(x: 58, y: 64), .init(x: 77, y: 76)])
-                    let dot = CGRect(x: 48 * scale, y: 48 * scale, width: 12 * scale, height: 12 * scale)
-                    context.fill(Path(ellipseIn: dot), with: .color(HermesTheme.purple))
-                }
-                .padding(size * 0.04)
+                CoreHubMarkView(size: size * 0.6, color: CoreHubTokens.Palette.textPrimary)
             }
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.23, style: .continuous))
-        .accessibilityLabel("Hermes Studio")
+        .overlay(RoundedRectangle(cornerRadius: size * 0.23, style: .continuous).stroke(CoreHubTokens.Palette.borderLight, lineWidth: 1))
+        .accessibilityLabel("Core Hub")
         .task { await logo.loadCached() }
     }
 }
@@ -58,46 +38,55 @@ struct ProfileAvatar: View {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
                 ZStack {
-                    LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-                    Text(initials).font(.system(size: size * 0.34, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    CoreHubTokens.Palette.accent
+                    Text(initials).font(.system(size: size * 0.38, weight: .semibold, design: .rounded)).foregroundStyle(CoreHubTokens.Palette.textOnAccent)
                 }
             }
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
-        .overlay(Circle().stroke(.white.opacity(0.14), lineWidth: 1))
+        .overlay(Circle().stroke(Color.white.opacity(0.14), lineWidth: 1))
         .task(id: avatarFingerprint(profile: name, avatar: avatar)) {
             await cache.ensure(profile: name, avatar: avatar)
         }
     }
 
     private var initials: String {
-        name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased().nilIfEmpty ?? "H"
-    }
-    private var colors: [Color] {
-        let palette: [[Color]] = [[HermesTheme.purple, .indigo], [.teal, .cyan], [.orange, .pink], [.blue, .purple], [.green, .teal]]
-        return palette[abs(name.hashValue) % palette.count]
+        name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased().nilIfEmpty ?? "C"
     }
 }
 
+/// Card surface: bg.card, radius 14, 1 px border.light, card shadow.
 struct SurfaceCard<Content: View>: View {
     @ViewBuilder var content: Content
     var body: some View {
-        content.padding(14).background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: HermesTheme.radius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: HermesTheme.radius, style: .continuous).stroke(.primary.opacity(0.07)))
+        content.padding(14)
+            .background(CoreHubTokens.Palette.bgCard, in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: CoreHubTokens.Radius.card, style: .continuous).stroke(CoreHubTokens.Palette.borderLight))
+            .coreHubShadow(CoreHubTokens.Shadow.card)
     }
 }
 
 struct StatusPill: View {
     let text: String
     let color: Color
-    var body: some View { Text(text).font(.caption2.weight(.semibold)).padding(.horizontal, 9).padding(.vertical, 5).foregroundStyle(color).background(color.opacity(0.13), in: Capsule()) }
+    var body: some View {
+        Text(text)
+            .font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.meta, weight: .semibold))
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .foregroundStyle(color)
+            .background(color.opacity(0.13), in: Capsule())
+    }
 }
 
 struct ToolIcon: View {
     let name: String
     var body: some View {
-        Image(systemName: symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(color).frame(width: 34, height: 34).background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        Image(systemName: symbol)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(color)
+            .frame(width: 30, height: 30)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.control))
     }
     private var symbol: String {
         let key = name.lowercased()
@@ -109,9 +98,5 @@ struct ToolIcon: View {
         if key.contains("python") || key.contains("code") { return "chevron.left.forwardslash.chevron.right" }
         return "wrench.and.screwdriver"
     }
-    private var color: Color { name.lowercased().contains("terminal") ? .green : HermesTheme.purple }
-}
-
-extension View {
-    func hermesBackground() -> some View { background(Color(uiColor: .systemBackground).ignoresSafeArea()) }
+    private var color: Color { name.lowercased().contains("terminal") ? CoreHubTokens.Palette.success : CoreHubTokens.Palette.accent }
 }
