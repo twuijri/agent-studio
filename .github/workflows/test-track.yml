@@ -115,24 +115,28 @@ jobs:
           - label: macOS arm64
             runner: macos-26
             target_os: darwin
+            target_arch: arm64
             electron_target: "--mac dmg --arm64"
             artifact_files: |
               packages/desktop/release/*.dmg
           - label: macOS x64
             runner: macos-26-intel
             target_os: darwin
+            target_arch: x64
             electron_target: "--mac dmg --x64"
             artifact_files: |
               packages/desktop/release/*.dmg
           - label: Windows x64
             runner: windows-latest
             target_os: win32
+            target_arch: x64
             electron_target: "--win nsis --x64"
             artifact_files: |
               packages/desktop/release/*.exe
           - label: Linux x64
             runner: ubuntu-22.04
             target_os: linux
+            target_arch: x64
             electron_target: "--linux AppImage --x64"
             artifact_files: |
               packages/desktop/release/*.AppImage
@@ -214,7 +218,9 @@ jobs:
       - name: Upload the test app (private workflow artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: core-hub-test-${{ matrix.target_os }}-${{ env.TEST_VERSION }}
+          # One artifact per platform *and* architecture: the two macOS builds
+          # previously shared a name, and the merged download kept only one dmg.
+          name: core-hub-test-${{ matrix.target_os }}-${{ matrix.target_arch }}-${{ env.TEST_VERSION }}
           path: ${{ matrix.artifact_files }}
           retention-days: 14
           if-no-files-found: error
