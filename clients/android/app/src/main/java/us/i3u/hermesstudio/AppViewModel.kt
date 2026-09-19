@@ -24,7 +24,24 @@ enum class Screen {
     Loading, Onboarding, Login, Chats, Groups, AgentHub, Conversation, Room, Profiles,
     Settings, SettingsPage, SettingsGroup, History, Channels, Channel, CronJobs, CronJob, CronHistory,
     Kanban, KanbanTask, Skills, Skill, Plugins, Mcp, Pets, Insights, AgentRuntimes, Workflows, Workflow, WorkflowRun, GlobalAgent, EkkoHub, Files, Logs, Connections, Journey, Webhooks, RuntimeVersions, Appearance,
+    Models, AgentSettings,
 }
+
+/**
+ * One agent's settings screen: the two files the web's `CodingAgentConfigView`
+ * edits, each with its own draft and its own error so one unreadable file does
+ * not hide the other.
+ */
+data class AgentSettingsState(
+    val agent: AgentDefinition,
+    val loading: Boolean = false,
+    val preference: AgentConfigFile? = null,
+    val preferenceDraft: String = "",
+    val preferenceError: String = "",
+    val configuration: AgentConfigFile? = null,
+    val configurationDraft: String = "",
+    val configurationError: String = "",
+)
 
 /** Settings is a short list of these; each opens its own screen. */
 enum class SettingsGroup {
@@ -298,6 +315,19 @@ data class UiState(
     val loadingManagedUsers: Boolean = false,
     val modelProviders: List<ModelProvider> = emptyList(),
     val loadingModelProviders: Boolean = false,
+    /** Models page › Fallback: the ordered chain, and the copy last saved. */
+    val fallbackChain: List<FallbackEntry> = emptyList(),
+    val savedFallbackChain: List<FallbackEntry> = emptyList(),
+    val loadingFallbackChain: Boolean = false,
+    /** Agent Manager: the fixed catalogue with the server's state folded in. */
+    val agents: List<AgentCard> = emptyList(),
+    val loadingAgents: Boolean = false,
+    /** The agent id a long-running install / delete / check is busy with. */
+    val agentBusyId: String? = null,
+    /** True when `/api/agents/status` came back 403 or otherwise refused. */
+    val agentSnapshotUnavailable: Boolean = false,
+    /** The agent whose settings screen is open, and its two files. */
+    val openAgentSettings: AgentSettingsState? = null,
     val cronJobs: List<CronJob> = emptyList(),
     val cronLoading: Boolean = false,
     /** The job currently running a pause/resume/run/delete request. */
@@ -796,6 +826,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Agent Manager (super-admin): every agent tool in one place. */
     fun openAgentManager() {
         _state.update { it.copy(screen = Screen.AgentHub, error = null, notice = null) }
+        loadAgents()
         refreshServerConfig()
         if (_state.value.cronJobs.isEmpty()) refreshCronJobs()
     }
@@ -4081,6 +4112,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ── settings groups ───────────────────────────────────────────────────
 
     fun openSettingsGroup(group: SettingsGroup) {
+        // Models is no longer a settings body: the drawer's Models rail item
+        // asks for this group, and the group stays the selected key, but the
+        // destination is the full provider page.
+        if (group == SettingsGroup.Models) {
+            val from = _state.value.screen
+            _state.update {
+                it.copy(
+                    toolReturnScreen = when (from) {
+                        Screen.AgentHub -> Screen.AgentHub
+                        Screen.SettingsPage -> Screen.SettingsPage
+                        else -> Screen.Settings
+                    },
+                )
+            }
+            openModels()
+            return
+        }
         _state.update {
             it.copy(
                 screen = Screen.SettingsGroup,
@@ -4244,7 +4292,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun randomizeAccountAvatar() = accountWork {
         val seed = "${_state.value.account.orEmpty()}-${System.currentTimeMillis()}-${java.util.UUID.randomUUID()}"
-        val svg = MultiAvatar.svg(getApplication(), seed)
+        val svg = BoringAvatar.beam(seed, size = 144)
         val encoded = android.util.Base64.encodeToString(svg.toByteArray(), android.util.Base64.NO_WRAP)
         api.updateMyAvatar("data:image/svg+xml;base64,$encoded", seed)
         loadAccountSettings()
@@ -4375,6 +4423,272 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun addCustomProvider(name: String, baseUrl: String, apiKey: String, apiMode: String) = modelsWork { api.addCustomProvider(currentProfile(), name.trim(), baseUrl.trim(), apiKey.trim(), apiMode) }
     fun removeProvider(provider: ModelProvider) = modelsWork { api.removeProvider(currentProfile(), provider) }
     fun restoreProviderModels(provider: String) = modelsWork { api.restoreProviderModels(currentProfile(), provider) }
+
+    // ---- Models page ------------------------------------------------------
+
+    /**
+     * Opens the Models page. The drawer still asks for
+     * `SettingsGroup.Models`, so the group is kept as the selected key while
+     * the screen itself is the full provider page, not a settings body.
+     */
+    fun openModels() {
+        _state.update {
+            it.copy(
+                screen = Screen.Models,
+                openGroup = SettingsGroup.Models,
+                error = null,
+                notice = null,
+            )
+        }
+        loadModelProviders()
+        loadFallbackChain()
+    }
+
+    fun reloadModels() {
+        loadModelProviders()
+        loadFallbackChain()
+    }
+
+    /** The header action: drops the server's cached provider catalogues. */
+    fun refreshModelCache() = modelsWork { api.refreshModelCache() }
+
+    /**
+     * Mirrors the web store: keep the current default model when the provider
+     * already offers it, otherwise take its first visible model.
+     */
+    fun setDefaultProvider(provider: ModelProvider) {
+        val visible = provider.models.filter { it.visible }.map { it.id }
+        if (visible.isEmpty()) {
+            _state.update { it.copy(error = str(R.string.models_provider_no_models)) }
+            return
+        }
+        val current = _state.value.modelCatalog?.defaultModel.orEmpty()
+        setDefaultModelFromCatalog(provider.id, if (current in visible) current else visible.first())
+    }
+
+    private fun loadFallbackChain() {
+        val profile = currentProfile()
+        _state.update { it.copy(loadingFallbackChain = true) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.fallbackProviders(profile) } }
+                .onSuccess { chain ->
+                    _state.update {
+                        it.copy(fallbackChain = chain, savedFallbackChain = chain, loadingFallbackChain = false)
+                    }
+                }
+                // A profile with no chain yet is the normal case, not an error
+                // worth a red banner over the whole page.
+                .onFailure { _state.update { it.copy(loadingFallbackChain = false) } }
+        }
+    }
+
+    fun addFallbackEntry(provider: String, model: String) {
+        _state.update { state ->
+            if (state.fallbackChain.any { it.provider == provider && it.model == model }) state
+            else state.copy(fallbackChain = state.fallbackChain + FallbackEntry(provider, model))
+        }
+    }
+
+    fun removeFallbackEntry(index: Int) {
+        _state.update { state ->
+            state.copy(fallbackChain = state.fallbackChain.filterIndexed { at, _ -> at != index })
+        }
+    }
+
+    fun moveFallbackEntry(from: Int, to: Int) {
+        _state.update { state ->
+            val chain = state.fallbackChain
+            if (from == to || from !in chain.indices || to !in chain.indices) return@update state
+            val next = chain.toMutableList()
+            next.add(to, next.removeAt(from))
+            state.copy(fallbackChain = next)
+        }
+    }
+
+    fun saveFallbackChain() {
+        val chain = _state.value.fallbackChain
+        _state.update { it.copy(savingSetting = true, error = null, notice = null) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.saveFallbackProviders(currentProfile(), chain) } }
+                .onSuccess {
+                    _state.update {
+                        it.copy(savingSetting = false, savedFallbackChain = chain, notice = str(R.string.notice_saved))
+                    }
+                }
+                .onFailure { failure ->
+                    _state.update { it.copy(savingSetting = false, error = failure.readableMessage(localized)) }
+                }
+        }
+    }
+
+    // ---- Agent Manager ----------------------------------------------------
+
+    /**
+     * Loads the agent list. Three calls, each allowed to fail on its own:
+     * `/api/coding-agents` needs only a signed-in user, while
+     * `/api/agents/status` and the update policies are super-admin and admin
+     * only. Whatever answers is folded into the fixed catalogue, so the list
+     * never silently shrinks.
+     */
+    fun loadAgents() {
+        _state.update { it.copy(loadingAgents = true) }
+        viewModelScope.launch {
+            val tools = runCatching { withContext(Dispatchers.IO) { api.codingAgents() } }
+            val snapshot = runCatching { withContext(Dispatchers.IO) { api.agentStatusSnapshot() } }
+            val policies = runCatching { withContext(Dispatchers.IO) { api.agentUpdatePolicies() } }
+            val answered = tools.isSuccess || snapshot.isSuccess
+            val cards = AgentCatalog.merge(
+                tools = tools.getOrDefault(emptyList()),
+                snapshot = snapshot.getOrDefault(emptyList()),
+                policies = policies.getOrDefault(emptyMap()),
+                anyServerAnswer = answered,
+            )
+            _state.update {
+                it.copy(
+                    agents = cards,
+                    loadingAgents = false,
+                    agentSnapshotUnavailable = snapshot.isFailure,
+                    error = if (answered) it.error else tools.exceptionOrNull()?.readableMessage(localized),
+                )
+            }
+        }
+    }
+
+    fun installAgent(id: String) = agentWork(id) { api.installCodingAgent(id) }
+
+    fun deleteAgent(id: String) = agentWork(id) { api.deleteCodingAgent(id) }
+
+    fun checkAgentUpdate(id: String) {
+        _state.update { it.copy(agentBusyId = id, error = null, notice = null) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.checkCodingAgentUpdate(id) } }
+                .onSuccess { result ->
+                    _state.update {
+                        it.copy(
+                            agentBusyId = null,
+                            notice = when {
+                                result.message.isNotBlank() -> result.message
+                                result.updateAvailable -> str(R.string.agent_update_available, result.latestVersion)
+                                else -> str(R.string.agent_update_none)
+                            },
+                        )
+                    }
+                    loadAgents()
+                }
+                .onFailure { failure ->
+                    _state.update { it.copy(agentBusyId = null, error = failure.readableMessage(localized)) }
+                }
+        }
+    }
+
+    fun setAgentAutoUpdate(id: String, enabled: Boolean) {
+        _state.update { it.copy(agentBusyId = id, error = null, notice = null) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.setAgentAutoUpdate(id, enabled) } }
+                .onSuccess { _state.update { it.copy(agentBusyId = null) }; loadAgents() }
+                .onFailure { failure ->
+                    _state.update { it.copy(agentBusyId = null, error = failure.readableMessage(localized)) }
+                }
+        }
+    }
+
+    /**
+     * Install and delete answer 200 even when npm failed, so the body decides
+     * whether this was a success or a message the owner needs to read.
+     */
+    private fun agentWork(id: String, block: suspend () -> AgentMutationResult) {
+        _state.update { it.copy(agentBusyId = id, error = null, notice = null) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { block() } }
+                .onSuccess { result ->
+                    _state.update {
+                        it.copy(
+                            agentBusyId = null,
+                            notice = if (result.success) result.message.ifBlank { str(R.string.notice_saved) } else null,
+                            error = if (result.success) null else result.message.ifBlank { str(R.string.agent_action_failed) },
+                        )
+                    }
+                    loadAgents()
+                }
+                .onFailure { failure ->
+                    _state.update { it.copy(agentBusyId = null, error = failure.readableMessage(localized)) }
+                }
+        }
+    }
+
+    /** Opens one agent's settings: the preference file and the config file. */
+    fun openAgentSettings(definition: AgentDefinition) {
+        _state.update {
+            it.copy(
+                screen = Screen.AgentSettings,
+                openAgentSettings = AgentSettingsState(agent = definition, loading = true),
+                error = null,
+                notice = null,
+            )
+        }
+        viewModelScope.launch {
+            val preference = runCatching {
+                withContext(Dispatchers.IO) { api.codingAgentConfigFile(definition.id, definition.preferenceKey) }
+            }
+            val configuration = runCatching {
+                withContext(Dispatchers.IO) { api.codingAgentConfigFile(definition.id, definition.configurationKey) }
+            }
+            _state.update { state ->
+                val open = state.openAgentSettings ?: return@update state
+                if (open.agent.id != definition.id) return@update state
+                state.copy(
+                    openAgentSettings = open.copy(
+                        loading = false,
+                        preference = preference.getOrNull(),
+                        preferenceError = preference.exceptionOrNull()?.readableMessage(localized).orEmpty(),
+                        preferenceDraft = preference.getOrNull()?.content.orEmpty(),
+                        configuration = configuration.getOrNull(),
+                        configurationError = configuration.exceptionOrNull()?.readableMessage(localized).orEmpty(),
+                        configurationDraft = configuration.getOrNull()?.content.orEmpty(),
+                    ),
+                )
+            }
+        }
+    }
+
+    fun editAgentSettingsDraft(preference: Boolean, value: String) {
+        _state.update { state ->
+            val open = state.openAgentSettings ?: return@update state
+            state.copy(
+                openAgentSettings = if (preference) open.copy(preferenceDraft = value)
+                else open.copy(configurationDraft = value),
+            )
+        }
+    }
+
+    fun saveAgentSettings(preference: Boolean) {
+        val open = _state.value.openAgentSettings ?: return
+        val key = if (preference) open.agent.preferenceKey else open.agent.configurationKey
+        val content = if (preference) open.preferenceDraft else open.configurationDraft
+        _state.update { it.copy(savingSetting = true, error = null, notice = null) }
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { api.saveCodingAgentConfigFile(open.agent.id, key, content) }
+            }
+                .onSuccess { saved ->
+                    _state.update { state ->
+                        val current = state.openAgentSettings
+                        state.copy(
+                            savingSetting = false,
+                            notice = str(R.string.notice_saved),
+                            openAgentSettings = when {
+                                current == null || current.agent.id != open.agent.id -> current
+                                preference -> current.copy(preference = saved, preferenceDraft = saved.content, preferenceError = "")
+                                else -> current.copy(configuration = saved, configurationDraft = saved.content, configurationError = "")
+                            },
+                        )
+                    }
+                }
+                .onFailure { failure ->
+                    _state.update { it.copy(savingSetting = false, error = failure.readableMessage(localized)) }
+                }
+        }
+    }
 
     /** Settings › Display › Text size, applied to every screen through the theme. */
     fun setTextScale(scale: Float) {
@@ -5026,13 +5340,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 Screen.WorkflowRun -> Screen.Workflow
                 Screen.Kanban, Screen.Skills, Screen.Plugins, Screen.Mcp, Screen.AgentRuntimes, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files, Screen.Connections, Screen.Webhooks, Screen.RuntimeVersions -> Screen.AgentHub
                 Screen.Pets, Screen.Insights, Screen.Logs, Screen.Journey, Screen.Appearance, Screen.SettingsPage -> Screen.Settings
-                Screen.Channels, Screen.SettingsGroup, Screen.CronJobs -> state.toolReturnScreen
+                Screen.AgentSettings -> Screen.AgentHub
+                Screen.Channels, Screen.SettingsGroup, Screen.CronJobs, Screen.Models -> state.toolReturnScreen
                 Screen.Profiles -> state.profilesReturnScreen
                 else -> state.tab.rootScreen(state.openSession.takeUnless { state.screen == Screen.Conversation })
             }
             consumingBackNavigation = true
             state.copy(
                 screen = target,
+                openAgentSettings = state.openAgentSettings.takeUnless { state.screen == Screen.AgentSettings },
                 error = null,
                 openSession = state.openSession.takeUnless { state.screen == Screen.Conversation },
                 lines = if (state.screen == Screen.Conversation) emptyList() else state.lines,

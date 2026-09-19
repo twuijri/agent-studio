@@ -117,7 +117,7 @@ dependencies {
     implementation("io.socket:socket.io-client:2.1.2") {
         exclude(group = "org.json", module = "json")
     }
-    // Draws the Multiavatar SVG Studio generates for a profile without a picture.
+    // Draws the generated avatar SVG (and a stored SVG data URL) into a bitmap.
     implementation("com.caverock:androidsvg-aar:1.4")
     // Remote Petdex previews and active data-URI spritesheets.
     implementation("io.coil-kt:coil-compose:2.6.0")
