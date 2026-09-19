@@ -3,6 +3,7 @@ package us.i3u.hermesstudio
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -15,6 +16,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,32 +28,60 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Rule
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.Cable
+import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.DisplaySettings
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.HourglassBottom
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.ModelTraining
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.VpnLock
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
@@ -61,12 +91,24 @@ import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ViewKanban
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -79,9 +121,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -90,33 +134,58 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
 import java.io.File
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
@@ -128,26 +197,81 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
-            HermesTheme {
-                Surface(modifier = Modifier.fillMaxSize()) { App() }
-            }
-        }
+        setContent { App() }
     }
 }
 
 @Composable
 private fun App(viewModel: AppViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var availableUpdate by remember { mutableStateOf<AvailableUpdate?>(null) }
+    var downloadingUpdate by remember { mutableStateOf(false) }
+    var updateError by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(Unit) { availableUpdate = runCatching { AppUpdater.check() }.getOrNull() }
+
+    HermesTheme(appearance = state.appearance) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            AppContent(state, viewModel)
+        }
+        availableUpdate?.let { update ->
+            AlertDialog(
+                onDismissRequest = { if (!downloadingUpdate) availableUpdate = null },
+                title = { Text(stringResource(R.string.update_available_title)) },
+                text = {
+                    Text(
+                        stringResource(
+                            updateError ?: if (downloadingUpdate) R.string.update_downloading else R.string.update_available_body,
+                        ),
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = !downloadingUpdate,
+                        onClick = {
+                            scope.launch {
+                                downloadingUpdate = true
+                                updateError = null
+                                runCatching { AppUpdater.download(context, update) }
+                                    .onSuccess { apk ->
+                                        downloadingUpdate = false
+                                        if (AppUpdater.install(context, apk) == InstallResult.PermissionRequired) {
+                                            updateError = R.string.update_permission
+                                        }
+                                    }
+                                    .onFailure {
+                                        downloadingUpdate = false
+                                        updateError = R.string.update_failed
+                                    }
+                            }
+                        },
+                    ) { Text(stringResource(R.string.update_install)) }
+                },
+                dismissButton = {
+                    TextButton(
+                        enabled = !downloadingUpdate,
+                        onClick = { availableUpdate = null },
+                    ) { Text(stringResource(R.string.update_later)) }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppContent(state: UiState, viewModel: AppViewModel) {
 
     // The system back gesture belongs to the app while there is somewhere to go
     // back to. Only the two root lists let it fall through and close the app.
     when (state.screen) {
         Screen.Conversation, Screen.Room, Screen.Profiles, Screen.Settings,
-        Screen.SettingsGroup, Screen.Channels, Screen.Channel, Screen.CronJobs,
-        Screen.CronJob, Screen.CronHistory,
+        Screen.MoreSettings, Screen.SettingsGroup, Screen.Channels, Screen.Channel, Screen.CronJobs,
+        Screen.CronJob, Screen.CronHistory, Screen.Kanban, Screen.KanbanTask, Screen.Skills,
+        Screen.Skill, Screen.Plugins, Screen.Mcp, Screen.Pets, Screen.Insights, Screen.AgentRuntimes, Screen.Workflows, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files, Screen.Logs, Screen.Connections, Screen.Journey, Screen.Webhooks, Screen.RuntimeVersions, Screen.Appearance,
         -> BackHandler { viewModel.back() }
-        Screen.Groups -> BackHandler { viewModel.showTab(Tab.Chats) }
+        Screen.Groups, Screen.AgentHub -> BackHandler { viewModel.showTab(Tab.Chats) }
         else -> Unit
     }
 
@@ -164,15 +288,36 @@ private fun App(viewModel: AppViewModel = viewModel()) {
             onDone = { viewModel.finishOnboarding() },
         )
         Screen.Settings -> SettingsScreen(state, viewModel)
+        Screen.MoreSettings -> MoreSettingsScreen(state, viewModel)
         Screen.SettingsGroup -> SettingsGroupScreen(state, viewModel)
         Screen.Channels -> ChannelsScreen(state, viewModel)
         Screen.Channel -> ChannelScreen(state, viewModel)
         Screen.CronJobs -> CronJobsScreen(state, viewModel)
         Screen.CronJob -> CronJobEditorScreen(state, viewModel)
         Screen.CronHistory -> CronHistoryScreen(state, viewModel)
+        Screen.Kanban -> KanbanScreen(state, viewModel)
+        Screen.KanbanTask -> KanbanTaskScreen(state, viewModel)
+        Screen.Skills -> SkillsScreen(state, viewModel)
+        Screen.Skill -> SkillScreen(state, viewModel)
+        Screen.Plugins -> PluginsScreen(state, viewModel)
+        Screen.Mcp -> McpScreen(state, viewModel)
+        Screen.Pets -> PetsScreen(state, viewModel)
+        Screen.Insights -> InsightsScreen(state, viewModel)
+        Screen.AgentRuntimes -> AgentRuntimeScreen(state, viewModel)
+        Screen.Workflows -> WorkflowsScreen(state, viewModel)
+        Screen.GlobalAgent -> GlobalAgentScreen(state, viewModel)
+        Screen.EkkoHub -> EkkoHubScreen(state, viewModel)
+        Screen.Files -> FilesScreen(state, viewModel)
+        Screen.Logs -> LogsScreen(state, viewModel)
+        Screen.Connections -> ConnectionsScreen(state, viewModel)
+        Screen.Journey -> JourneyScreen(state, viewModel)
+        Screen.Webhooks -> WebhooksScreen(state, viewModel)
+        Screen.RuntimeVersions -> RuntimeVersionsScreen(state, viewModel)
+        Screen.Appearance -> AppearanceScreen(state, viewModel)
         Screen.Login -> LoginScreen(state, viewModel)
         Screen.Chats -> ChatsScreen(state, viewModel)
         Screen.Groups -> GroupsScreen(state, viewModel)
+        Screen.AgentHub -> AgentHubScreen(state, viewModel)
         Screen.Conversation -> ConversationScreen(state, viewModel)
         Screen.Room -> RoomScreen(state, viewModel)
         Screen.Profiles -> ProfilesScreen(state, viewModel)
@@ -249,12 +394,28 @@ private fun LoginScreen(state: UiState, viewModel: AppViewModel) {
 
 // ── conversation list ────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 private fun ChatsScreen(state: UiState, viewModel: AppViewModel) {
     var manage by remember { mutableStateOf<SessionSummary?>(null) }
     var rename by remember { mutableStateOf<SessionSummary?>(null) }
     var confirmDelete by remember { mutableStateOf<SessionSummary?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var newCategory by remember { mutableStateOf(false) }
+    var editCategory by remember { mutableStateOf<SessionCategory?>(null) }
+    var deleteCategory by remember { mutableStateOf<SessionCategory?>(null) }
+    var workspaceFor by remember { mutableStateOf<SessionSummary?>(null) }
+    var deleteVisible by remember { mutableStateOf(false) }
+    val visibleSessions = remember(state.sessions, state.sessionSearchResults, query) {
+        val clean = query.trim()
+        if (clean.isBlank()) state.sessions else state.sessionSearchResults.orEmpty()
+    }
+    LaunchedEffect(query) { viewModel.searchSessions(query) }
+    LaunchedEffect(Unit) { viewModel.loadSessionCategories() }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = state.refreshingSessions,
+        onRefresh = viewModel::refreshSessions,
+    )
 
     manage?.let { session ->
         ModalBottomSheet(
@@ -272,8 +433,27 @@ private fun ChatsScreen(state: UiState, viewModel: AppViewModel) {
                     confirmDelete = session
                 },
             )
+            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { viewModel.archiveSession(session); manage = null }) {
+                Text(stringResource(if (session.archived) R.string.session_unarchive else R.string.session_archive), Modifier.fillMaxWidth())
+            }
+            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { viewModel.exportSession(session); manage = null }) { Text(stringResource(R.string.session_export), Modifier.fillMaxWidth()) }
+            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { workspaceFor = session; manage = null }) { Text(stringResource(R.string.session_workspace), Modifier.fillMaxWidth()) }
+            state.sessionCategories.forEach { category ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) { TextButton(modifier = Modifier.weight(1f), onClick = { viewModel.setSessionCategory(session, category.id); manage = null }) { Text(stringResource(R.string.session_move_category, category.name), Modifier.fillMaxWidth()) }; TextButton(onClick = { editCategory = category; manage = null }) { Text(stringResource(R.string.action_edit)) }; TextButton(onClick = { deleteCategory = category; manage = null }) { Text(stringResource(R.string.action_delete)) } }
+            }
+            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { manage = null; newCategory = true }) {
+                Text(stringResource(R.string.session_new_category), Modifier.fillMaxWidth())
+            }
         }
     }
+    if (newCategory) TextPromptDialog(
+        title = stringResource(R.string.session_new_category), initial = "", hint = stringResource(R.string.session_category_name), action = stringResource(R.string.action_create),
+        onConfirm = { viewModel.createSessionCategory(it); newCategory = false }, onDismiss = { newCategory = false },
+    )
+    editCategory?.let { category -> TextPromptDialog(title = stringResource(R.string.session_category_edit), initial = category.name, hint = category.name, action = stringResource(R.string.action_save), onConfirm = { viewModel.renameSessionCategory(category, it); editCategory = null }, onDismiss = { editCategory = null }) }
+    deleteCategory?.let { category -> ConfirmDialog(title = stringResource(R.string.action_delete), body = category.name, action = stringResource(R.string.action_delete), onConfirm = { viewModel.deleteSessionCategory(category); deleteCategory = null }, onDismiss = { deleteCategory = null }) }
+    if (deleteVisible) ConfirmDialog(title = stringResource(R.string.session_batch_delete), body = stringResource(R.string.session_batch_delete_body, visibleSessions.size), action = stringResource(R.string.action_delete), onConfirm = { viewModel.batchDeleteVisibleSessions(); deleteVisible = false }, onDismiss = { deleteVisible = false })
+    workspaceFor?.let { session -> TextPromptDialog(title = stringResource(R.string.session_workspace), initial = session.workspace.orEmpty(), hint = "/workspace", action = stringResource(R.string.action_save), onConfirm = { viewModel.setSessionWorkspace(session, it); workspaceFor = null }, onDismiss = { workspaceFor = null }) }
     rename?.let { session ->
         TextPromptDialog(
             title = stringResource(R.string.chats_rename_title),
@@ -296,49 +476,80 @@ private fun ChatsScreen(state: UiState, viewModel: AppViewModel) {
 
     Scaffold(
         topBar = {
-            StudioTopBar(
+            StudioLargeTopBar(
                 title = stringResource(R.string.chats_title),
-                leading = { AppMark(size = 30.dp, corner = 9.dp) },
+                navigationIcon = {
+                    IconButton(onClick = { viewModel.openProfiles() }) {
+                        ProfileAvatar(
+                            name = state.activeProfile.ifBlank { "default" },
+                            spec = state.avatarOf(state.activeProfile),
+                            size = 34.dp,
+                        )
+                    }
+                },
                 actions = {
+                    IconButton(onClick = { deleteVisible = true }, enabled = visibleSessions.isNotEmpty()) { Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.session_batch_delete)) }
+                    IconButton(
+                        onClick = { viewModel.refreshSessions() },
+                        enabled = !state.refreshingSessions,
+                    ) {
+                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh), tint = MaterialTheme.colorScheme.primary)
+                    }
                     IconButton(onClick = { viewModel.startNewConversation() }) {
-                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.action_new_chat))
-                    }
-                    IconButton(onClick = { viewModel.refreshSessions() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh))
-                    }
-                    IconButton(onClick = { viewModel.show(Screen.Profiles) }) {
-                        Icon(Icons.Filled.Person, contentDescription = stringResource(R.string.action_profiles))
-                    }
-                    IconButton(onClick = { viewModel.openSettings() }) {
-                        Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.action_settings))
+                        Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.action_new_chat), tint = MaterialTheme.colorScheme.primary)
                     }
                 },
             )
         },
         bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            ProfileFilterRow(state, viewModel)
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-            if (state.busy) LoadingRow()
-            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
-
-            if (!state.busy && state.sessions.isEmpty()) {
-                EmptyNote(stringResource(R.string.chats_empty))
-            } else {
-                SectionHeader(stringResource(R.string.chats_section), state.sessions.size)
-                LazyColumn {
-                    items(state.sessions) { session ->
-                        SessionRow(
-                            session = session,
-                            avatar = state.avatarOf(session.profile),
-                            onClick = { viewModel.openSession(session) },
-                            onLongClick = { manage = session },
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .pullRefresh(pullRefreshState),
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = StudioHorizontalPadding, end = StudioHorizontalPadding, top = 8.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item { ProfileFilterRow(state, viewModel) }
+                item {
+                    StudioSearchField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = stringResource(R.string.action_search),
+                    )
+                }
+                if (state.busy) item { LoadingRow() }
+                state.error?.let { message -> item { ErrorNote(message) { viewModel.dismissError() } } }
+                if (!state.busy && visibleSessions.isEmpty()) {
+                    item { EmptyNote(stringResource(R.string.chats_empty)) }
+                } else if (visibleSessions.isNotEmpty()) {
+                    item {
+                        StudioGroupedCard {
+                            visibleSessions.forEachIndexed { index, session ->
+                                SessionRow(
+                                    session = session,
+                                    avatar = state.avatarOf(session.profile),
+                                    onClick = { viewModel.openSession(session) },
+                                    onLongClick = { manage = session },
+                                )
+                                if (index != visibleSessions.lastIndex) StudioCardDivider(startIndent = 76)
+                            }
+                        }
                     }
+                    if (query.isBlank()) item { TextButton(onClick = viewModel::loadMoreSessions, Modifier.fillMaxWidth()) { Text(stringResource(R.string.load_more)) } }
                 }
             }
+            PullRefreshIndicator(
+                refreshing = state.refreshingSessions,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                backgroundColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }
@@ -355,13 +566,13 @@ private fun SessionRow(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ProfileAvatar(
             name = session.profile.orEmpty().ifBlank { "default" },
             spec = avatar,
-            size = 40.dp,
+            size = 48.dp,
         )
         Spacer(Modifier.width(12.dp))
         Column(
@@ -369,13 +580,7 @@ private fun SessionRow(
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = session.title,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+                Text(text = session.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = formatStamp(session.updatedAt),
@@ -384,13 +589,18 @@ private fun SessionRow(
                 )
             }
             Text(
-                text = listOfNotNull(session.profile, session.model).joinToString(" · "),
+                text = listOfNotNull(session.agentId ?: session.source.takeIf { it != "cli" }, session.profile, session.model).joinToString(" · "),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+        )
     }
 }
 
@@ -405,18 +615,23 @@ private fun ProfileFilterRow(state: UiState, viewModel: AppViewModel) {
     var open by remember { mutableStateOf(false) }
     val label = state.profileFilter.ifBlank { stringResource(R.string.chats_all_profiles) }
 
-    Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            onClick = { open = true },
-        ) {
+    Box {
+        StudioGroupedCard {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().clickable { open = true }.padding(horizontal = 16.dp, vertical = 15.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(label, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.width(6.dp))
-                Text("▾", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Filled.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(12.dp))
+                Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(5.dp))
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "${state.sessions.size} ${stringResource(R.string.chats_section)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -467,69 +682,80 @@ private fun GroupsScreen(state: UiState, viewModel: AppViewModel) {
 
     Scaffold(
         topBar = {
-            StudioTopBar(
+            StudioLargeTopBar(
                 title = stringResource(R.string.groups_title),
                 actions = {
-                    IconButton(onClick = { creating = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.groups_new))
-                    }
                     IconButton(onClick = { viewModel.refreshRooms() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh))
+                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh), tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = { creating = true }) {
+                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.groups_new), tint = MaterialTheme.colorScheme.primary)
                     }
                 },
             )
         },
         bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (state.busy) LoadingRow()
-            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
-
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = StudioHorizontalPadding, end = StudioHorizontalPadding, top = 8.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (state.busy) item { LoadingRow() }
+            state.error?.let { message -> item { ErrorNote(message) { viewModel.dismissError() } } }
             if (!state.busy && state.rooms.isEmpty()) {
-                EmptyNote(stringResource(R.string.groups_empty))
-            } else {
-                SectionHeader(stringResource(R.string.groups_section), state.rooms.size)
-                LazyColumn {
-                    items(state.rooms) { room ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .combinedClickable(
-                                    onClick = { viewModel.openRoom(room) },
-                                    onLongClick = { confirmDelete = room },
-                                )
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    room.name,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                )
-                                formatStamp(room.updatedAt).takeIf { it.isNotBlank() }?.let { stamp ->
-                                    Text(
-                                        stamp,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                            if (room.agentCount != null && room.memberCount != null) {
-                                Text(
-                                    stringResource(R.string.groups_counts, room.agentCount, room.memberCount),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                item { EmptyNote(stringResource(R.string.groups_empty)) }
+            } else if (state.rooms.isNotEmpty()) {
+                item {
+                    StudioGroupedCard {
+                        state.rooms.forEachIndexed { index, room ->
+                            RoomRow(
+                                room = room,
+                                onClick = { viewModel.openRoom(room) },
+                                onLongClick = { confirmDelete = room },
+                            )
+                            if (index != state.rooms.lastIndex) StudioCardDivider(startIndent = 78)
                         }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                     }
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun RoomRow(room: Room, onClick: () -> Unit, onLongClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(50.dp).clip(RoundedCornerShape(15.dp)).background(
+                Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, Color(0xFF4389FF))),
+            ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.Groups, contentDescription = null, tint = Color.White)
+        }
+        Spacer(Modifier.width(13.dp))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(room.name, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                formatStamp(room.updatedAt).takeIf { it.isNotBlank() }?.let { stamp ->
+                    Text(stamp, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (room.agentCount != null && room.memberCount != null) {
+                Text(
+                    stringResource(R.string.groups_counts, room.agentCount, room.memberCount),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
     }
 }
 
@@ -613,6 +839,7 @@ private fun RoomScreen(state: UiState, viewModel: AppViewModel) {
                 onBack = { viewModel.back() },
             )
         },
+        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).imePadding()) {
             if (state.loadingHistory) LoadingRow()
@@ -701,14 +928,97 @@ private fun RoomScreen(state: UiState, viewModel: AppViewModel) {
 
 // ── conversation ─────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ConversationScreen(state: UiState, viewModel: AppViewModel) {
     var draft by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
+    var actionLine by remember { mutableStateOf<ChatLine?>(null) }
+    var replyingTo by remember { mutableStateOf<ChatLine?>(null) }
+    val conversationKey = state.openSession?.id ?: "new"
+    var reachedInitialBottom by remember(conversationKey) { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var clarification by rememberSaveable(state.pendingRunAction?.id) { mutableStateOf("") }
 
-    LaunchedEffect(state.lines.size) {
-        if (state.lines.isNotEmpty()) listState.animateScrollToItem(state.lines.lastIndex)
+    state.pendingRunAction?.let { action ->
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(if (action.kind == RequiredAction.Approval) R.string.run_approval_title else R.string.run_clarification_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(action.prompt.ifBlank { stringResource(if (action.kind == RequiredAction.Approval) R.string.run_requires_approval else R.string.run_requires_clarification) })
+                    if (action.kind == RequiredAction.Approval && action.options.count { it != "deny" } > 1) {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            action.options.filter { it != "deny" }.forEach { choice ->
+                                AssistChip(
+                                    onClick = { viewModel.resolveRunAction(choice) },
+                                    label = { Text(stringResource(when (choice) {
+                                        "session" -> R.string.approval_session
+                                        "always" -> R.string.approval_always
+                                        else -> R.string.approval_once
+                                    })) },
+                                )
+                            }
+                        }
+                    }
+                    if (action.kind == RequiredAction.Clarification) {
+                        if (action.options.isNotEmpty()) {
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                action.options.forEach { choice ->
+                                    AssistChip(onClick = { clarification = choice }, label = { Text(choice) })
+                                }
+                            }
+                        }
+                        OutlinedTextField(
+                            value = clarification,
+                            onValueChange = { clarification = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(R.string.run_clarification_answer)) },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = action.kind == RequiredAction.Approval || clarification.isNotBlank(),
+                    onClick = { viewModel.resolveRunAction(if (action.kind == RequiredAction.Approval) action.options.firstOrNull() ?: "once" else clarification.trim()) },
+                ) { Text(stringResource(if (action.kind == RequiredAction.Approval) R.string.action_approve else R.string.action_send)) }
+            },
+            dismissButton = if (action.kind == RequiredAction.Approval) {
+                { TextButton(onClick = { viewModel.resolveRunAction(action.options.firstOrNull { it == "deny" } ?: "deny") }) { Text(stringResource(R.string.action_reject)) } }
+            } else null,
+        )
+    }
+
+    // A run continues in Studio after the mobile stream is detached. Reload
+    // the server history whenever the app returns to the foreground so a reply
+    // completed while the user was away is shown immediately.
+    DisposableEffect(lifecycleOwner, conversationKey) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && state.openSession != null) {
+                viewModel.refreshConversation()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(conversationKey, state.loadingHistory, state.lines.size) {
+        if (!state.loadingHistory && state.lines.isNotEmpty()) {
+            val last = state.lines.lastIndex
+            if (!reachedInitialBottom) {
+                // A huge offset is intentionally clamped by LazyColumn to the
+                // real end, including when the final message is taller than the
+                // viewport. Animation from the first message made old chats
+                // appear to open at the top.
+                listState.scrollToItem(last, Int.MAX_VALUE / 2)
+                reachedInitialBottom = true
+            } else {
+                listState.animateScrollToItem(last, Int.MAX_VALUE / 2)
+            }
+        }
     }
 
     LaunchedEffect(state.transcript) {
@@ -720,23 +1030,42 @@ private fun ConversationScreen(state: UiState, viewModel: AppViewModel) {
 
     val profile = state.openSession?.profile ?: state.activeProfile
     val avatar = state.avatarOf(profile)
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = state.loadingHistory,
+        onRefresh = { viewModel.refreshConversation() },
+    )
+    actionLine?.let { line ->
+        ModalBottomSheet(
+            onDismissRequest = { actionLine = null },
+            sheetState = rememberModalBottomSheetState(),
+        ) {
+            SheetTitle(stringResource(R.string.message_actions))
+            TextButton(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                onClick = {
+                    clipboard.setText(AnnotatedString(line.text))
+                    actionLine = null
+                },
+            ) { Text(stringResource(R.string.message_copy), modifier = Modifier.fillMaxWidth()) }
+            TextButton(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                onClick = { replyingTo = line; actionLine = null },
+            ) { Text(stringResource(R.string.message_reply), modifier = Modifier.fillMaxWidth()) }
+            TextButton(
+                enabled = !state.sending,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                onClick = { actionLine = null; viewModel.send("/fork") },
+            ) { Text(stringResource(R.string.message_fork), modifier = Modifier.fillMaxWidth()) }
+            Spacer(Modifier.height(18.dp))
+        }
+    }
     Scaffold(
+        // The composer applies the IME inset itself. Scaffold's default system
+        // bottom inset would otherwise be added above the keyboard as a second,
+        // empty navigation-bar-sized strip.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            StudioTopBar(
-                title = state.openSession?.title ?: stringResource(R.string.action_new_chat),
-                subtitle = listOfNotNull(profile.ifBlank { null }, state.openSession?.model)
-                    .joinToString(" · ")
-                    .ifBlank { null },
-                leading = {
-                    ProfileAvatar(profile.ifBlank { "default" }, avatar, size = 32.dp)
-                },
-                onBack = { viewModel.back() },
-                actions = {
-                    IconButton(onClick = { viewModel.startNewConversation() }) {
-                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.action_new_chat))
-                    }
-                },
-            )
+            ConversationTopBar(state, profile, avatar, viewModel)
         },
     ) { padding ->
         Column(
@@ -745,22 +1074,22 @@ private fun ConversationScreen(state: UiState, viewModel: AppViewModel) {
                 .padding(padding)
                 .imePadding(),
         ) {
-            if (state.loadingHistory) LoadingRow()
-
-            if (state.lines.isEmpty() && !state.loadingHistory) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth().pullRefresh(pullRefreshState),
+            ) {
+                if (state.lines.isEmpty() && !state.loadingHistory) {
                     Text(
                         stringResource(
                             R.string.conversation_empty,
                             profile.ifBlank { stringResource(R.string.conversation_your_agent) },
                         ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.Center),
                     )
-                }
-            } else {
+                } else {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                        modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -769,12 +1098,49 @@ private fun ConversationScreen(state: UiState, viewModel: AppViewModel) {
                             line = line,
                             profile = profile.ifBlank { "default" },
                             avatar = avatar,
+                            onActions = { actionLine = line },
+                            onDownload = { file ->
+                                viewModel.downloadChatFile(file, profile.ifBlank { "default" })
+                            },
                         )
+                    }
+                }
+                }
+                PullRefreshIndicator(
+                    refreshing = state.loadingHistory,
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    backgroundColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                )
+                if (reachedInitialBottom && listState.canScrollForward && state.lines.isNotEmpty()) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(14.dp)
+                            .size(46.dp)
+                            .clickable {
+                                scope.launch {
+                                    listState.animateScrollToItem(state.lines.lastIndex, Int.MAX_VALUE / 2)
+                                }
+                            },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        tonalElevation = 5.dp,
+                        shadowElevation = 5.dp,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Filled.KeyboardArrowDown,
+                                contentDescription = stringResource(R.string.conversation_jump_latest),
+                            )
+                        }
                     }
                 }
             }
 
-            if (state.sending) {
+            if (state.sending && state.lines.none { it.streaming }) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -789,15 +1155,54 @@ private fun ConversationScreen(state: UiState, viewModel: AppViewModel) {
                 }
             }
 
-            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
+            if (state.queuedRuns.isNotEmpty() || state.backgroundAgentRuns.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    state.queuedRuns.forEach { queued ->
+                        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                            Row(Modifier.padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(stringResource(R.string.queued_run_summary, queued.position, queued.preview), maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                                IconButton(onClick = { viewModel.insertQueuedRun(queued.id) }) { Icon(Icons.Filled.KeyboardArrowUp, stringResource(R.string.queued_run_insert)) }
+                                IconButton(onClick = { viewModel.cancelQueuedRun(queued.id) }) { Icon(Icons.Filled.Close, stringResource(R.string.queued_run_cancel)) }
+                            }
+                        }
+                    }
+                    state.backgroundAgentRuns.forEach { agent ->
+                        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                            Text(stringResource(R.string.background_agent_summary, agent.label, agent.status), modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+            }
 
+            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
+            state.notice?.let { NoticeNote(it) { viewModel.dismissNotice() } }
+
+            replyingTo?.let { quoted ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.message_replying), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                            Text(quoted.text, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                        }
+                        IconButton(onClick = { replyingTo = null }) { Icon(Icons.Filled.Close, stringResource(R.string.action_cancel)) }
+                    }
+                }
+            }
             Composer(
                 state = state,
                 draft = draft,
                 onDraftChange = { draft = it },
                 onSend = {
-                    viewModel.send(draft)
+                    viewModel.send(replyingTo?.let { quoteForReply(it.text, draft) } ?: draft)
                     draft = ""
+                    replyingTo = null
                 },
                 viewModel = viewModel,
             )
@@ -805,24 +1210,97 @@ private fun ConversationScreen(state: UiState, viewModel: AppViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MessageBubble(line: ChatLine, profile: String? = null, avatar: AvatarSpec? = null) {
+private fun ConversationTopBar(state: UiState, profile: String, avatar: AvatarSpec?, viewModel: AppViewModel) {
+    var menuOpen by remember { mutableStateOf(false) }
+    TopAppBar(
+        title = {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                tonalElevation = 2.dp,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ProfileAvatar(profile.ifBlank { "default" }, avatar, size = 27.dp)
+                    Column {
+                        Text(state.openSession?.title ?: stringResource(R.string.action_new_chat), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            state.selectedRuntime.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
+        navigationIcon = {
+            Surface(modifier = Modifier.padding(start = 7.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                IconButton(onClick = { viewModel.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) }
+            }
+        },
+        actions = {
+            Box {
+                Surface(modifier = Modifier.padding(end = 7.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                    IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.message_actions)) }
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_refresh)) }, onClick = { menuOpen = false; viewModel.refreshConversation() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_new_chat)) }, onClick = { menuOpen = false; viewModel.startNewConversation() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.message_fork)) }, enabled = !state.sending, onClick = { menuOpen = false; viewModel.send("/fork") })
+                }
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+    )
+}
+
+@Composable
+private fun MessageBubble(
+    line: ChatLine,
+    profile: String? = null,
+    avatar: AvatarSpec? = null,
+    onActions: (() -> Unit)? = null,
+    onDownload: ((ChatFileLink) -> Unit)? = null,
+) {
+    val parsed = remember(line.text, onDownload != null) {
+        if (onDownload == null) ParsedChatMessage(line.text, emptyList()) else parseChatMessage(line.text)
+    }
     val alignment = if (line.fromUser) Alignment.CenterEnd else Alignment.CenterStart
+    val hasThinking = !line.fromUser && (
+        line.streaming || line.reasoning?.isNotBlank() == true || line.tools.isNotEmpty()
+    )
+    val wide = !line.fromUser || hasThinking || parsed.files.isNotEmpty()
     val container = when {
         line.isError -> MaterialTheme.colorScheme.errorContainer
-        line.fromUser -> MaterialTheme.colorScheme.primaryContainer
+        line.fromUser -> MaterialTheme.colorScheme.surfaceVariant
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
-        Row(verticalAlignment = Alignment.Bottom) {
+        Row(
+            modifier = if (wide) Modifier.fillMaxWidth() else Modifier,
+            verticalAlignment = if (wide) Alignment.Top else Alignment.Bottom,
+        ) {
             // The agent's picture rides with its own replies, the way Studio
             // shows it in the transcript.
             if (!line.fromUser && !profile.isNullOrBlank()) {
                 ProfileAvatar(profile, avatar, size = 26.dp)
                 Spacer(Modifier.width(8.dp))
             }
-            Card(colors = CardDefaults.cardColors(containerColor = container)) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Card(
+                modifier = (if (wide) Modifier.weight(1f) else Modifier).combinedClickable(
+                    enabled = onActions != null,
+                    onClick = { onActions?.invoke() },
+                    onLongClick = { onActions?.invoke() },
+                ),
+                shape = RoundedCornerShape(10.dp),
+                colors = CardDefaults.cardColors(containerColor = container),
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     line.sender?.let {
                         Text(
                             it,
@@ -830,9 +1308,12 @@ private fun MessageBubble(line: ChatLine, profile: String? = null, avatar: Avata
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    if (line.text.isNotBlank()) Text(text = line.text)
-                    line.reasoning?.takeIf { it.isNotBlank() }?.let { thinking ->
-                        ReasoningNote(thinking)
+                    if (hasThinking) ThinkingTimeline(line)
+                    if (parsed.text.isNotBlank()) {
+                        if (line.fromUser) Text(text = parsed.text) else ChatMarkdownText(text = parsed.text)
+                    }
+                    parsed.files.forEach { file ->
+                        ChatFileCard(file = file, onDownload = { onDownload?.invoke(file) })
                     }
                     val stamp = formatStamp(line.timestamp)
                     if (stamp.isNotBlank()) {
@@ -848,42 +1329,247 @@ private fun MessageBubble(line: ChatLine, profile: String? = null, avatar: Avata
     }
 }
 
-/** The model's own account of how it got there, folded away until asked for. */
+private fun quoteForReply(quoted: String, reply: String): String {
+    val excerpt = quoted.trim().lineSequence().take(8).joinToString("\n") { "> $it" }
+    return listOf(excerpt, reply.trim()).filter { it.isNotBlank() }.joinToString("\n\n")
+}
+
 @Composable
-private fun ReasoningNote(reasoning: String) {
-    var open by rememberSaveable { mutableStateOf(false) }
+private fun ChatFileCard(file: ChatFileLink, onDownload: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onDownload),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.InsertDriveFile,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    file.label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (file.fileName != file.label) {
+                    Text(
+                        file.fileName,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            textDirection = TextDirection.Ltr,
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            IconButton(onClick = onDownload) {
+                Icon(
+                    Icons.Filled.Download,
+                    contentDescription = stringResource(R.string.download_action),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThinkingTimeline(line: ChatLine) {
+    var expandedOverride by rememberSaveable(line.startedAtMillis) { mutableStateOf<Boolean?>(null) }
+    val hasDetails = line.tools.isNotEmpty() || !line.reasoning.isNullOrBlank()
+    val expanded = expandedOverride ?: line.streaming
+    val nowMillis = timelineNow(line)
+    val elapsed = line.startedAtMillis?.let { formatElapsed(nowMillis - it) }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.clickable { open = !open }.padding(vertical = 2.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (hasDetails) Modifier.clickable { expandedOverride = !expanded }
+                    else Modifier,
+                )
+                .padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(
-                Icons.Filled.Psychology,
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (line.streaming) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    Icons.Filled.Psychology,
+                    contentDescription = null,
+                    modifier = Modifier.size(17.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
-                stringResource(R.string.reasoning_show),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                stringResource(R.string.thinking_title),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
             )
-            Text(
-                if (open) "⌃" else "⌄",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            elapsed?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        textDirection = TextDirection.Ltr,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            if (hasDetails) {
+                Icon(
+                    if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.thinking_collapse else R.string.thinking_expand,
+                    ),
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
-        if (open) {
-            Text(
-                reasoning,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
-            )
+        if (expanded) {
+            Column(
+                modifier = Modifier.padding(top = 7.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                line.tools.forEach { tool -> ToolStepRow(tool, nowMillis) }
+                line.reasoning?.takeIf { it.isNotBlank() }?.let { reasoning ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(9.dp),
+                    ) {
+                        Text(
+                            reasoning,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun ToolStepRow(tool: ChatToolStep, nowMillis: Long) {
+    val seconds = tool.durationSeconds ?: if (tool.status == ToolRunStatus.Running) {
+        (nowMillis - tool.startedAtMillis).coerceAtLeast(0) / 1000.0
+    } else {
+        null
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(9.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                Icons.Filled.Build,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    tool.name,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        textDirection = TextDirection.Ltr,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                tool.detail?.takeIf { it.isNotBlank() }?.let { detail ->
+                    Text(
+                        detail,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            textDirection = TextDirection.Ltr,
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            seconds?.let {
+                Text(
+                    formatToolDuration(it),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        textDirection = TextDirection.Ltr,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            when (tool.status) {
+                ToolRunStatus.Running -> CircularProgressIndicator(
+                    modifier = Modifier.size(15.dp),
+                    strokeWidth = 2.dp,
+                )
+                ToolRunStatus.Done -> Icon(
+                    Icons.Filled.Check,
+                    contentDescription = stringResource(R.string.tool_status_done),
+                    modifier = Modifier.size(17.dp),
+                    tint = androidx.compose.ui.graphics.Color(0xFF67C650),
+                )
+                ToolRunStatus.Error -> Icon(
+                    Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.tool_status_failed),
+                    modifier = Modifier.size(17.dp),
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun timelineNow(line: ChatLine): Long {
+    var now by remember(line.startedAtMillis, line.finishedAtMillis) {
+        mutableLongStateOf(line.finishedAtMillis ?: System.currentTimeMillis())
+    }
+    LaunchedEffect(line.streaming, line.finishedAtMillis) {
+        if (!line.streaming) {
+            now = line.finishedAtMillis ?: System.currentTimeMillis()
+            return@LaunchedEffect
+        }
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(1_000)
+        }
+    }
+    return line.finishedAtMillis ?: now
+}
+
+private fun formatElapsed(milliseconds: Long): String {
+    val totalSeconds = (milliseconds.coerceAtLeast(0) / 1000).toInt()
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return if (minutes == 0) "${seconds}s" else "${minutes}m${seconds.toString().padStart(2, '0')}s"
+}
+
+private fun formatToolDuration(seconds: Double): String = when {
+    seconds < 10 -> String.format(Locale.US, "%.1fs", seconds)
+    seconds < 60 -> "${seconds.toInt()}s"
+    else -> "${(seconds / 60).toInt()}m${(seconds.toInt() % 60).toString().padStart(2, '0')}s"
 }
 
 // ── profiles ─────────────────────────────────────────────────────────────
@@ -891,6 +1577,10 @@ private fun ReasoningNote(reasoning: String) {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ProfilesScreen(state: UiState, viewModel: AppViewModel) {
+    val context = LocalContext.current
+    var avatarTarget by remember { mutableStateOf<String?>(null) }
+    val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri ?: return@rememberLauncherForActivityResult; val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@rememberLauncherForActivityResult; val mime = context.contentResolver.getType(uri) ?: "image/png"; avatarTarget?.let { viewModel.updateProfileAvatar(it, "data:$mime;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)) } }
+    val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri ?: return@rememberLauncherForActivityResult; val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@rememberLauncherForActivityResult; viewModel.importProfile(bytes, uri.lastPathSegment ?: "profile.tar.gz") }
     var confirmSignOut by remember { mutableStateOf(false) }
     var manage by remember { mutableStateOf<Profile?>(null) }
     var rename by remember { mutableStateOf<Profile?>(null) }
@@ -913,6 +1603,13 @@ private fun ProfilesScreen(state: UiState, viewModel: AppViewModel) {
                     confirmDelete = profile
                 },
             )
+            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { manage = null; viewModel.restartProfile(profile.name) }) {
+                Text(stringResource(R.string.profile_restart), Modifier.fillMaxWidth())
+            }
+            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { manage = null; viewModel.switchActiveProfile(profile.name) }) { Text(stringResource(R.string.profile_make_active), Modifier.fillMaxWidth()) }
+            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { manage = null; viewModel.downloadProfile(profile.name) }) { Text(stringResource(R.string.profile_export), Modifier.fillMaxWidth()) }
+            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { avatarTarget = profile.name; manage = null; avatarPicker.launch("image/*") }) { Text(stringResource(R.string.profile_avatar), Modifier.fillMaxWidth()) }
+            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { manage = null; viewModel.clearProfileAvatar(profile.name) }) { Text(stringResource(R.string.profile_avatar_clear), Modifier.fillMaxWidth()) }
         }
     }
     rename?.let { profile ->
@@ -961,24 +1658,37 @@ private fun ProfilesScreen(state: UiState, viewModel: AppViewModel) {
                 subtitle = state.account?.let { stringResource(R.string.profiles_signed_in, it) },
                 onBack = { viewModel.back() },
                 actions = {
+                    IconButton(onClick = { importPicker.launch("*/*") }) { Icon(Icons.Filled.Download, contentDescription = stringResource(R.string.profile_import), tint = MaterialTheme.colorScheme.primary) }
                     IconButton(onClick = { creating = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.profiles_new))
+                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.profiles_new), tint = MaterialTheme.colorScheme.primary)
                     }
                     IconButton(onClick = { viewModel.refreshProfiles() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh))
+                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh), tint = MaterialTheme.colorScheme.primary)
                     }
                     IconButton(onClick = { confirmSignOut = true }) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = stringResource(R.string.action_sign_out))
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = stringResource(R.string.action_sign_out), tint = MaterialTheme.colorScheme.primary)
                     }
                 },
             )
         },
+        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (state.busy) LoadingRow()
-            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
-            LazyColumn {
-                items(state.profiles) { profile ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(
+                start = StudioHorizontalPadding,
+                end = StudioHorizontalPadding,
+                top = 12.dp,
+                bottom = 28.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (state.busy) item { LoadingRow() }
+            state.error?.let { message -> item { ErrorNote(message) { viewModel.dismissError() } } }
+            if (state.profiles.isNotEmpty()) {
+                item {
+                    StudioGroupedCard {
+                        state.profiles.forEachIndexed { index, profile ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -986,28 +1696,48 @@ private fun ProfilesScreen(state: UiState, viewModel: AppViewModel) {
                                 onClick = { viewModel.selectProfile(profile.name) },
                                 onLongClick = { manage = profile },
                             )
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                            .padding(horizontal = 15.dp, vertical = 13.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        ProfileAvatar(profile.name, profile.avatar, size = 42.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(profile.name, style = MaterialTheme.typography.bodyLarge)
+                        ProfileAvatar(profile.name, profile.avatar, size = 52.dp)
+                        Spacer(Modifier.width(13.dp))
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(profile.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             Text(
                                 profile.model ?: stringResource(R.string.profiles_no_model),
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
+                            state.profileRuntimeStatuses[profile.name]?.let { status ->
+                                Text(stringResource(R.string.profile_runtime_status, status), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                         if (profile.name == state.activeProfile) {
-                            Text(
-                                stringResource(R.string.profiles_active),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(50.dp),
+                            ) {
+                                Text(
+                                    stringResource(R.string.profiles_active),
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        } else {
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                            if (index != state.profiles.lastIndex) StudioCardDivider(startIndent = 80)
+                        }
+                    }
                 }
             }
         }
@@ -1026,6 +1756,8 @@ private fun Composer(
     val context = LocalContext.current
     var sheet by remember { mutableStateOf<ComposerSheet?>(null) }
     var captureUri by remember { mutableStateOf<Uri?>(null) }
+    var fieldFocused by remember { mutableStateOf(false) }
+    var composerExpanded by rememberSaveable { mutableStateOf(false) }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { readAndAttach(context, it, viewModel) }
@@ -1119,7 +1851,43 @@ private fun Composer(
         null -> Unit
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    if (!composerExpanded && draft.isBlank() && state.attachments.isEmpty() && !state.recording && !state.transcribing) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            tonalElevation = 3.dp,
+            shadowElevation = 3.dp,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                IconButton(onClick = { composerExpanded = true }, modifier = Modifier.size(42.dp)) {
+                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.composer_expand))
+                }
+                Text(
+                    stringResource(R.string.composer_hint),
+                    modifier = Modifier.weight(1f).clickable { composerExpanded = true }.padding(vertical = 10.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ComposerActionButton(state, draft, onSend, viewModel) {
+                    askMic.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            }
+        }
+        return
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 7.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 3.dp,
+        shadowElevation = 3.dp,
+    ) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
         if (state.attachments.isNotEmpty() || state.attaching) {
             FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
@@ -1149,67 +1917,117 @@ private fun Composer(
                     modifier = Modifier.weight(1f),
                 )
                 if (state.recording) {
-                    TextButton(onClick = { viewModel.stopRecordingAndAttach() }) { Text(stringResource(R.string.composer_send_audio)) }
                     TextButton(onClick = { viewModel.cancelRecording() }) { Text(stringResource(R.string.action_cancel)) }
                 }
             }
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
         ) {
             OutlinedTextField(
                 value = draft,
                 onValueChange = onDraftChange,
                 placeholder = { Text(stringResource(R.string.composer_hint)) },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth().onFocusChanged {
+                    if (fieldFocused && !it.isFocused && draft.isBlank() && state.attachments.isEmpty()) {
+                        composerExpanded = false
+                    }
+                    fieldFocused = it.isFocused
+                },
                 maxLines = 5,
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(10.dp),
             )
-            SendOrRecordButton(state, draft, onSend, viewModel) {
-                askMic.launch(Manifest.permission.RECORD_AUDIO)
-            }
         }
 
-        // Studio keeps its context controls on a row under the field.
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable(enabled = !state.sending) { sheet = ComposerSheet.Options },
-                contentAlignment = Alignment.Center,
+            Surface(
+                modifier = Modifier.size(40.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = stringResource(R.string.composer_more),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(18.dp),
+                IconButton(onClick = { sheet = ComposerSheet.Options }, enabled = !state.sending) {
+                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.composer_more))
+                }
+            }
+            Row(
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                ToolbarChip(
+                    icon = Icons.Filled.Person,
+                    label = state.openSession?.profile ?: state.activeProfile.ifBlank { "default" },
+                    onClick = {},
                 )
+                ToolbarChip(
+                    icon = Icons.Filled.Psychology,
+                    label = reasoningLabel(state.reasoningEffort),
+                ) { sheet = ComposerSheet.Reasoning }
+                ToolbarChip(
+                    icon = Icons.Filled.ModelTraining,
+                    label = state.sessionModel ?: stringResource(R.string.sheet_model),
+                ) {
+                    viewModel.loadModels()
+                    sheet = ComposerSheet.Model
+                }
+                if (state.speaking) {
+                    AssistChip(
+                        onClick = { viewModel.stopSpeaking() },
+                        label = { Text(stringResource(R.string.voice_stop_reply)) },
+                        leadingIcon = { Icon(Icons.Filled.Stop, null, Modifier.size(15.dp)) },
+                    )
+                }
+                ContextUsage(state)
             }
-            ToolbarChip(
-                icon = Icons.Filled.Psychology,
-                label = reasoningLabel(state.reasoningEffort),
-            ) {
-                sheet = ComposerSheet.Reasoning
-            }
-            ToolbarChip(
-                icon = Icons.Filled.WbSunny,
-                label = state.sessionModel ?: stringResource(R.string.sheet_model),
-            ) {
-                viewModel.loadModels()
-                sheet = ComposerSheet.Model
+            ComposerActionButton(state, draft, onSend, viewModel) {
+                askMic.launch(Manifest.permission.RECORD_AUDIO)
             }
         }
     }
+    }
 }
+
+@Composable
+private fun ContextUsage(state: UiState) {
+    val ratio = if (state.contextWindow > 0) {
+        (state.contextTokens.toFloat() / state.contextWindow.toFloat()).coerceIn(0f, 1f)
+    } else 0f
+    val color = when {
+        ratio > .8f -> MaterialTheme.colorScheme.error
+        ratio > .6f -> Color(0xFFD59A2D)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Column(modifier = Modifier.widthIn(min = 84.dp, max = 122.dp)) {
+        Text(
+            if (state.loadingContext) stringResource(R.string.context_loading)
+            else if (state.contextWindow > 0) stringResource(
+                R.string.context_usage,
+                compactNumber(state.contextTokens),
+                compactNumber(state.contextWindow),
+            ) else stringResource(R.string.context_unknown),
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            maxLines = 1,
+        )
+        LinearProgressIndicator(
+            progress = { ratio },
+            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(99.dp)),
+            color = color,
+            trackColor = MaterialTheme.colorScheme.outlineVariant,
+        )
+    }
+}
+
+private fun compactNumber(value: Long): String = when {
+    value >= 1_000_000 -> "%.1fM".format(Locale.US, value / 1_000_000.0)
+    value >= 1_000 -> "%.1fK".format(Locale.US, value / 1_000.0)
+    else -> value.toString()
+}.replace(".0", "")
 
 private enum class ComposerSheet { Options, Model, Reasoning }
 
@@ -1218,6 +2036,13 @@ private val REASONING_LEVELS = listOf(
     "low" to R.string.reasoning_low,
     "medium" to R.string.reasoning_medium,
     "high" to R.string.reasoning_high,
+    "xhigh" to R.string.reasoning_extra_high,
+)
+
+private val APPEARANCE_LEVELS = listOf(
+    "system" to R.string.appearance_system,
+    "light" to R.string.appearance_light,
+    "dark" to R.string.appearance_dark,
 )
 
 @Composable
@@ -1226,7 +2051,15 @@ private fun reasoningLabel(effort: String): String = stringResource(
 )
 
 @Composable
-private fun SendOrRecordButton(
+private fun appearanceLabel(appearance: String): String = stringResource(
+    APPEARANCE_LEVELS.firstOrNull { it.first == appearance }?.second ?: R.string.appearance_system,
+)
+
+private const val PHONE_REPOSITORY_URL = "https://github.com/twuijri/hermes-studio-mobile"
+private const val STUDIO_REPOSITORY_URL = "https://github.com/EKKOLearnAI/hermes-studio"
+
+@Composable
+private fun ComposerActionButton(
     state: UiState,
     draft: String,
     onSend: () -> Unit,
@@ -1234,12 +2067,13 @@ private fun SendOrRecordButton(
     onRecord: () -> Unit,
 ) {
     val hasPayload = draft.isNotBlank() || state.attachments.isNotEmpty()
-    val background = if (hasPayload || state.recording || state.sending) {
+    val active = hasPayload || state.recording || state.sending
+    val background = if (active) {
         MaterialTheme.colorScheme.primary
     } else {
         MaterialTheme.colorScheme.surfaceVariant
     }
-    val tint = if (hasPayload || state.recording || state.sending) {
+    val tint = if (active) {
         MaterialTheme.colorScheme.onPrimary
     } else {
         MaterialTheme.colorScheme.onSurface
@@ -1247,25 +2081,23 @@ private fun SendOrRecordButton(
 
     Box(
         modifier = Modifier
-            .padding(bottom = 4.dp)
-            .size(46.dp)
-            .clip(RoundedCornerShape(23.dp))
+            .size(40.dp)
+            .clip(CircleShape)
             .background(background),
         contentAlignment = Alignment.Center,
     ) {
         when {
             state.recording -> IconButton(onClick = { viewModel.stopRecordingAndTranscribe() }) {
-                Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.composer_stop), tint = tint)
+                Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.composer_stop), tint = tint, modifier = Modifier.size(20.dp))
             }
-            // A streaming run can be called off, so the button becomes a stop.
             state.sending -> IconButton(onClick = { viewModel.stopRun() }) {
-                Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.conversation_stop), tint = tint)
+                Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.conversation_stop), tint = tint, modifier = Modifier.size(20.dp))
             }
-            hasPayload -> IconButton(onClick = onSend, enabled = !state.sending) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.composer_send), tint = tint)
+            hasPayload -> IconButton(onClick = onSend) {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.composer_send), tint = tint, modifier = Modifier.size(20.dp))
             }
             else -> IconButton(onClick = onRecord, enabled = !state.transcribing) {
-                Icon(Icons.Filled.Mic, contentDescription = stringResource(R.string.composer_record), tint = tint)
+                Icon(Icons.Filled.Mic, contentDescription = stringResource(R.string.composer_record), tint = tint, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -1326,7 +2158,7 @@ private fun OptionsSheet(
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         SheetTitle(stringResource(R.string.sheet_conversation))
         SheetRow(
-            icon = Icons.Filled.WbSunny,
+            icon = Icons.Filled.ModelTraining,
             label = stringResource(R.string.sheet_model),
             detail = state.sessionModel ?: stringResource(R.string.sheet_profile_default),
             onClick = onModel,
@@ -1421,7 +2253,11 @@ private fun SheetRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -1619,141 +2455,620 @@ private fun LanguageAction(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-/**
- * Settings is a table of contents, not a wall.
- *
- * Studio groups its own settings into tabs; a phone has no room for eleven
- * tabs, so each group opens its own screen and this list stays short enough to
- * take in at a glance.
- */
+/** Agent work gets a first-class home instead of masquerading as app settings. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(state: UiState, viewModel: AppViewModel) {
+private fun AgentHubScreen(state: UiState, viewModel: AppViewModel) {
     val channels = state.serverConfig?.channels.orEmpty()
+    val profile = state.profiles.firstOrNull { it.name == state.activeProfile }
+        ?: state.profiles.firstOrNull { it.active }
+        ?: state.profiles.firstOrNull()
+    val profileName = profile?.name ?: state.activeProfile.ifBlank { "default" }
 
     Scaffold(
         topBar = {
-            StudioTopBar(
-                title = stringResource(R.string.settings_title),
-                subtitle = state.account?.let { stringResource(R.string.profiles_signed_in, it) },
-                onBack = { viewModel.back() },
+            StudioLargeTopBar(
+                title = stringResource(R.string.agent_hub_title),
+                navigationIcon = {
+                    IconButton(onClick = { viewModel.openProfiles() }) {
+                        ProfileAvatar(profileName, profile?.avatar, size = 34.dp)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.openSettings() }) {
+                        Icon(
+                            Icons.Filled.Settings,
+                            contentDescription = stringResource(R.string.action_settings),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                },
             )
         },
+        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(
+                start = StudioHorizontalPadding,
+                end = StudioHorizontalPadding,
+                top = 8.dp,
+                bottom = 28.dp,
+            ),
         ) {
-            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
-            state.notice?.let { NoticeNote(it) { viewModel.dismissNotice() } }
+            state.error?.let { message -> item { ErrorNote(message) { viewModel.dismissError() } } }
+            state.notice?.let { message -> item { NoticeNote(message) { viewModel.dismissNotice() } } }
 
-            SettingsSection(stringResource(R.string.settings_category_account))
-            SettingsRow(
-                icon = Icons.Filled.Dns,
-                label = stringResource(R.string.settings_group_server),
-                value = state.baseUrl.ifBlank { stringResource(R.string.settings_group_server_note) },
-                onClick = { viewModel.openSettingsGroup(SettingsGroup.Server) },
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(
+                        icon = Icons.Filled.Psychology,
+                        color = Color(0xFF7A5CFF),
+                        title = stringResource(R.string.agent_runtimes_title),
+                        subtitle = stringResource(R.string.agent_runtimes_hub_note),
+                        onClick = { viewModel.openAgentRuntimes() },
+                    )
+                    StudioCardDivider()
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { viewModel.openProfiles() }
+                            .padding(horizontal = 16.dp, vertical = 15.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ProfileAvatar(profileName, profile?.avatar, size = 58.dp)
+                        Spacer(Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(profileName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text(
+                                profile?.model.orEmpty().ifBlank { stringResource(R.string.settings_default_model_server) },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Surface(
+                            color = Color(0xFF43C879).copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(50.dp),
+                        ) {
+                            Text(
+                                if (profile?.active == true) stringResource(R.string.agent_status_active)
+                                else stringResource(R.string.agent_status_ready),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF43C879),
+                            )
+                        }
+                    }
+                }
+            }
+
+            item { StudioSectionTitle(stringResource(R.string.agent_hub_work)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(
+                        icon = Icons.Filled.AccountTree,
+                        color = Color(0xFF35B7DB),
+                        title = stringResource(R.string.workflows_title),
+                        subtitle = stringResource(R.string.workflows_hub_note),
+                        onClick = { viewModel.openWorkflows() },
+                    )
+                    StudioCardDivider()
+                    StudioDestinationRow(
+                        icon = Icons.Filled.Schedule,
+                        color = Color(0xFF4D8DFF),
+                        title = stringResource(R.string.cron_title),
+                        subtitle = stringResource(R.string.settings_group_cron_note),
+                        onClick = { viewModel.openCronJobs() },
+                    )
+                    StudioCardDivider()
+                    StudioDestinationRow(
+                        icon = Icons.Filled.ViewKanban,
+                        color = Color(0xFFFF9F43),
+                        title = stringResource(R.string.agent_hub_kanban),
+                        subtitle = stringResource(R.string.agent_hub_kanban_note),
+                        onClick = { viewModel.openKanban() },
+                    )
+                    StudioCardDivider()
+                    StudioDestinationRow(
+                        icon = Icons.Filled.Forum,
+                        color = Color(0xFF45C878),
+                        title = stringResource(R.string.settings_channels),
+                        subtitle = if (channels.isEmpty()) {
+                            stringResource(R.string.settings_group_channels_note)
+                        } else {
+                            stringResource(
+                                R.string.settings_channels_summary,
+                                channels.count { it.configured },
+                                channels.size.coerceAtLeast(CHANNELS.size),
+                            )
+                        },
+                        onClick = { viewModel.openChannels() },
+                    )
+                }
+            }
+
+            item { StudioSectionTitle(stringResource(R.string.insights_title)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(
+                        icon = Icons.Filled.Insights,
+                        color = Color(0xFF7A5CFF),
+                        title = stringResource(R.string.insights_title),
+                        subtitle = stringResource(R.string.insights_subtitle),
+                        onClick = { viewModel.openInsights() },
+                    )
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.Folder, Color(0xFFFFB547), stringResource(R.string.files_title), stringResource(R.string.files_hub_note), { viewModel.openFiles() })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.History, Color(0xFF4D8DFF), stringResource(R.string.logs_title), stringResource(R.string.logs_hub_note), { viewModel.openLogs() })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.Dns, Color(0xFF2AAE88), stringResource(R.string.connections_title), stringResource(R.string.connections_hub_note), { viewModel.openConnections() })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.AccountTree, Color(0xFF35B7DB), stringResource(R.string.journey_title), stringResource(R.string.journey_note), { viewModel.openJourney() })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.Link, Color(0xFFFF9F43), stringResource(R.string.webhooks_title), stringResource(R.string.webhooks_note), { viewModel.openWebhooks() })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.SystemUpdate, Color(0xFF45C878), stringResource(R.string.runtime_versions_title), stringResource(R.string.runtime_versions_note), { viewModel.openRuntimeVersions() })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.Palette, Color(0xFFB45CFF), stringResource(R.string.appearance_title), stringResource(R.string.appearance_note), { viewModel.openAppearance() })
+                }
+            }
+
+            item { StudioSectionTitle(stringResource(R.string.global_agent_title)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(Icons.Filled.AutoAwesome, Color(0xFF2AAE88), stringResource(R.string.global_agent_title), stringResource(R.string.global_agent_hub_note), { viewModel.openGlobalAgent() })
+                }
+            }
+
+            item { StudioSectionTitle(stringResource(R.string.agent_hub_capabilities)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(Icons.Filled.School, Color(0xFF7A5CFF), stringResource(R.string.agent_hub_skills), stringResource(R.string.agent_hub_skills_note), { viewModel.openSkills() })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.Extension, Color(0xFFB45CFF), stringResource(R.string.agent_hub_plugins), stringResource(R.string.agent_hub_plugins_note), { viewModel.openPlugins() })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.Cable, Color(0xFF35B7DB), stringResource(R.string.agent_hub_mcp), stringResource(R.string.agent_hub_mcp_note), { viewModel.openMcp() })
+                    StudioCardDivider()
+                }
+            }
+
+            item { StudioSectionTitle(stringResource(R.string.ekko_hub_title)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(Icons.Filled.Psychology, Color(0xFF2AAE88), stringResource(R.string.ekko_hub_title), stringResource(R.string.ekko_hub_note), { viewModel.openEkkoHub() })
+                }
+            }
+
+            item { StudioSectionTitle(stringResource(R.string.agent_hub_intelligence)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(Icons.Filled.Memory, Color(0xFFFFB547), stringResource(R.string.settings_group_memory), stringResource(R.string.settings_group_memory_note), { viewModel.openSettingsGroup(SettingsGroup.Memory) })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.ModelTraining, Color(0xFF39C6A3), stringResource(R.string.settings_group_models), stringResource(R.string.settings_group_models_note), { viewModel.openSettingsGroup(SettingsGroup.Models) })
+                }
+            }
+        }
+    }
+}
+
+/** App settings stay intentionally small; Studio's long list has one doorway. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsScreen(state: UiState, viewModel: AppViewModel) {
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val accountName = state.account.orEmpty().ifBlank { stringResource(R.string.settings_account_unknown) }
+    val language = APP_LANGUAGES.firstOrNull { it.tag == state.language } ?: APP_LANGUAGES.first()
+    var appearanceSheet by remember { mutableStateOf(false) }
+    var languageSheet by remember { mutableStateOf(false) }
+    var reasoningSheet by remember { mutableStateOf(false) }
+    var confirmSignOut by remember { mutableStateOf(false) }
+
+    if (appearanceSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { appearanceSheet = false },
+            sheetState = rememberModalBottomSheetState(),
+        ) {
+            PickerSheet(
+                title = stringResource(R.string.settings_appearance),
+                loading = false,
+                rows = APPEARANCE_LEVELS.map { (value, label) ->
+                    PickerRow(
+                        label = stringResource(label),
+                        detail = null,
+                        selected = state.appearance == value,
+                    ) {
+                        appearanceSheet = false
+                        viewModel.setAppearance(value)
+                        activity?.recreate()
+                    }
+                },
             )
-            if (state.currentUser?.role == "super_admin") {
-                SettingsRow(
-                    icon = Icons.Filled.Group,
-                    label = stringResource(R.string.settings_group_users),
-                    value = stringResource(R.string.settings_group_users_note),
-                    onClick = { viewModel.openSettingsGroup(SettingsGroup.Users) },
+        }
+    }
+    if (languageSheet) LanguageSheet(state, viewModel) { languageSheet = false }
+    if (reasoningSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { reasoningSheet = false },
+            sheetState = rememberModalBottomSheetState(),
+        ) {
+            PickerSheet(
+                title = stringResource(R.string.settings_reasoning),
+                loading = false,
+                rows = REASONING_LEVELS.map { (value, label) ->
+                    PickerRow(
+                        label = stringResource(label),
+                        detail = if (value.isBlank()) stringResource(R.string.reasoning_use_profile) else null,
+                        selected = state.reasoningEffort == value,
+                    ) {
+                        reasoningSheet = false
+                        viewModel.setReasoningEffort(value)
+                    }
+                },
+            )
+        }
+    }
+    if (confirmSignOut) {
+        ConfirmDialog(
+            title = stringResource(R.string.confirm_sign_out_title),
+            body = stringResource(R.string.confirm_sign_out_body),
+            action = stringResource(R.string.action_sign_out),
+            onConfirm = { viewModel.signOut() },
+            onDismiss = { confirmSignOut = false },
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            StudioLargeTopBar(
+                title = stringResource(R.string.settings_title),
+                navigationIcon = {
+                    IconButton(onClick = { viewModel.back() }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
+                    }
+                },
+            )
+        },
+        bottomBar = { StudioTabs(state, viewModel) },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(
+                start = StudioHorizontalPadding,
+                end = StudioHorizontalPadding,
+                top = 8.dp,
+                bottom = 28.dp,
+            ),
+        ) {
+            state.error?.let { message -> item { ErrorNote(message) { viewModel.dismissError() } } }
+            state.notice?.let { message -> item { NoticeNote(message) { viewModel.dismissNotice() } } }
+
+            item {
+                StudioGroupedCard {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { viewModel.openSettingsGroup(SettingsGroup.Account) }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ProfileAvatar(accountName, state.accountAvatar, size = 50.dp)
+                        Spacer(Modifier.width(13.dp))
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(accountName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                state.currentUser?.role?.let {
+                                    stringResource(if (it == "super_admin") R.string.users_super_admin else R.string.users_admin)
+                                }.orEmpty(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    StudioCardDivider()
+                    StudioDestinationRow(
+                        icon = Icons.Filled.Person,
+                        color = Color(0xFF4D8DFF),
+                        title = stringResource(R.string.action_profiles),
+                        subtitle = state.activeProfile,
+                        onClick = { viewModel.openProfiles() },
+                    )
+                    StudioCardDivider()
+                    StudioDestinationRow(
+                        icon = Icons.Filled.Dns,
+                        color = Color(0xFF35C878),
+                        title = stringResource(R.string.settings_studio_connection),
+                        subtitle = state.baseUrl,
+                        onClick = { viewModel.openSettingsGroup(SettingsGroup.Server) },
+                    )
+                }
+            }
+
+            item { StudioSectionTitle(stringResource(R.string.settings_category_app)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(
+                        icon = Icons.Filled.DisplaySettings,
+                        color = Color(0xFF6F72E8),
+                        title = stringResource(R.string.settings_appearance),
+                        subtitle = appearanceLabel(state.appearance),
+                        onClick = { appearanceSheet = true },
+                    )
+                    StudioCardDivider()
+                    StudioDestinationRow(
+                        icon = Icons.Filled.Language,
+                        color = Color(0xFF18B9C7),
+                        title = stringResource(R.string.settings_language),
+                        subtitle = AppLocale.labelFor(context, language),
+                        onClick = { languageSheet = true },
+                    )
+                    StudioCardDivider()
+                    StudioDestinationRow(
+                        icon = Icons.Filled.Psychology,
+                        color = Color(0xFFD62AE8),
+                        title = stringResource(R.string.settings_reasoning),
+                        subtitle = reasoningLabel(state.reasoningEffort),
+                        onClick = { reasoningSheet = true },
+                    )
+                }
+            }
+
+            item { Spacer(Modifier.height(16.dp)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(
+                        icon = Icons.Filled.Tune,
+                        color = Color(0xFFFF9F43),
+                        title = stringResource(R.string.more_settings_title),
+                        subtitle = stringResource(R.string.more_settings_note),
+                        onClick = { viewModel.openMoreSettings() },
+                    )
+                }
+            }
+            item {
+                Text(
+                    stringResource(R.string.more_settings_footer),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
                 )
             }
 
-            SettingsSection(stringResource(R.string.settings_category_profile))
-            SettingsRow(
-                icon = Icons.Filled.Person,
-                label = stringResource(R.string.settings_group_profile),
-                value = state.activeProfile.ifBlank { stringResource(R.string.settings_group_profile_note) },
-                onClick = { viewModel.openSettingsGroup(SettingsGroup.Profile) },
-            )
-            SettingsRow(
-                icon = Icons.Filled.WbSunny,
-                label = stringResource(R.string.settings_group_models),
-                value = stringResource(R.string.settings_group_models_note),
-                onClick = { viewModel.openSettingsGroup(SettingsGroup.Models) },
-            )
-            SettingsRow(
-                icon = Icons.Filled.Psychology,
-                label = stringResource(R.string.settings_group_agent),
-                value = stringResource(R.string.settings_group_agent_note),
-                onClick = { viewModel.openSettingsGroup(SettingsGroup.Agent) },
-            )
-            SettingsRow(
-                icon = Icons.Filled.Psychology,
-                label = stringResource(R.string.settings_group_memory),
-                value = stringResource(R.string.settings_group_memory_note),
-                onClick = { viewModel.openSettingsGroup(SettingsGroup.Memory) },
-            )
-            SettingsRow(
-                icon = Icons.Filled.RestartAlt,
-                label = stringResource(R.string.settings_group_compression),
-                value = stringResource(R.string.settings_group_compression_note),
-                onClick = { viewModel.openSettingsGroup(SettingsGroup.Compression) },
-            )
-            SettingsRow(
-                icon = Icons.Filled.Check,
-                label = stringResource(R.string.settings_group_sessions),
-                value = stringResource(R.string.settings_group_sessions_note),
-                onClick = { viewModel.openSettingsGroup(SettingsGroup.Sessions) },
-            )
-            SettingsRow(
-                icon = Icons.Filled.Check,
-                label = stringResource(R.string.settings_group_privacy),
-                value = stringResource(R.string.settings_group_privacy_note),
-                onClick = { viewModel.openSettingsGroup(SettingsGroup.Privacy) },
-            )
-
-            SettingsSection(stringResource(R.string.settings_category_integrations))
-            SettingsRow(
-                icon = Icons.Filled.Hub,
-                label = stringResource(R.string.settings_channels),
-                value = if (channels.isEmpty()) {
-                    stringResource(R.string.settings_group_channels_note)
-                } else {
-                    stringResource(
-                        R.string.settings_channels_summary,
-                        channels.count { it.configured },
-                        channels.size.coerceAtLeast(CHANNELS.size),
+            item { StudioSectionTitle(stringResource(R.string.settings_section_about)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(
+                        icon = Icons.Filled.PhoneAndroid,
+                        color = Color(0xFF7A5CFF),
+                        title = stringResource(R.string.settings_phone_name),
+                        trailing = {
+                            Text(
+                                BuildConfig.VERSION_NAME,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        },
                     )
-                },
-                onClick = { viewModel.openChannels() },
-            )
-            SettingsRow(
-                icon = Icons.Filled.Schedule,
-                label = stringResource(R.string.cron_title),
-                value = stringResource(R.string.settings_group_cron_note),
-                onClick = { viewModel.openCronJobs() },
-            )
-            SettingsRow(
-                icon = Icons.Filled.Dns,
-                label = stringResource(R.string.settings_group_proxy),
-                value = stringResource(R.string.settings_group_proxy_note),
-                onClick = { viewModel.openSettingsGroup(SettingsGroup.Proxy) },
-            )
+                    StudioCardDivider()
+                    StudioDestinationRow(
+                        icon = painterResource(R.drawable.ic_github),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        title = stringResource(R.string.settings_phone_github),
+                        onClick = {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PHONE_REPOSITORY_URL)))
+                        },
+                        trailing = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
+                    )
+                    StudioCardDivider()
+                    StudioDestinationRow(
+                        icon = painterResource(R.drawable.ic_github),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        title = stringResource(R.string.settings_studio_github),
+                        onClick = {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(STUDIO_REPOSITORY_URL)))
+                        },
+                        trailing = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
+                    )
+                }
+            }
 
-            SettingsSection(stringResource(R.string.settings_category_app))
-            SettingsRow(
-                icon = Icons.Filled.Settings,
-                label = stringResource(R.string.settings_group_display),
-                value = stringResource(R.string.settings_group_display_note),
-                onClick = { viewModel.openSettingsGroup(SettingsGroup.Display) },
-            )
-            SettingsRow(
-                icon = Icons.Filled.Language,
-                label = stringResource(R.string.settings_group_device),
-                value = stringResource(R.string.settings_group_device_note),
-                onClick = { viewModel.openSettingsGroup(SettingsGroup.Device) },
-            )
-            SettingsRow(
-                icon = Icons.AutoMirrored.Filled.Chat,
-                label = stringResource(R.string.settings_section_about),
-                value = stringResource(R.string.settings_group_about_note),
-                onClick = { viewModel.openSettingsGroup(SettingsGroup.About) },
-            )
+            item { Spacer(Modifier.height(20.dp)) }
+            item {
+                StudioGroupedCard {
+                    TextButton(
+                        onClick = { confirmSignOut = true },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.action_sign_out), style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
         }
+    }
+}
+
+/** The non-agent Studio settings, grouped behind one clearly named entry. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MoreSettingsScreen(state: UiState, viewModel: AppViewModel) {
+    Scaffold(
+        topBar = {
+            StudioTopBar(
+                title = stringResource(R.string.more_settings_title),
+                subtitle = stringResource(R.string.more_settings_subtitle),
+                onBack = { viewModel.back() },
+            )
+        },
+        bottomBar = { StudioTabs(state, viewModel) },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(
+                start = StudioHorizontalPadding,
+                end = StudioHorizontalPadding,
+                top = 8.dp,
+                bottom = 28.dp,
+            ),
+        ) {
+            state.error?.let { message -> item { ErrorNote(message) { viewModel.dismissError() } } }
+            state.notice?.let { message -> item { NoticeNote(message) { viewModel.dismissNotice() } } }
+
+            item { StudioSectionTitle(stringResource(R.string.more_settings_agent)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(Icons.Filled.Tune, Color(0xFF7A5CFF), stringResource(R.string.settings_group_agent), stringResource(R.string.settings_group_agent_note), { viewModel.openSettingsGroup(SettingsGroup.Agent) })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.Memory, Color(0xFFFFB547), stringResource(R.string.settings_group_memory), stringResource(R.string.settings_group_memory_note), { viewModel.openSettingsGroup(SettingsGroup.Memory) })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.Compress, Color(0xFFFF9F43), stringResource(R.string.settings_group_compression), stringResource(R.string.settings_group_compression_note), { viewModel.openSettingsGroup(SettingsGroup.Compression) })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.ModelTraining, Color(0xFF39C6A3), stringResource(R.string.settings_group_models), stringResource(R.string.settings_group_models_note), { viewModel.openSettingsGroup(SettingsGroup.Models) })
+                }
+            }
+
+            item { StudioSectionTitle(stringResource(R.string.more_settings_conversation)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(Icons.Filled.DisplaySettings, Color(0xFFFF6584), stringResource(R.string.settings_group_display), stringResource(R.string.settings_group_display_note), { viewModel.openSettingsGroup(SettingsGroup.Display) })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.History, Color(0xFF6F72E8), stringResource(R.string.settings_group_sessions), stringResource(R.string.settings_group_sessions_note), { viewModel.openSettingsGroup(SettingsGroup.Sessions) })
+                }
+            }
+
+            item { StudioSectionTitle(stringResource(R.string.more_settings_network_privacy)) }
+            item {
+                StudioGroupedCard {
+                    StudioDestinationRow(Icons.Filled.VpnLock, Color(0xFF18B9C7), stringResource(R.string.settings_group_proxy), stringResource(R.string.settings_group_proxy_note), { viewModel.openSettingsGroup(SettingsGroup.Proxy) })
+                    StudioCardDivider()
+                    StudioDestinationRow(Icons.Filled.PrivacyTip, Color(0xFFE85262), stringResource(R.string.settings_group_privacy), stringResource(R.string.settings_group_privacy_note), { viewModel.openSettingsGroup(SettingsGroup.Privacy) })
+                }
+            }
+
+            if (state.currentUser?.role == "super_admin") {
+                item { StudioSectionTitle(stringResource(R.string.more_settings_management)) }
+                item {
+                    StudioGroupedCard {
+                        StudioDestinationRow(
+                            icon = Icons.Filled.Group,
+                            color = Color(0xFF35B7DB),
+                            title = stringResource(R.string.settings_group_users),
+                            subtitle = stringResource(R.string.settings_group_users_note),
+                            onClick = { viewModel.openSettingsGroup(SettingsGroup.Users) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InsightsScreen(state: UiState, viewModel: AppViewModel) {
+    val usage = state.usageStats
+    val performance = state.runtimePerformance
+    Scaffold(
+        topBar = {
+            StudioTopBar(
+                title = stringResource(R.string.insights_title),
+                subtitle = stringResource(R.string.insights_subtitle),
+                onBack = { viewModel.back() },
+                actions = {
+                    IconButton(onClick = { viewModel.refreshInsights() }) {
+                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh))
+                    }
+                },
+            )
+        },
+        bottomBar = { StudioTabs(state, viewModel) },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(StudioHorizontalPadding, 8.dp, StudioHorizontalPadding, 28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (state.loadingInsights) item { LoadingRow() }
+            state.error?.let { item { ErrorNote(it) { viewModel.dismissError() } } }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(7, 30, 90, 365).forEach { days ->
+                        AssistChip(
+                            onClick = { viewModel.openInsights(days) },
+                            label = { Text(stringResource(R.string.insights_days, days)) },
+                            leadingIcon = if (days == state.usageDays) ({ Icon(Icons.Filled.Check, null, Modifier.size(16.dp)) }) else null,
+                        )
+                    }
+                }
+            }
+            usage?.let { stats ->
+                item { StudioSectionTitle(stringResource(R.string.insights_usage)) }
+                item {
+                    StudioGroupedCard {
+                        InsightMetric(stringResource(R.string.insights_tokens), compactNumber(stats.inputTokens + stats.outputTokens))
+                        StudioCardDivider()
+                        InsightMetric(stringResource(R.string.insights_sessions), stats.sessions.toString())
+                        StudioCardDivider()
+                        InsightMetric(stringResource(R.string.insights_cost), "$${"%.4f".format(stats.cost)}")
+                        StudioCardDivider()
+                        InsightMetric(stringResource(R.string.insights_cache), compactNumber(stats.cacheReadTokens + stats.cacheWriteTokens))
+                    }
+                }
+                if (stats.models.isNotEmpty()) {
+                    item { StudioSectionTitle(stringResource(R.string.insights_by_model)) }
+                    items(stats.models.take(8), key = { it.name }) { row ->
+                        StudioGroupedCard { InsightMetric(row.name, compactNumber(row.totalTokens), row.sessions.toString()) }
+                    }
+                }
+                if (stats.agents.isNotEmpty()) {
+                    item { StudioSectionTitle(stringResource(R.string.insights_by_agent)) }
+                    items(stats.agents.take(8), key = { it.name }) { row ->
+                        StudioGroupedCard { InsightMetric(row.name, compactNumber(row.totalTokens), row.sessions.toString()) }
+                    }
+                }
+                if (stats.daily.isNotEmpty()) {
+                    item { StudioSectionTitle(stringResource(R.string.insights_daily)) }
+                    items(stats.daily.takeLast(14).reversed(), key = { it.date }) { row ->
+                        StudioGroupedCard { InsightMetric(row.date, compactNumber(row.totalTokens), "$${"%.3f".format(row.cost)}") }
+                    }
+                }
+            }
+            performance?.let { runtime ->
+                item { StudioSectionTitle(stringResource(R.string.insights_runtime)) }
+                item {
+                    StudioGroupedCard {
+                        InsightMetric("CPU", runtime.cpuPercent?.let { "%.1f%%".format(it) } ?: "—")
+                        StudioCardDivider()
+                        InsightMetric(stringResource(R.string.insights_memory), runtime.memoryPercent?.let { "%.1f%%".format(it) } ?: "—")
+                        StudioCardDivider()
+                        InsightMetric(stringResource(R.string.insights_workers), "${runtime.runningWorkers}/${runtime.workerCount}")
+                        StudioCardDivider()
+                        InsightMetric(stringResource(R.string.insights_live_sessions), runtime.sessionCount.toString())
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InsightMetric(label: String, value: String, supporting: String? = null) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            supporting?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
     }
 }
 
@@ -1763,6 +3078,7 @@ private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
     val group = state.openGroup ?: return
     val title = stringResource(
         when (group) {
+            SettingsGroup.Account -> R.string.settings_account
             SettingsGroup.Server -> R.string.settings_group_server
             SettingsGroup.Users -> R.string.settings_group_users
             SettingsGroup.Profile -> R.string.settings_group_profile
@@ -1781,6 +3097,7 @@ private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
 
     Scaffold(
         topBar = { StudioTopBar(title = title, onBack = { viewModel.back() }) },
+        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -1799,6 +3116,7 @@ private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
                 !state.loadingModelProviders
             ) {
                 when (group) {
+                    SettingsGroup.Account -> AccountSettings(state, viewModel)
                     SettingsGroup.Server -> ServerSettings(state, viewModel)
                     SettingsGroup.Users -> ManagedUsersSettings(state, viewModel)
                     SettingsGroup.Profile -> ProfileSettings(state, viewModel)
@@ -1820,34 +3138,21 @@ private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
 
 @Composable
 private fun ServerSettings(state: UiState, viewModel: AppViewModel) {
-    var confirmSignOut by remember { mutableStateOf(false) }
-    if (confirmSignOut) {
-        ConfirmDialog(
-            title = stringResource(R.string.confirm_sign_out_title),
-            body = stringResource(R.string.confirm_sign_out_body),
-            action = stringResource(R.string.action_sign_out),
-            onConfirm = { viewModel.signOut() },
-            onDismiss = { confirmSignOut = false },
-        )
-    }
-
     SettingsRow(
         icon = Icons.Filled.Dns,
         label = stringResource(R.string.settings_address),
         value = state.baseUrl.ifBlank { stringResource(R.string.settings_address_missing) },
     )
+}
+
+@Composable
+private fun AccountSettings(state: UiState, viewModel: AppViewModel) {
     SettingsRow(
         icon = Icons.Filled.Person,
         label = stringResource(R.string.settings_account),
         value = state.account ?: stringResource(R.string.settings_account_unknown),
     )
     AccountStudioSettings(state, viewModel)
-    SettingsRow(
-        icon = Icons.AutoMirrored.Filled.Logout,
-        label = stringResource(R.string.action_sign_out),
-        value = stringResource(R.string.settings_sign_out_note),
-        onClick = { confirmSignOut = true },
-    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1888,10 +3193,10 @@ private fun ProfileSettings(state: UiState, viewModel: AppViewModel) {
         icon = Icons.Filled.Person,
         label = stringResource(R.string.settings_profile),
         value = profile,
-        onClick = { viewModel.show(Screen.Profiles) },
+        onClick = { viewModel.openProfiles() },
     )
     SettingsRow(
-        icon = Icons.Filled.WbSunny,
+        icon = Icons.Filled.ModelTraining,
         label = stringResource(R.string.settings_default_model),
         value = state.defaultModel ?: stringResource(R.string.settings_default_model_server),
         onClick = {
@@ -1991,25 +3296,25 @@ private fun AgentSettings(state: UiState, viewModel: AppViewModel) {
     }
 
     SettingsRow(
-        icon = Icons.Filled.Psychology,
+        icon = Icons.Filled.Repeat,
         label = stringResource(R.string.agent_max_turns),
         value = agent?.maxTurns?.toString() ?: stringResource(R.string.agent_unset),
         onClick = { editing = "max_turns" },
     )
     SettingsRow(
-        icon = Icons.Filled.RestartAlt,
+        icon = Icons.Filled.Timer,
         label = stringResource(R.string.agent_gateway_timeout),
         value = agent?.gatewayTimeout?.toString() ?: stringResource(R.string.agent_unset),
         onClick = { editing = "gateway_timeout" },
     )
     SettingsRow(
-        icon = Icons.Filled.RestartAlt,
+        icon = Icons.Filled.HourglassBottom,
         label = stringResource(R.string.agent_drain_timeout),
         value = agent?.restartDrainTimeout?.toString() ?: stringResource(R.string.agent_unset),
         onClick = { editing = "restart_drain_timeout" },
     )
     SettingsRow(
-        icon = Icons.Filled.Check,
+        icon = Icons.AutoMirrored.Filled.Rule,
         label = stringResource(R.string.agent_tool_enforcement),
         value = stringResource(
             TOOL_ENFORCEMENT.firstOrNull { it.first == agent?.toolEnforcement }?.second ?: R.string.agent_tool_auto,
@@ -2040,7 +3345,7 @@ private fun AgentSettings(state: UiState, viewModel: AppViewModel) {
     if (policy?.enabled == true) {
         if (state.activeProfile.ifBlank { "default" } == "default") {
             SettingsRow(
-                icon = Icons.Filled.Settings,
+                icon = Icons.Filled.AccountTree,
                 label = stringResource(R.string.agent_management),
                 value = stringResource(R.string.agent_management_note),
                 trailing = {
@@ -2056,7 +3361,7 @@ private fun AgentSettings(state: UiState, viewModel: AppViewModel) {
             )
         }
         SettingsRow(
-            icon = Icons.Filled.Person,
+            icon = Icons.Filled.Groups,
             label = stringResource(R.string.agent_policy),
             value = stringResource(
                 if (policy.include == null) R.string.agent_policy_all else R.string.agent_policy_include,
@@ -2185,7 +3490,7 @@ private fun DeviceSettings(state: UiState, viewModel: AppViewModel) {
 @Composable
 private fun AboutSettings() {
     SettingsRow(
-        icon = Icons.AutoMirrored.Filled.Chat,
+        icon = Icons.Filled.Info,
         label = stringResource(R.string.settings_version),
         value = BuildConfig.VERSION_NAME,
     )
@@ -2218,27 +3523,73 @@ private fun ChannelsScreen(state: UiState, viewModel: AppViewModel) {
                 onBack = { viewModel.back() },
             )
         },
+        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = StudioHorizontalPadding)
+                .verticalScroll(rememberScrollState()),
         ) {
             if (state.savingSetting) LoadingRow()
             state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
             state.notice?.let { NoticeNote(it) { viewModel.dismissNotice() } }
 
-            listed.forEach { (spec, status) ->
-                SettingsRow(
-                    icon = Icons.Filled.Hub,
-                    label = spec.label,
-                    value = stringResource(
-                        when {
-                            status?.configured == true && status.enabled -> R.string.channel_configured
-                            status?.configured == true -> R.string.channel_off
-                            else -> R.string.channel_missing
-                        },
-                    ),
-                    onClick = { viewModel.openChannel(spec.platform) },
-                )
+            StudioGroupedCard {
+                listed.forEachIndexed { index, (spec, status) ->
+                    val connected = status?.configured == true && status.enabled
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.openChannel(spec.platform) }
+                            .padding(horizontal = 14.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                        ) {
+                            Icon(
+                                painter = painterResource(spec.iconRes),
+                                contentDescription = null,
+                                tint = Color.Unspecified,
+                                modifier = Modifier.padding(10.dp).size(28.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(spec.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                stringResource(
+                                    when {
+                                        connected -> R.string.channel_connected
+                                        status?.configured == true -> R.string.channel_off
+                                        else -> R.string.channel_missing
+                                    },
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(11.dp)
+                                .clip(RoundedCornerShape(99.dp))
+                                .background(
+                                    if (connected) Color(0xFF30D158)
+                                    else MaterialTheme.colorScheme.outlineVariant,
+                                ),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (index != listed.lastIndex) StudioCardDivider(startIndent = 76)
+                }
             }
 
             Text(
@@ -2256,11 +3607,31 @@ private fun ChannelsScreen(state: UiState, viewModel: AppViewModel) {
 @Composable
 private fun ChannelScreen(state: UiState, viewModel: AppViewModel) {
     val platform = state.openChannel ?: return
+    val context = LocalContext.current
     val spec = channelSpec(platform)
     val status = state.serverConfig?.channels.orEmpty().firstOrNull { it.platform == platform }
-    val values = remember(platform) { mutableStateMapOf<String, String>() }
-    var enabled by remember(platform) { mutableStateOf(status?.enabled ?: true) }
+    val values = remember(platform, status?.values) {
+        mutableStateMapOf<String, String>().apply {
+            putAll(status?.values.orEmpty())
+            spec.fields.filter { it.kind == ChannelFieldKind.Toggle }.forEach { field ->
+                putIfAbsent(field.path, field.defaultEnabled.toString())
+            }
+        }
+    }
+    val revealed = remember(platform) { mutableStateMapOf<String, Boolean>() }
+    var enabled by remember(platform, status?.enabled) { mutableStateOf(status?.enabled ?: true) }
     var confirmClear by remember(platform) { mutableStateOf(false) }
+    var openedQrId by remember(platform) { mutableStateOf("") }
+
+    LaunchedEffect(state.weixinQr.id, state.weixinQr.url) {
+        val qr = state.weixinQr
+        if (platform == "weixin" && qr.id.isNotBlank() && qr.url.isNotBlank() && openedQrId != qr.id) {
+            openedQrId = qr.id
+            runCatching {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(qr.url)))
+            }.onFailure { viewModel.showToolError(it) }
+        }
+    }
 
     if (confirmClear) {
         ConfirmDialog(
@@ -2277,11 +3648,24 @@ private fun ChannelScreen(state: UiState, viewModel: AppViewModel) {
             StudioTopBar(
                 title = spec.label,
                 subtitle = stringResource(
-                    if (status?.configured == true) R.string.channel_configured else R.string.channel_missing,
+                    when {
+                        status?.configured == true && status.enabled -> R.string.channel_connected
+                        status?.configured == true -> R.string.channel_off
+                        else -> R.string.channel_missing
+                    },
                 ),
                 onBack = { viewModel.back() },
+                leading = {
+                    Icon(
+                        painter = painterResource(spec.iconRes),
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = Color.Unspecified,
+                    )
+                },
             )
         },
+        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -2294,45 +3678,113 @@ private fun ChannelScreen(state: UiState, viewModel: AppViewModel) {
             state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
             state.notice?.let { NoticeNote(it) { viewModel.dismissNotice() } }
 
-            SettingsRow(
-                icon = Icons.Filled.Hub,
-                label = stringResource(R.string.channel_enabled),
-                value = stringResource(R.string.channel_enabled_note),
-                trailing = { Switch(checked = enabled, onCheckedChange = { enabled = it }) },
-            )
+            if (spec.exclusive) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFFFF9500).copy(alpha = 0.14f),
+                ) {
+                    Text(
+                        stringResource(R.string.channel_exclusive_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFFFB340),
+                        modifier = Modifier.padding(14.dp),
+                    )
+                }
+            }
 
-            if (spec.pairedElsewhere) {
-                Text(
-                    stringResource(R.string.channel_paired_elsewhere),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(20.dp),
+            if (platform == "weixin") {
+                val qrStatus = when (state.weixinQr.status) {
+                    "loading" -> R.string.channel_qr_loading
+                    "waiting" -> R.string.channel_qr_waiting
+                    "scanned" -> R.string.channel_qr_scanned
+                    "confirmed" -> R.string.channel_qr_confirmed
+                    "expired" -> R.string.channel_qr_expired
+                    "error" -> R.string.channel_qr_error
+                    else -> R.string.channel_qr_ready
+                }
+                SettingsRow(
+                    icon = Icons.Filled.Cable,
+                    label = stringResource(R.string.channel_qr_link),
+                    value = stringResource(qrStatus),
+                    onClick = viewModel::startWeixinQr,
+                    trailing = if (state.weixinQr.status == "loading" || state.weixinQr.status == "waiting" || state.weixinQr.status == "scanned") {
+                        { CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp) }
+                    } else null,
                 )
             }
 
-            spec.fields.forEach { field ->
-                OutlinedTextField(
-                    value = values[field.path].orEmpty(),
-                    onValueChange = { values[field.path] = it },
-                    label = { Text(field.label) },
-                    placeholder = {
-                        Text(
-                            if (status?.configured == true && field.secret) {
-                                stringResource(R.string.channel_secret_set)
-                            } else {
-                                field.hint
+            if (spec.fields.none {
+                    it.target == ChannelFieldTarget.Credentials && it.path == "enabled"
+                }
+            ) {
+                SettingsRow(
+                    icon = painterResource(spec.iconRes),
+                    label = stringResource(R.string.channel_enabled),
+                    value = stringResource(R.string.channel_enabled_note),
+                    trailing = {
+                        Switch(checked = enabled, onCheckedChange = { enabled = it })
+                    },
+                )
+            }
+
+            @Composable
+            fun section(target: ChannelFieldTarget, title: Int) {
+                val fields = spec.fields.filter { it.target == target }
+                if (fields.isEmpty()) return
+                SettingsSection(stringResource(title))
+                fields.forEach { field ->
+                    val label = stringResource(field.labelRes)
+                    val hint = field.hintRes?.let { stringResource(it) }.orEmpty()
+                    when (field.kind) {
+                        ChannelFieldKind.Toggle -> SettingsRow(
+                            icon = if (target == ChannelFieldTarget.Credentials) Icons.Filled.VpnLock else Icons.Filled.Tune,
+                            label = label,
+                            value = hint,
+                            trailing = {
+                                Switch(
+                                    checked = values[field.path].toBoolean(),
+                                    onCheckedChange = { values[field.path] = it.toString() },
+                                )
                             },
                         )
-                    },
-                    singleLine = true,
-                    visualTransformation = if (field.secret) {
-                        PasswordVisualTransformation()
-                    } else {
-                        androidx.compose.ui.text.input.VisualTransformation.None
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
-                )
+                        ChannelFieldKind.Text,
+                        ChannelFieldKind.Secret,
+                        ChannelFieldKind.CommaList,
+                        -> {
+                            val secret = field.kind == ChannelFieldKind.Secret
+                            val visible = revealed[field.path] == true
+                            OutlinedTextField(
+                                value = values[field.path].orEmpty(),
+                                onValueChange = { values[field.path] = it },
+                                label = { Text(label) },
+                                supportingText = hint.takeIf(String::isNotBlank)?.let { { Text(it) } },
+                                placeholder = field.placeholder.takeIf(String::isNotBlank)?.let { placeholder ->
+                                    { Text(placeholder) }
+                                },
+                                trailingIcon = if (secret) {
+                                    {
+                                        IconButton(onClick = { revealed[field.path] = !visible }) {
+                                            Icon(
+                                                if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                                contentDescription = stringResource(
+                                                    if (visible) R.string.channel_hide_secret else R.string.channel_show_secret,
+                                                ),
+                                            )
+                                        }
+                                    }
+                                } else null,
+                                singleLine = true,
+                                visualTransformation = if (secret && !visible) PasswordVisualTransformation() else VisualTransformation.None,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
+                }
             }
+
+            section(ChannelFieldTarget.Credentials, R.string.channel_credentials_section)
+            section(ChannelFieldTarget.Configuration, R.string.channel_behavior_section)
 
             Button(
                 onClick = { viewModel.saveChannel(platform, values.toMap(), enabled) },
@@ -2342,7 +3794,7 @@ private fun ChannelScreen(state: UiState, viewModel: AppViewModel) {
                 Text(stringResource(R.string.channel_save))
             }
 
-            if (status?.configured == true) {
+            if (status?.configured == true && spec.supportsCredentialClear) {
                 SettingsRow(
                     icon = Icons.Filled.Delete,
                     label = stringResource(R.string.channel_clear),
@@ -2364,10 +3816,11 @@ private fun ChannelScreen(state: UiState, viewModel: AppViewModel) {
 @Composable
 internal fun SettingsSection(label: String) {
     Text(
-        label.uppercase(),
-        style = MaterialTheme.typography.labelSmall,
+        label,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 6.dp),
+        modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 18.dp, bottom = 4.dp),
     )
 }
 
@@ -2379,15 +3832,53 @@ internal fun SettingsRow(
     onClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
+    SettingsRowContent(
+        leading = { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+        label = label,
+        value = value,
+        onClick = onClick,
+        trailing = trailing,
+    )
+}
+
+/** Settings row for Studio/channel vector assets that are not Material icons. */
+@Composable
+internal fun SettingsRow(
+    icon: Painter,
+    label: String,
+    value: String,
+    onClick: (() -> Unit)? = null,
+    trailing: @Composable (() -> Unit)? = null,
+) {
+    SettingsRowContent(
+        leading = { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+        label = label,
+        value = value,
+        onClick = onClick,
+        trailing = trailing,
+    )
+}
+
+@Composable
+private fun SettingsRowContent(
+    leading: @Composable () -> Unit,
+    label: String,
+    value: String,
+    onClick: (() -> Unit)?,
+    trailing: @Composable (() -> Unit)?,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = StudioHorizontalPadding, vertical = 4.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        leading()
         Column(modifier = Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.bodyLarge)
             Text(
@@ -2400,10 +3891,13 @@ internal fun SettingsRow(
         }
         when {
             trailing != null -> trailing()
-            onClick != null -> Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            onClick != null -> Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
 }
 
 /** Settings row that previews the current app mark instead of an icon. */
@@ -2412,8 +3906,11 @@ private fun LogoRow(value: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = StudioHorizontalPadding, vertical = 4.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -2428,7 +3925,11 @@ private fun LogoRow(value: String, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
 }
@@ -2492,20 +3993,46 @@ internal fun StudioTopBar(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StudioTabs(state: UiState, viewModel: AppViewModel) {
-    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+internal fun StudioTabs(state: UiState, viewModel: AppViewModel) {
+    // Keeping the navigation bar in Scaffold while the IME covers it reserves
+    // a full invisible bar between the composer and keyboard. Material apps
+    // hide bottom navigation during text entry, then restore it with the IME.
+    if (WindowInsets.isImeVisible) return
+
+    val colors = NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.primary,
+        selectedTextColor = MaterialTheme.colorScheme.primary,
+        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 0.dp,
+    ) {
         NavigationBarItem(
             selected = state.tab == Tab.Chats,
             onClick = { viewModel.showTab(Tab.Chats) },
             icon = { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null) },
             label = { Text(stringResource(R.string.chats_tab)) },
+            colors = colors,
         )
         NavigationBarItem(
             selected = state.tab == Tab.Groups,
             onClick = { viewModel.showTab(Tab.Groups) },
             icon = { Icon(Icons.Filled.Group, contentDescription = null) },
             label = { Text(stringResource(R.string.groups_tab)) },
+            colors = colors,
+        )
+        NavigationBarItem(
+            selected = state.tab == Tab.Agent,
+            onClick = { viewModel.showTab(Tab.Agent) },
+            icon = { Icon(Icons.Filled.AutoAwesome, contentDescription = null) },
+            label = { Text(stringResource(R.string.agent_hub_tab)) },
+            colors = colors,
         )
     }
 }

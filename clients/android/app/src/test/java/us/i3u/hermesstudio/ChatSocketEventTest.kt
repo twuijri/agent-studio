@@ -1,0 +1,144 @@
+package us.i3u.hermesstudio
+
+import org.json.JSONArray
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class ChatSocketEventTest {
+    @Test
+    fun `usage event accepts Studio camel and snake case fields`() {
+        assertEquals(
+            RunEvent.Usage(24_000, 128_000),
+            usageFrom(JSONObject().put("contextTokens", 24_000).put("contextWindow", 128_000)),
+        )
+        assertEquals(
+            RunEvent.Usage(25_000, null),
+            usageFrom(JSONObject().put("context_tokens", "25000")),
+        )
+    }
+
+    @Test
+    fun `studio tool start keeps its id name and useful argument`() {
+        val event = parseToolEvent(
+            event = JSONObject()
+                .put("tool_call_id", "call-7")
+                .put("tool_name", "vision_analyze")
+                .put("args", JSONObject().put("path", "/workspace/slide-4.jpg")),
+            status = ToolRunStatus.Running,
+            occurredAtMillis = 1_000L,
+        )
+
+        assertNotNull(event)
+        assertEquals("call-7", event?.id)
+        assertEquals("vision_analyze", event?.name)
+        assertEquals("/workspace/slide-4.jpg", event?.detail)
+        assertEquals(ToolRunStatus.Running, event?.status)
+    }
+
+    @Test
+    fun `current socket aliases and duration are accepted on completion`() {
+        val event = parseToolEvent(
+            event = JSONObject()
+                .put("call_id", "call-8")
+                .put("tool", "terminal")
+                .put("arguments", JSONObject().put("command", "gradle assembleDebug"))
+                .put("duration_seconds", 2.9),
+            status = ToolRunStatus.Done,
+            occurredAtMillis = 4_000L,
+        )
+
+        assertEquals("terminal", event?.name)
+        assertEquals("gradle assembleDebug", event?.detail)
+        assertEquals(2.9, event?.durationSeconds ?: 0.0, 0.001)
+        assertEquals(ToolRunStatus.Done, event?.status)
+    }
+
+    @Test
+    fun `payload without a tool identity is ignored`() {
+        assertNull(
+            parseToolEvent(
+                event = JSONObject().put("args", JSONObject().put("path", "/tmp/file")),
+                status = ToolRunStatus.Running,
+                occurredAtMillis = 1_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `completed event carrying an error is shown as failed`() {
+        val event = parseToolEvent(
+            event = JSONObject()
+                .put("tool_call_id", "call-9")
+                .put("name", "terminal")
+                .put("error", "permission denied"),
+            status = ToolRunStatus.Done,
+            occurredAtMillis = 2_000L,
+        )
+
+        assertEquals(ToolRunStatus.Error, event?.status)
+    }
+
+    @Test
+    fun `resume recovers the answer completed during a temporary disconnect`() {
+        val payload = JSONObject()
+            .put("isWorking", false)
+            .put(
+                "messages",
+                JSONArray()
+                    .put(JSONObject().put("role", "assistant").put("content", "old answer"))
+                    .put(JSONObject().put("role", "user").put("content", "voice attachment"))
+                    .put(
+                        JSONObject()
+                            .put("role", "assistant")
+                            .put("content", "transcription completed")
+                            .put("reasoning", "audio processed"),
+                    ),
+            )
+
+        val event = completionFromResume(payload)
+
+        assertEquals("transcription completed", event?.output)
+        assertEquals("audio processed", event?.reasoning)
+    }
+
+    @Test
+    fun `resume does not complete while server still works`() {
+        val payload = JSONObject().put("isWorking", true).put("messages", JSONArray())
+
+        assertNull(completionFromResume(payload))
+    }
+
+    @Test
+    fun `app resume preserves opaque page id messages metadata and workspace changes`() {
+        val payload = JSONObject()
+            .put("id", "7a5f-server-page-hash")
+            .put("messagesCached", false)
+            .put("model", "model-a")
+            .put("provider", "provider-a")
+            .put("reasoning_effort", "high")
+            .put("workspace", "/work/project")
+            .put("messages", JSONArray().put(JSONObject().put("id", "m1").put("role", "assistant").put("content", "restored")))
+            .put("workspaceRunChanges", JSONArray().put(JSONObject().put("change_id", "c1").put("assistant_message_id", "m1").put("files_changed", 2).put("additions", 8).put("deletions", 3)))
+
+        val event = parseResumedState(payload)
+
+        assertEquals("7a5f-server-page-hash", event.pageId)
+        assertEquals("restored", event.messages?.single()?.content)
+        assertEquals("model-a", event.model)
+        assertEquals("provider-a", event.provider)
+        assertEquals("high", event.reasoningEffort)
+        assertEquals("/work/project", event.workspace)
+        assertEquals("c1", event.workspaceChanges.single().id)
+    }
+
+    @Test
+    fun `cached app resume keeps existing messages`() {
+        val event = parseResumedState(JSONObject().put("id", "same-page").put("messagesCached", true))
+
+        assertNull(event.messages)
+        assertEquals("same-page", event.pageId)
+    }
+}

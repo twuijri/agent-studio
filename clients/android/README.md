@@ -1,22 +1,13 @@
-# Hermes Studio for Android
+# Hermes Studio Mobile — Android
 
-> Historical personal contribution restored into Agent Studio. The API contract
-> below predates the current server modules. Treat this client as experimental
-> until its HTTP/socket contract and device build are revalidated. Use the direct
-> web interface on mobile in the meantime. This is not the official paid App.
-
-A native Android client for Hermes Studio. It talks to the same HTTP API and
-Socket.IO namespaces the web UI uses, so it needs no server-side component of
-its own.
-
-Development also happens in the community repository
-[twuijri/hermes-studio-android](https://github.com/twuijri/hermes-studio-android),
-which is where the signed APK is published.
+An **unofficial, community-built** native Android client for
+[Hermes Studio](https://github.com/EKKOLearnAI/hermes-studio).
+Not affiliated with EKKOLearnAI.
 
 The Studio web UI is built for the desktop, so this app talks to the same HTTP API
 directly and renders a native, phone-shaped interface instead of wrapping a web view.
 
-## What works today (v0.12)
+## What works today (v1.4.0)
 
 - **Replies stream in as they are written**, over the same `/chat-run` socket the
   web UI uses, with a stop button that calls the run off mid-sentence. If the
@@ -28,6 +19,20 @@ directly and renders a native, phone-shaped interface instead of wrapping a web 
 - **Manage profiles**: create, rename and delete them from the profiles screen
 - **Group chat is writable**: create a room, choose which agents are in it, post
   into it over the room socket and watch replies arrive, or delete the room
+- **Agent tools have their own bottom tab**, beside Chats and Groups. Jobs,
+  Kanban, Channels, Skills, Plugins, MCP, Pets, Memory and Models now have one
+  predictable home. Every one opens a native Android screen; none sends you to
+  the desktop website
+- **Mobile Kanban inspired by modern task apps**: switch boards, search, create a
+  task, inspect its result and runs, assign it, and comment. Hold a card and drag
+  left or right to move it between stages, or use its Move menu for precise and
+  accessible control
+- **Skills are native and editable** for Hermes, Claude, and Codex targets: search,
+  enable, pin, import a ZIP, open `SKILL.md`, edit it, save it, or delete a local
+  skill
+- **Plugins, MCP, and Petdex are native too**: inspect or toggle standalone plugins;
+  add, edit, test, reload, and delete MCP servers without losing advanced JSON;
+  and adopt, enable, or resize a companion from the phone
 - **Channels are set up from the app**, on their own screen: enter a bot token (or
   the app id, secret and the rest — each channel asks for exactly the fields the
   server maps), turn a channel on or off, or remove its credentials. Saving writes
@@ -37,17 +42,19 @@ directly and renders a native, phone-shaped interface instead of wrapping a web 
   limit; pause or resume it, run it immediately, delete it, and read its run output.
   Every call uses the same profile-scoped endpoints and `X-Hermes-Profile` header
   as Studio.
-- **Studio settings are native mobile screens**, not one long wall: account security
-  and IP locks; super-admin user management; model-provider keys; agent and gateway
-  start policy; memory; context compression; session reset and write approvals;
-  privacy redaction; proxy; and Studio display preferences. Every value is read from
-  and saved to the active profile through the same config contracts as the web UI
+- **Settings no longer contains another confusing settings menu**: the main page
+  carries device preferences and About, while one clearly named **More settings**
+  entry contains account security, IP locks, super-admin user management, context
+  compression, session reset and approvals, privacy, proxy, and Studio display.
+  Agent-specific configuration lives in the Agent tab. Every native value is read
+  from and saved to the active profile through the same contracts as the web UI
 - **Agent settings**: max turns, gateway timeout, restart drain timeout, tool
   enforcement, and **gateway auto-start where Studio keeps it** — including the
   profile policy, so a server with several profiles can start only the ones that
   actually answer on a channel
 - **The system back button behaves**: it walks back through the app — a conversation,
-  a room, settings, the groups tab — and only closes the app from the chat list
+  a room, an Agent tool, More settings, settings, or the groups tab — and only
+  closes the app from the chat list
 - **Confirmation before anything you cannot undo**: signing out and restarting a
   profile's gateway both ask first, naming the profile that will stop answering
 - **Ready for other languages**: every string lives in one file, adding a language is
@@ -59,7 +66,7 @@ directly and renders a native, phone-shaped interface instead of wrapping a web 
   generated from the profile name — rendered on the device and cached, so a launch
   draws them from disk instead of pulling them again
 - **Your Studio logo as the app mark**, fetched from your own server (`/logo.png`) and
-  cached; swap it for any picture on your phone from Settings → Appearance
+  cached; swap it for any picture on your phone from Settings → This device
 - **First-run walkthrough** explaining what the app is and that you supply the
   Hermes Studio server yourself
 - **Splash while the stored session is verified** — the sign-in form only appears when
@@ -82,8 +89,8 @@ directly and renders a native, phone-shaped interface instead of wrapping a web 
   on every run, the same field the web composer sets
 - Attachments upload to your server and ride along with the message as proper
   content blocks
-- **Voice**: record, then either transcribe into the composer through your Studio
-  STT provider or send the take itself as audio
+- **Voice**: record, then transcribe directly into the composer through your Studio
+  STT provider without sending the recording as a chat attachment
 - Profiles screen to switch which agent a new chat talks to
 - Start a fresh conversation at any time
 - Studio's dark palette, RTL-aware layout (Arabic reads correctly)
@@ -98,7 +105,7 @@ directly and renders a native, phone-shaped interface instead of wrapping a web 
 ## Install
 
 Grab `hermes-studio-android.apk` from the
-[latest build](https://github.com/twuijri/hermes-studio-android/releases/tag/latest-debug) and open it on your phone.
+[latest build](https://github.com/twuijri/hermes-studio-mobile/releases/tag/latest-debug) and open it on your phone.
 
 Android shows **"Play Protect hasn't seen an app from this developer before"** — that
 appears for every app installed outside the Play Store. Choose **Install anyway**.
@@ -106,6 +113,11 @@ appears for every app installed outside the Play Store. Choose **Install anyway*
 Every push to `main` rebuilds that release, so the link always points at the newest
 build, and each build is signed with the same project key so it installs straight over
 the previous version.
+
+GitHub-built copies also check that rolling release at launch. When its published
+commit differs from the installed build, the app offers to download the APK and
+hands it to Android's package installer. Android still requires the user to approve
+the installation and to allow this app as an update source once.
 
 > Installed a build from before 2026-07-30? Uninstall the old app once, then install
 > this one. Those builds were signed with a throwaway key that CI regenerated on every
@@ -143,6 +155,12 @@ the previous version.
 | Scheduled jobs | `GET` · `POST /api/hermes/jobs` · `PATCH` · `DELETE /api/hermes/jobs/{id}` |
 | Pause / resume / run a job | `POST /api/hermes/jobs/{id}/pause` · `resume` · `run` |
 | Scheduled job run history | `GET /api/cron-history` · `GET /api/cron-history/{jobId}/{fileName}` |
+| Kanban boards and tasks | `GET /api/hermes/kanban/boards` · `GET` / `POST /api/hermes/kanban` · `POST /api/hermes/kanban/tasks/bulk` |
+| Kanban detail, comments, and assignees | `GET /api/hermes/kanban/{id}` · `POST /api/hermes/kanban/{id}/comments` · `GET /api/hermes/kanban/assignees` |
+| Skills | `GET /api/hermes/skills` · `GET` / `PUT` / `DELETE /api/hermes/skills/{category}/{name}` · `PUT /api/hermes/skills/toggle` · `pin` |
+| Plugins | `GET /api/hermes/plugins` · `POST /api/hermes/plugins/{key}/enable` · `disable` |
+| MCP servers | `GET` · `POST /api/hermes/mcp/servers` · `PATCH` / `DELETE /api/hermes/mcp/servers/{name}` · `POST /api/hermes/mcp/reload` |
+| Petdex and active pet | `GET /api/hermes/petdex/manifest` · `GET` / `PATCH /api/hermes/pets/active` · `POST /api/hermes/pets/adopt` |
 | App mark | `GET /logo.png` (static, cached on the device) |
 
 Both sockets authenticate with the same bearer token, passed in the Socket.IO
@@ -161,8 +179,9 @@ written to the app cache, uploaded, and deleted immediately.
 - Answering an approval request the agent raises mid-run
 - Editing a profile's avatar from the app, not only reading it
 - Voice settings (STT and TTS providers) from the app
-- Push notifications for finished runs
-- Kanban
+- Native push notifications for finished runs, approvals, and scheduled reports
+  after the Studio server implements the capability-gated APNs/FCM contract in
+  [`../docs/push-notifications.md`](../docs/push-notifications.md)
 
 ## Build locally
 
@@ -170,13 +189,14 @@ written to the app cache, uploaded, and deleted immediately.
 gradle assembleDebug
 ```
 
-Requires JDK 17 and the Android SDK (compileSdk 34). CI builds the same target on every
+Requires JDK 17 and the Android SDK (compileSdk 35). CI builds the same target on every
 push, so a local SDK is optional.
 
 ### Running it without a Studio server
 
 `tools/mock-studio.py` answers the REST endpoints the app calls, with sample profiles,
-conversations, accounts, settings, model providers, a room and scheduled jobs — enough
+conversations, accounts, settings, model providers, a room, scheduled jobs, Kanban,
+skills, plugins, MCP servers, and Petdex — enough
 to open and edit every screen. It does not
 speak Socket.IO, which makes it a good way to exercise the REST fallback: messages
 still get answered, just not word by word.
@@ -197,8 +217,8 @@ Issues and pull requests are welcome — this is meant to be a community client.
 file, translate it, add two lines. [docs/adding-a-language.md](docs/adding-a-language.md)
 walks through it, and `gradle test` checks your work.
 
-If you want to port the same API layer to iOS, `HermesApi.kt` is a single
-self-contained file that documents every call the app makes.
+The native iOS client lives beside this project in [`../ios`](../ios/). Keep shared
+API behavior and public release versions aligned when changing either platform.
 
 ## Credits
 
@@ -213,4 +233,4 @@ changes the mark here.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](../LICENSE).

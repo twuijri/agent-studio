@@ -1,0 +1,250 @@
+package us.i3u.hermesstudio
+
+/** Native mobile models for the agent tools exposed by Hermes Studio. */
+data class KanbanBoard(
+    val slug: String,
+    val name: String,
+    val description: String?,
+    val color: String?,
+    val total: Int,
+    val isCurrent: Boolean,
+)
+
+data class KanbanTask(
+    val id: String,
+    val title: String,
+    val body: String?,
+    val assignee: String?,
+    val status: String,
+    val priority: Int,
+    val createdAt: Long,
+    val result: String?,
+    val skills: List<String>,
+)
+
+data class KanbanComment(
+    val id: String,
+    val author: String,
+    val body: String,
+    val createdAt: Long,
+)
+
+data class KanbanRun(
+    val id: String,
+    val status: String,
+    val summary: String?,
+    val error: String?,
+    val startedAt: Long,
+)
+
+data class KanbanTaskDetail(
+    val task: KanbanTask,
+    val latestSummary: String?,
+    val comments: List<KanbanComment>,
+    val runs: List<KanbanRun>,
+)
+
+data class SkillInfo(
+    val name: String,
+    val description: String,
+    val enabled: Boolean,
+    val source: String,
+    val pinned: Boolean,
+    val useCount: Int,
+)
+
+data class SkillCategory(
+    val name: String,
+    val description: String,
+    val skills: List<SkillInfo>,
+)
+
+data class OpenSkill(
+    val category: String,
+    val skill: SkillInfo,
+    val content: String,
+)
+
+data class HermesPlugin(
+    val key: String,
+    val name: String,
+    val kind: String,
+    val source: String,
+    val configured: Boolean,
+    val enabled: Boolean,
+    val version: String?,
+    val description: String?,
+    val author: String?,
+    val tools: List<String>,
+    val hooks: List<String>,
+    val requiredEnv: List<String>,
+) {
+    val manageable: Boolean get() = kind == "standalone" && source != "bundled"
+}
+
+data class McpTool(val name: String, val description: String?)
+
+data class McpServer(
+    val name: String,
+    val transport: String,
+    val connected: Boolean,
+    val toolCount: Int,
+    val registeredToolCount: Int,
+    val tools: List<McpTool>,
+    val error: String?,
+    /** Kept verbatim so editing a server never discards advanced Studio keys. */
+    val rawConfig: String,
+)
+
+data class PetdexPet(
+    val slug: String,
+    val displayName: String,
+    val kind: String,
+    val submittedBy: String?,
+    val previewUrl: String?,
+)
+
+data class ActivePet(
+    val enabled: Boolean,
+    val slug: String,
+    val displayName: String,
+    val kind: String,
+    val scale: Double,
+    val spritesheetDataUrl: String?,
+)
+
+data class KanbanUiState(
+    val loading: Boolean = false,
+    val actionId: String? = null,
+    val boards: List<KanbanBoard> = emptyList(),
+    val board: String = "",
+    val tasks: List<KanbanTask> = emptyList(),
+    val assignees: List<String> = emptyList(),
+    val openTask: KanbanTaskDetail? = null,
+)
+
+data class SkillsUiState(
+    val loading: Boolean = false,
+    val actionName: String? = null,
+    val target: String = "hermes",
+    val categories: List<SkillCategory> = emptyList(),
+    val openSkill: OpenSkill? = null,
+    val pendingWrites: List<PendingSkillWrite> = emptyList(),
+    val resolvingWriteId: String? = null,
+)
+
+data class PendingSkillWrite(
+    val id: String,
+    val subsystem: String,
+    val action: String,
+    val summary: String,
+    val origin: String,
+    val createdAt: Long?,
+)
+
+/** Canonical runtime inventory introduced by Studio 0.7.x. */
+data class AgentRuntimeStatus(
+    val id: String,
+    val family: String,
+    val name: String,
+    val installed: Boolean,
+    val source: String,
+    val version: String?,
+    val path: String?,
+    val error: String?,
+)
+
+data class AgentRuntimeSelection(
+    val id: String = "hermes",
+    val family: String = "hermes",
+    val name: String = "Hermes",
+    val globalAgent: Boolean = false,
+) {
+    val isHermes: Boolean get() = id == "hermes"
+    val codingAgentId: String? get() = when (id) {
+        "ekko", "ekko-agent" -> "ekko-agent"
+        "claude", "claude-code" -> "claude-code"
+        "codex", "pi" -> id
+        else -> null
+    }
+}
+
+data class SessionCategory(val id: Int, val name: String)
+
+data class StudioWorkflow(
+    val id: String,
+    val name: String,
+    val profile: String,
+    val workspace: String?,
+    val nodeCount: Int,
+    val edgeCount: Int,
+    val nodesJson: String = "[]",
+    val edgesJson: String = "[]",
+)
+data class WorkflowSchedule(val id: String, val workflowId: String, val schedule: String, val timezone: String, val enabled: Boolean, val nextRunAt: Long?)
+
+data class QueuedRun(
+    val id: String,
+    val preview: String,
+    val position: Int,
+)
+
+data class BackgroundAgentRun(
+    val id: String,
+    val runtime: String,
+    val status: String,
+    val label: String,
+    val output: String? = null,
+)
+
+data class StudioWorkflowRun(
+    val id: String,
+    val workflowId: String,
+    val status: String,
+    val createdAt: Long,
+    val error: String?,
+    val pendingNodeId: String?,
+)
+
+data class EkkoMemory(val id: String, val title: String, val content: String, val status: String, val revision: Int, val tags: List<String>)
+data class EkkoMcpServer(val name: String, val enabled: Boolean, val transport: String, val config: String)
+data class StudioFile(val name: String, val path: String, val directory: Boolean, val size: Long)
+data class StudioLogFile(val name: String, val size: String, val modified: String)
+data class StudioLogEntry(val timestamp: String, val level: String, val logger: String, val message: String)
+data class AppRelayStatus(val connected: Boolean, val machineId: String, val pairingCode: String, val expiresAt: Long, val route: String, val relayUrl: String)
+data class StudioDevice(val id: String, val name: String, val address: String, val inbound: String, val outbound: String)
+data class AppConnection(val id: Int, val name: String, val type: String, val active: Boolean, val online: Boolean)
+data class AppAuthorization(val code: String, val expiresAt: Long, val type: String, val qrPayload: String = code)
+data class EkkoSkillFile(val path: String, val content: String = "")
+data class PeerConnection(val id: String, val deviceId: String, val name: String)
+data class JourneyNode(val id: String, val label: String, val kind: String, val category: String, val uses: Int)
+data class JourneyGraph(val profile: String, val nodes: List<JourneyNode>, val edges: List<Pair<String, String>>, val clusters: List<Pair<String, Int>>)
+data class SkillUsage(val totalLoads: Int, val totalEdits: Int, val totalActions: Int, val distinctSkills: Int, val topSkills: List<Pair<String, Int>>)
+data class WebhookEndpoint(val id: String, val name: String, val url: String, val enabled: Boolean, val state: String, val delivered: Int, val failed: Int)
+data class RuntimeVersion(val version: String, val active: Boolean, val kind: String)
+data class RuntimeVersions(val platform: String, val activeRuntime: String, val activeWebUi: String, val runtime: List<RuntimeVersion>, val webUi: List<RuntimeVersion>, val remoteRuntime: List<String>, val remoteWebUi: List<String>)
+data class ThemeSettings(val fontSize: Int, val textColor: String, val accentColor: String, val backgroundName: String)
+
+data class PluginsUiState(
+    val loading: Boolean = false,
+    val actionKey: String? = null,
+    val plugins: List<HermesPlugin> = emptyList(),
+    val warnings: List<String> = emptyList(),
+)
+
+data class McpUiState(
+    val loading: Boolean = false,
+    val actionName: String? = null,
+    val servers: List<McpServer> = emptyList(),
+)
+
+data class PetsUiState(
+    val loading: Boolean = false,
+    val actionSlug: String? = null,
+    val pets: List<PetdexPet> = emptyList(),
+    val active: ActivePet? = null,
+)
+
+val KANBAN_STATUSES = listOf(
+    "triage", "todo", "scheduled", "ready", "running", "blocked", "review", "done",
+)

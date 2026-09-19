@@ -4,11 +4,24 @@
   TranslationsTest يرفض أي مفتاح ناقص أو زائد.
 -->
 <resources>
-    <string name="app_name">كور هب</string>
+    <string name="app_name">Hermes Studio</string>
+    <string name="launcher_name">H Studio</string>
 
     <!-- إجراءات وتسميات مشتركة -->
     <string name="action_back">رجوع</string>
     <string name="action_refresh">تحديث</string>
+    <string name="message_actions">خيارات الرسالة</string>
+    <string name="message_copy">نسخ</string>
+    <string name="message_reply">رد</string>
+    <string name="message_fork">تفريع المحادثة</string>
+    <string name="message_replying">الرد على</string>
+    <string name="composer_expand">فتح كاتب الرسالة</string>
+    <string name="skills_write_approval">موافقة تعديلات المهارات</string>
+    <string name="skills_write_approval_note">طلب الموافقة قبل أن ينشئ الوكيل مهارة أو يعدّلها.</string>
+    <string name="skills_pending_approvals">موافقات المهارات المعلّقة (%1$d)</string>
+    <string name="skills_approve">موافقة</string>
+    <string name="skills_reject">رفض</string>
+    <string name="conversation_jump_latest">الانتقال إلى آخر رسالة</string>
     <string name="action_dismiss">تجاهل</string>
     <string name="action_cancel">إلغاء</string>
     <string name="action_ok">حسنًا</string>
@@ -62,6 +75,23 @@
     <string name="room_title">غرفة</string>
     <string name="room_empty">لا توجد رسائل في هذه الغرفة بعد</string>
 
+    <!-- مركز الوكيل -->
+    <string name="agent_hub_title">الوكيل</string>
+    <string name="agent_hub_tab">الوكيل</string>
+    <string name="agent_hub_profile">البروفايل النشط: %1$s</string>
+    <string name="agent_hub_tools">أدوات الوكيل</string>
+    <string name="agent_hub_configuration">إعداد الوكيل</string>
+    <string name="agent_hub_work">العمل</string>
+    <string name="agent_hub_capabilities">القدرات</string>
+    <string name="agent_hub_intelligence">الذكاء</string>
+    <string name="agent_status_active">نشط</string>
+    <string name="agent_status_ready">جاهز</string>
+    <string name="agent_hub_kanban">كانبان</string>
+    <string name="agent_hub_skills">المهارات</string>
+    <string name="agent_hub_plugins">الإضافات</string>
+    <string name="agent_hub_mcp">MCP</string>
+    <string name="agent_hub_pets">الحيوانات المرافقة</string>
+
     <!-- المحادثة -->
     <string name="conversation_empty">أرسل رسالة إلى %1$s</string>
     <string name="run_requires_approval">هذا التشغيل ينتظر موافقة. افتح الاستديو للرد.</string>
@@ -69,14 +99,25 @@
     <string name="conversation_your_agent">وكيلك</string>
     <string name="conversation_thinking">يفكر…</string>
     <string name="conversation_tool">ينفّذ %1$s…</string>
+    <string name="thinking_title">يفكّر</string>
+    <string name="thinking_expand">عرض تفاصيل التفكير</string>
+    <string name="thinking_collapse">إخفاء تفاصيل التفكير</string>
+    <string name="tool_status_done">اكتمل</string>
+    <string name="tool_status_failed">فشل</string>
     <string name="conversation_stop">إيقاف</string>
     <string name="reasoning_show">التفكير</string>
+    <string name="download_action">تحميل الملف</string>
+    <string name="download_started">جارٍ تحميل %1$s</string>
+    <string name="download_description">ملف من البروفايل %1$s</string>
+    <string name="download_failed">تعذر تحميل الملف: %1$s</string>
 
     <!-- صندوق الكتابة -->
     <string name="composer_hint">اكتب رسالة…</string>
     <string name="composer_recording">جارٍ التسجيل…</string>
+    <string name="context_usage">السياق %1$s / %2$s</string>
+    <string name="context_loading">السياق…</string>
+    <string name="context_unknown">السياق —</string>
     <string name="composer_transcribing">جارٍ التفريغ…</string>
-    <string name="composer_send_audio">أرسل الصوت</string>
     <string name="composer_uploading">جارٍ الرفع…</string>
     <string name="composer_send">إرسال</string>
     <string name="composer_record">تسجيل صوتي</string>
@@ -97,6 +138,7 @@
     <string name="reasoning_low">منخفض</string>
     <string name="reasoning_medium">متوسط</string>
     <string name="reasoning_high">مرتفع</string>
+    <string name="reasoning_extra_high">مرتفع جدًا</string>
     <string name="reasoning_use_profile">استخدم افتراضي البروفايل</string>
 
     <!-- البروفايلات -->
@@ -107,12 +149,27 @@
 
     <!-- الإعدادات -->
     <string name="settings_title">الإعدادات</string>
+    <string name="more_settings_title">إعدادات إضافية</string>
+    <string name="more_settings_note">جميع إعدادات هرمز استديو في مكان واحد</string>
+    <string name="more_settings_footer">تبقى أدوات الوكيل في تبويب الوكيل، وتُجمع إعدادات الاستديو هنا لتبسيط التنقل.</string>
+    <string name="more_settings_subtitle">إعدادات الاستديو في مكان واحد</string>
+    <string name="more_settings_studio">سلوك الاستديو</string>
+    <string name="more_settings_agent">الوكيل</string>
+    <string name="more_settings_conversation">المحادثة</string>
+    <string name="more_settings_network_privacy">الشبكة والخصوصية</string>
+    <string name="more_settings_management">الإدارة</string>
     <string name="settings_section_server">السيرفر</string>
     <string name="settings_section_profile">البروفايل النشط</string>
     <string name="settings_section_appearance">المظهر</string>
     <string name="settings_section_device">هذا الجهاز</string>
     <string name="settings_section_account">الحساب</string>
     <string name="settings_section_about">عن التطبيق</string>
+    <string name="settings_section_studio">الاستديو</string>
+    <string name="settings_studio_connection">اتصال الاستديو</string>
+    <string name="settings_appearance">المظهر</string>
+    <string name="appearance_system">النظام</string>
+    <string name="appearance_light">فاتح</string>
+    <string name="appearance_dark">داكن</string>
     <string name="settings_address">العنوان</string>
     <string name="settings_address_missing">غير محدد</string>
     <string name="settings_account">الحساب</string>
@@ -136,7 +193,17 @@
     <string name="settings_reasoning_note">تُختار قوة التفكير لكل محادثة من زر + في صندوق الكتابة.</string>
     <string name="settings_sign_out_note">يحذف الرمز المحفوظ من هذا الجهاز</string>
     <string name="settings_version">الإصدار</string>
+    <string name="update_available_title">يتوفر تحديث جديد</string>
+    <string name="update_available_body">توجد نسخة أندرويد أحدث على GitHub. هل تريد تنزيلها وتثبيتها الآن؟</string>
+    <string name="update_install">حدّث الآن</string>
+    <string name="update_later">لاحقًا</string>
+    <string name="update_downloading">جارٍ تنزيل التحديث…</string>
+    <string name="update_failed">تعذّر تنزيل التحديث</string>
+    <string name="update_permission">اسمح بالتحديث من Hermes Studio، ثم ارجع واضغط «حدّث الآن» مرة أخرى.</string>
     <string name="settings_about_note">تطبيق مجتمعي غير رسمي لهرمز استديو. الصور الرمزية المولّدة من Multiavatar.com.</string>
+    <string name="settings_phone_name">هرمز استديو موبايل</string>
+    <string name="settings_phone_github">هرمز استديو موبايل</string>
+    <string name="settings_studio_github">هرمز استديو</string>
 
     <string name="action_rename">إعادة تسمية</string>
     <string name="action_delete">حذف</string>
@@ -172,6 +239,7 @@
     <string name="settings_channels_summary">%1$d من %2$d مُعدّة</string>
     <string name="channels_title">القنوات</string>
     <string name="channel_configured">مُعدّة</string>
+    <string name="channel_connected">متصلة</string>
     <string name="channel_missing">غير مُعدّة</string>
     <string name="channel_off">موقوفة</string>
     <string name="channel_enabled">مفعّلة</string>
@@ -183,8 +251,96 @@
     <string name="channel_clear_title">حذف بيانات %1$s؟</string>
     <string name="channel_clear_body">ستُحذف القيم المحفوظة من السيرفر وتتوقف القناة عن الرد.</string>
     <string name="channel_note">الحفظ يكتب القيم على سيرفرك ويعيد تشغيل البوابة حتى تلتقطها القناة.</string>
+    <string name="channel_credentials_section">بيانات الاعتماد</string>
+    <string name="channel_behavior_section">السلوك والوصول</string>
+    <string name="channel_exclusive_warning">تستخدم هذه المنصة قفلًا حصريًا للتوكن. يجب أن يستخدم كل بروفايل توكن هوية مختلفًا لتجنب التعارض مع البروفايلات الأخرى.</string>
+    <string name="channel_show_secret">إظهار القيمة</string>
+    <string name="channel_hide_secret">إخفاء القيمة</string>
+    <string name="channel_qr_link">ربط Weixin برمز QR</string>
+    <string name="channel_qr_ready">افتح رمز QR وأكمل الربط من داخل التطبيق.</string>
+    <string name="channel_qr_loading">جارٍ جلب رمز QR جديد…</string>
+    <string name="channel_qr_waiting">امسح الرمز الذي فُتح ثم ارجع إلى هنا.</string>
+    <string name="channel_qr_scanned">مُسح الرمز — أكّد الربط في Weixin.</string>
+    <string name="channel_qr_confirmed">تم ربط Weixin.</string>
+    <string name="channel_qr_expired">انتهت صلاحية الرمز. اضغط للمحاولة مجدداً.</string>
+    <string name="channel_qr_error">تعذر إكمال الربط. اضغط لإعادة المحاولة.</string>
+    <string name="channel_bot_token">توكن البوت</string>
+    <string name="channel_bot_token_hint">توكن البوت من بوابة المطورين</string>
+    <string name="channel_proxy_url">عنوان البروكسي</string>
+    <string name="channel_proxy_url_hint">بروكسي اختياري للمنصة يدعم HTTP وHTTPS وSOCKS5</string>
+    <string name="channel_require_mention">طلب إشارة @</string>
+    <string name="channel_require_mention_group">طلب إشارة @ في المجموعات للرد</string>
+    <string name="channel_require_mention_channel">طلب إشارة @ في القنوات للرد</string>
+    <string name="channel_require_mention_room">طلب إشارة @ في الغرف للرد</string>
+    <string name="channel_reactions">التفاعلات</string>
+    <string name="channel_reactions_hint">التفاعل مع الرسائل بالإيموجي</string>
+    <string name="channel_free_response_chats">محادثات الرد الحر</string>
+    <string name="channel_free_response_chats_hint">معرّفات المحادثات التي يُرد فيها بدون إشارة @ ومفصولة بفواصل</string>
+    <string name="channel_free_response_channels">قنوات الرد الحر</string>
+    <string name="channel_free_response_channels_hint">معرّفات القنوات التي يُرد فيها بدون إشارة @ ومفصولة بفواصل</string>
+    <string name="channel_free_response_rooms">غرف الرد الحر</string>
+    <string name="channel_free_response_rooms_hint">معرّفات الغرف التي يُرد فيها بدون إشارة @ ومفصولة بفواصل</string>
+    <string name="channel_mention_patterns">أنماط إشارة مخصصة</string>
+    <string name="channel_mention_patterns_hint">أنماط تحفيز إضافية مفصولة بفواصل</string>
+    <string name="channel_auto_thread">سلسلة تلقائية</string>
+    <string name="channel_auto_thread_channel">إنشاء سلسلة رد تلقائيًا بعد الإشارة</string>
+    <string name="channel_auto_thread_room">إنشاء سلاسل رد تلقائيًا في الغرف</string>
+    <string name="channel_allow_bots">السماح برسائل البوتات</string>
+    <string name="channel_allow_bots_hint">الرد على الرسائل الواردة من بوتات أخرى</string>
+    <string name="channel_allowed_channels">القنوات المسموح بها</string>
+    <string name="channel_allowed_channels_hint">قائمة معرّفات القنوات المسموح بها مفصولة بفواصل</string>
+    <string name="channel_ignored_channels">القنوات المتجاهلة</string>
+    <string name="channel_ignored_channels_hint">القنوات التي لا يرد فيها البوت أبدًا</string>
+    <string name="channel_no_thread_channels">قنوات بدون سلاسل</string>
+    <string name="channel_no_thread_channels_hint">القنوات التي يرد فيها البوت بدون سلاسل</string>
+    <string name="channel_whatsapp_enabled">تفعيل واتساب</string>
+    <string name="channel_whatsapp_enabled_hint">تفعيل قناة واتساب المقترنة</string>
+    <string name="channel_access_token">توكن الوصول</string>
+    <string name="channel_access_token_hint">توكن وصول Matrix</string>
+    <string name="channel_matrix_user_id">معرّف مستخدم Matrix</string>
+    <string name="channel_matrix_user_id_hint">مطلوب مع تسجيل الدخول بكلمة المرور واختياري مع توكن الوصول</string>
+    <string name="channel_matrix_password">كلمة مرور Matrix</string>
+    <string name="channel_matrix_password_hint">بديل عن توكن الوصول</string>
+    <string name="channel_homeserver">عنوان الخادم الرئيسي</string>
+    <string name="channel_homeserver_hint">عنوان الخادم الرئيسي في Matrix</string>
+    <string name="channel_dm_mention_threads">سلاسل الإشارة في الرسائل المباشرة</string>
+    <string name="channel_dm_mention_threads_hint">استخدام ردود السلاسل للإشارات في الرسائل المباشرة</string>
+    <string name="channel_app_id">معرّف التطبيق</string>
+    <string name="channel_app_id_hint">معرّف تطبيق المنصة</string>
+    <string name="channel_app_secret">سر التطبيق</string>
+    <string name="channel_app_secret_hint">سر تطبيق المنصة</string>
+    <string name="channel_encrypt_key">مفتاح التشفير</string>
+    <string name="channel_encrypt_key_hint">مفتاح تشفير Feishu</string>
+    <string name="channel_verification_token">توكن التحقق</string>
+    <string name="channel_verification_token_hint">توكن التحقق في Feishu</string>
+    <string name="channel_client_id">معرّف العميل</string>
+    <string name="channel_client_id_hint">معرّف عميل DingTalk</string>
+    <string name="channel_client_secret">سر العميل</string>
+    <string name="channel_client_secret_hint">سر عميل DingTalk</string>
+    <string name="channel_app_key">مفتاح التطبيق</string>
+    <string name="channel_app_key_hint">مفتاح تطبيق DingTalk</string>
+    <string name="channel_card_template_id">معرّف قالب البطاقة</string>
+    <string name="channel_card_template_id_hint">معرّف قالب بطاقة الذكاء في DingTalk</string>
+    <string name="channel_allow_all_users">السماح لجميع المستخدمين</string>
+    <string name="channel_allow_all_users_hint">السماح بالرسائل من أي مستخدم</string>
+    <string name="channel_allowed_users">المستخدمون المسموح لهم</string>
+    <string name="channel_allowed_users_hint">معرّفات المستخدمين المسموح لهم مفصولة بفواصل</string>
+    <string name="channel_qq_app_id">معرّف تطبيق QQ</string>
+    <string name="channel_qq_app_id_hint">معرّف تطبيق بوت QQ</string>
+    <string name="channel_qq_secret">سر تطبيق QQ</string>
+    <string name="channel_qq_secret_hint">سر عميل بوت QQ</string>
+    <string name="channel_qq_markdown">دعم Markdown</string>
+    <string name="channel_qq_markdown_hint">عرض تنسيق Markdown المدعوم في ردود QQ</string>
+    <string name="channel_weixin_token">توكن Weixin</string>
+    <string name="channel_weixin_token_hint">التوكن الناتج من تسجيل دخول Weixin</string>
+    <string name="channel_account_id">معرّف الحساب</string>
+    <string name="channel_account_id_hint">معرّف حساب Weixin المتصل</string>
+    <string name="channel_bot_id">معرّف البوت</string>
+    <string name="channel_bot_id_hint">معرّف بوت WeCom</string>
+    <string name="channel_wecom_secret_hint">سر بوت WeCom</string>
     <string name="notice_channel_saved">حُفظت %1$s — البوابة تُعاد الآن</string>
     <string name="notice_channel_cleared">حُذفت بيانات %1$s</string>
+    <string name="notice_weixin_linked">تم ربط Weixin — البوابة تُعاد الآن</string>
     <string name="settings_auto_start_note">عند تفعيله يشغّل سيرفرك بوابة كل بروفايل عند الإقلاع، فترد القنوات دون أن يفتح أحد الاستديو.</string>
 
     <string name="settings_group_server">السيرفر والحساب</string>
@@ -304,7 +460,7 @@
     <string name="settings_category_account">الحساب</string>
     <string name="settings_category_profile">البروفايل النشط</string>
     <string name="settings_category_integrations">الربط والأتمتة</string>
-    <string name="settings_category_app">الواجهة والتطبيق</string>
+    <string name="settings_category_app">التطبيق</string>
     <string name="settings_group_users">إدارة الحسابات</string>
     <string name="settings_group_users_note">إنشاء المستخدمين وتحديد أدوارهم وحالتهم والبروفايلات المتاحة</string>
     <string name="settings_group_models">مزوّدو الموديلات</string>
@@ -450,4 +606,200 @@
     <string name="agent_management">إدارة موحّدة للبوابات</string>
     <string name="agent_management_note">السماح للبروفايل الافتراضي بإدارة بوابات كل البروفايلات</string>
     <string name="agent_excluded_profiles">البروفايلات المستثناة من التشغيل التلقائي</string>
+
+    <string name="action_search">بحث</string>
+    <string name="agent_hub_kanban_note">لوحات جوال مع سحب المهام بين المراحل</string>
+    <string name="agent_hub_skills_note">تصفح مهارات الوكيل وتفعيلها واستيرادها وتحريرها</string>
+    <string name="agent_hub_plugins_note">فحص إضافات الاستديو والتحكم بها</string>
+    <string name="agent_hub_mcp_note">إدارة سيرفرات MCP وأدواتها</string>
+    <string name="agent_hub_pets_note">اختيار الحيوان المرافق وضبطه</string>
+
+    <string name="kanban_title">كانبان</string>
+    <string name="kanban_mobile_note">لوحات مهام الاستديو بتجربة مخصصة للجوال</string>
+    <string name="kanban_add">إضافة مهمة</string>
+    <string name="kanban_default_board">اللوحة الافتراضية</string>
+    <string name="kanban_drag_hint">اضغط مطولًا على البطاقة ثم اسحب يمينًا أو يسارًا لنقلها بين المراحل.</string>
+    <string name="kanban_empty">لا توجد مهام هنا</string>
+    <string name="kanban_empty_note">أنشئ مهمة أو امسح البحث لعرض اللوحة.</string>
+    <string name="kanban_move">نقل المهمة</string>
+    <string name="kanban_hold_drag">اضغط مطولًا واسحب</string>
+    <string name="kanban_task">المهمة</string>
+    <string name="kanban_details">التفاصيل</string>
+    <string name="kanban_priority">الأولوية</string>
+    <string name="kanban_assignee">المكلّف</string>
+    <string name="kanban_unassigned">بلا مكلّف</string>
+    <string name="kanban_skills">المهارات</string>
+    <string name="kanban_result">النتيجة</string>
+    <string name="kanban_summary">آخر ملخص</string>
+    <string name="kanban_comments">التعليقات · %1$d</string>
+    <string name="kanban_comment_hint">أضف تعليقًا</string>
+    <string name="kanban_comment_add">نشر التعليق</string>
+    <string name="kanban_runs">التشغيلات · %1$d</string>
+    <string name="kanban_new_task">مهمة جديدة</string>
+    <string name="kanban_task_title">عنوان المهمة</string>
+    <string name="kanban_description">الوصف</string>
+    <string name="kanban_priority_value">الأولوية %1$d</string>
+    <string name="kanban_skills_hint">المهارات مفصولة بفاصلة</string>
+    <string name="kanban_send_triage">إرسالها للفرز أولًا</string>
+    <string name="kanban_created">تم إنشاء المهمة</string>
+    <string name="kanban_status_triage">الفرز</string>
+    <string name="kanban_status_todo">قيد الانتظار</string>
+    <string name="kanban_status_scheduled">مجدولة</string>
+    <string name="kanban_status_ready">جاهزة</string>
+    <string name="kanban_status_running">قيد التنفيذ</string>
+    <string name="kanban_status_blocked">متوقفة</string>
+    <string name="kanban_status_review">المراجعة</string>
+    <string name="kanban_status_done">مكتملة</string>
+    <string name="kanban_status_archived">مؤرشفة</string>
+
+    <string name="skills_title">المهارات</string>
+    <string name="skills_subtitle">البروفايل: %1$s</string>
+    <string name="skills_import">استيراد مهارة ZIP</string>
+    <string name="skills_search">البحث في المهارات</string>
+    <string name="skills_empty">لا توجد مهارات مطابقة</string>
+    <string name="skills_empty_note">جرّب هدفًا آخر أو امسح البحث أو استورد حزمة مهارة.</string>
+    <string name="skills_no_description">بلا وصف</string>
+    <string name="skills_uses">%1$d استخدام</string>
+    <string name="skills_pin">تثبيت المهارة</string>
+    <string name="skills_skill">المهارة</string>
+    <string name="skills_delete_title">حذف المهارة؟</string>
+    <string name="skills_delete_note">ستُحذف %1$s من الاستديو.</string>
+    <string name="skills_imported">تم استيراد %1$s</string>
+    <string name="skills_saved">تم حفظ المهارة</string>
+
+    <string name="plugins_title">الإضافات</string>
+    <string name="plugins_summary">%1$d مفعّلة · %2$d إجماليًا</string>
+    <string name="plugins_search">البحث في الإضافات</string>
+    <string name="plugins_enabled_only">المفعّلة فقط</string>
+    <string name="plugins_empty">لا توجد إضافات مطابقة</string>
+    <string name="plugins_empty_note">امسح الفلتر أو ثبّت الإضافات من Hermes Studio.</string>
+    <string name="plugins_tools">%1$d أداة</string>
+    <string name="plugins_hooks">%1$d خطاف</string>
+    <string name="plugins_env">%1$d قيمة بيئة</string>
+    <string name="plugins_managed_by_studio">تُدار بواسطة الاستديو</string>
+
+    <string name="mcp_title">سيرفرات MCP</string>
+    <string name="mcp_summary">%1$d متصلة · %2$d إجماليًا</string>
+    <string name="mcp_reload_all">إعادة تحميل كل السيرفرات</string>
+    <string name="mcp_add">إضافة سيرفر MCP</string>
+    <string name="mcp_empty">لا توجد سيرفرات MCP</string>
+    <string name="mcp_empty_note">أضف أمرًا محليًا أو سيرفر HTTP/SSE بعيدًا.</string>
+    <string name="mcp_tools">%1$d/%2$d أداة مسجلة</string>
+    <string name="mcp_test">اختبار</string>
+    <string name="mcp_reload">إعادة تحميل</string>
+    <string name="mcp_delete_title">حذف سيرفر MCP؟</string>
+    <string name="mcp_delete_note">سيُحذف %1$s وإعداده.</string>
+    <string name="mcp_edit">تعديل السيرفر</string>
+    <string name="mcp_name">اسم السيرفر</string>
+    <string name="mcp_command">الأمر</string>
+    <string name="mcp_url">رابط السيرفر</string>
+    <string name="mcp_args">المعاملات، واحد في كل سطر</string>
+    <string name="mcp_advanced_json">إعداد JSON المتقدم</string>
+
+    <string name="pets_title">الحيوانات المرافقة</string>
+    <string name="pets_count">%1$d حيوان مرافق</string>
+    <string name="pets_active">الحيوان النشط</string>
+    <string name="pets_scale">الحجم: %1$.1f×</string>
+    <string name="pets_search">البحث في الحيوانات</string>
+    <string name="pets_empty">لم نجد حيوانات مرافقة</string>
+    <string name="pets_empty_note">امسح البحث أو حدّث قائمة Petdex.</string>
+    <string name="pets_adopt">اختيار</string>
+    <string name="pets_adopted_button">تم اختياره</string>
+    <string name="pets_adopted">تم تفعيل الحيوان المرافق الجديد</string>
+    <string name="insights_title">الإحصائيات</string>
+    <string name="insights_subtitle">استهلاك التوكن وأداء الاستديو</string>
+    <string name="insights_days">%1$d يوم</string>
+    <string name="insights_usage">الاستهلاك</string>
+    <string name="insights_tokens">التوكن</string>
+    <string name="insights_sessions">الجلسات</string>
+    <string name="insights_cost">التكلفة التقديرية</string>
+    <string name="insights_cache">توكن الكاش</string>
+    <string name="insights_by_model">حسب الموديل</string>
+    <string name="insights_runtime">أداء الاستديو</string>
+    <string name="insights_memory">ذاكرة النظام</string>
+    <string name="insights_workers">عمّال الجسر</string>
+    <string name="insights_live_sessions">الجلسات النشطة</string>
+    <string name="voice_stop_reply">إيقاف الصوت</string>
+    <string name="voice_playback_failed">تعذّر تشغيل الرد الصوتي. تحقق من مزوّد TTS في الاستديو.</string>
+    <string name="agent_runtimes_title">الوكلاء</string>
+    <string name="agent_runtimes_subtitle">اختر الوكيل المسؤول عن هذه المحادثة. يرتّب الاستديو خمسة وكلاء ضمن ثلاث عائلات واضحة.</string>
+    <string name="agent_runtimes_hub_note">Hermes وEkko وClaude Code وCodex وPi</string>
+    <string name="agent_family_hermes">عائلة Hermes</string>
+    <string name="agent_family_ekko">عائلة Ekko</string>
+    <string name="agent_family_coding">وكلاء البرمجة</string>
+    <string name="agent_runtime_ready">جاهز</string>
+    <string name="agent_runtime_not_installed">غير مثبت</string>
+    <string name="agent_runtime_unavailable">غير متاح</string>
+    <string name="run_approval_title">تحتاج موافقتك</string>
+    <string name="run_clarification_title">سؤال من الوكيل</string>
+    <string name="run_clarification_answer">إجابتك</string>
+    <string name="run_action_resuming">جارٍ إكمال عمل الوكيل…</string>
+    <string name="action_approve">موافقة</string>
+    <string name="action_reject">رفض</string>
+    <string name="approval_once">سماح لمرة واحدة</string>
+    <string name="approval_session">سماح لهذه الجلسة</string>
+    <string name="approval_always">سماح دائم</string>
+    <string name="session_archive">أرشفة</string>
+    <string name="session_unarchive">إلغاء الأرشفة</string>
+    <string name="session_archived">تمت أرشفة المحادثة</string>
+    <string name="session_unarchived">تمت استعادة المحادثة</string>
+    <string name="session_move_category">نقل إلى %1$s</string>
+    <string name="session_new_category">تصنيف جديد</string>
+    <string name="session_category_name">اسم التصنيف</string>
+    <string name="workflows_title">مسارات العمل</string>
+    <string name="workflows_hub_note">تشغيل الأعمال المؤتمتة ومتابعتها والموافقة عليها</string>
+    <string name="workflows_mobile_note">عرض مناسب للمس لمسارات الاستديو وعمليات التشغيل الأخيرة وبوابات الموافقة.</string>
+    <string name="workflows_empty">لا توجد مسارات عمل في هذا البروفايل</string>
+    <string name="workflow_run">تشغيل</string>
+    <string name="workflow_run_title">تشغيل %1$s</string>
+    <string name="workflow_input">مدخل اختياري</string>
+    <string name="workflow_summary">%1$s · %2$d عقد · %3$d روابط</string>
+    <string name="global_agent_title">الوكيل العام</string>
+    <string name="global_agent_hub_note">وكيل مستمر واحد عبر أجهزة الاستديو</string>
+    <string name="global_agent_description">تابع محادثة مستمرة مع الوكيل العام باستخدام محرك Ekko المدمج في الاستديو.</string>
+    <string name="global_agent_profile">البروفايل النشط: %1$s</string>
+    <string name="global_agent_open">فتح محادثة الوكيل العام</string>
+    <string name="global_agent_remote_note">تبقى المحادثة في الاستديو ويمكن متابعتها من جهاز آخر متصل.</string>
+    <string name="action_stop">إيقاف</string>
+    <string name="global_agent_sessions">الجلسات الأخيرة</string>
+    <string name="ekko_hub_title">إعدادات Ekko</string>
+    <string name="ekko_hub_note">الذاكرة والمهارات وخوادم MCP الخاصة بـ Ekko</string>
+    <string name="ekko_memory_title">الذاكرة</string>
+    <string name="ekko_memory_edit">تعديل الذاكرة</string>
+    <string name="ekko_memory_name">العنوان</string>
+    <string name="ekko_memory_content">المحتوى</string>
+    <string name="ekko_skills_title">المهارات</string>
+    <string name="ekko_mcp_title">خوادم MCP</string>
+    <string name="ekko_mcp_edit">خادم MCP</string>
+    <string name="ekko_mcp_test_ok">نجح الاتصال بخادم MCP</string>
+    <string name="profile_restart">إعادة تشغيل محرك البروفايل</string>
+    <string name="profile_restarted">تمت إعادة تشغيل محرك البروفايل</string>
+    <string name="models_refresh">تحديث الموديلات</string>
+    <string name="models_refreshed">تم تحديث موديلات المزوّد</string>
+    <string name="action_test">اختبار</string>
+    <string name="action_add">إضافة</string>
+    <string name="profile_runtime_status">حالة المحرك: %1$s</string>
+    <string name="files_title">ملفات الاستديو</string><string name="files_hub_note">تصفح ملفات مساحة عمل البروفايل وتعديلها</string><string name="files_new_folder">مجلد جديد</string><string name="files_edit">قراءة أو تعديل</string><string name="files_open_external">فتح خارجيًا</string><string name="files_saved">تم حفظ الملف</string>
+    <string name="logs_title">السجلات</string><string name="logs_hub_note">تشخيصات الاستديو والجسر والوكلاء</string>
+    <string name="connections_title">الاتصالات</string><string name="connections_hub_note">ترحيل التطبيق وأجهزة الاستديو المرتبطة</string><string name="app_relay_title">ترحيل التطبيق</string><string name="devices_title">الأجهزة</string><string name="connected">متصل</string><string name="disconnected">غير متصل</string><string name="connect">اتصال</string><string name="disconnect">قطع الاتصال</string><string name="refresh_pairing">رمز اقتران جديد</string>
+    <string name="insights_by_agent">حسب الوكيل</string><string name="insights_daily">الاستهلاك اليومي</string>
+    <string name="files_upload">رفع ملف</string><string name="files_download">تنزيل أو فتح</string><string name="files_copy_to">نسخ إلى مسار</string>
+    <string name="authorize_lan">تفويض شبكة LAN</string><string name="authorize_cloud">تفويض سحابي</string><string name="authorization_code">رمز التفويض</string><string name="app_connections_title">التطبيقات المفوّضة</string>
+    <string name="profile_make_active">جعله البروفايل النشط</string><string name="profile_export">تصدير البروفايل</string>
+    <string name="ekko_skill_new">مهارة Ekko جديدة</string>
+    <string name="profile_import">استيراد بروفايل</string><string name="profile_avatar">اختيار صورة البروفايل</string><string name="profile_avatar_clear">حذف صورة البروفايل</string>
+    <string name="profile_export_started">بدأ تنزيل البروفايل</string><string name="ekko_external_dirs">المجلدات الخارجية</string><string name="revoke_connection">إلغاء تفويض التطبيق؟</string><string name="manual_device">إضافة جهاز يدويًا</string><string name="block">حظر</string><string name="unblock">إلغاء الحظر</string>
+    <string name="name">الاسم</string>
+    <string name="journey_title">الرحلة</string><string name="journey_note">مخطط المهارات والذاكرة مع الاستخدام</string>
+    <string name="webhooks_title">خطافات الويب</string><string name="webhooks_note">نقاط الإرسال والاختبارات والأحداث المحلية</string><string name="webhooks_add">إضافة خطاف ويب</string><string name="clear_events">مسح الأحداث</string><string name="local_events">أحداث الاختبار المحلية</string>
+    <string name="runtime_versions_title">إصدارات التشغيل</string><string name="runtime_versions_note">تنزيل وتفعيل وإعادة تشغيل البيئات المدارة</string><string name="restart_webui">إعادة تشغيل واجهة الويب</string><string name="activate">تفعيل</string>
+    <string name="appearance_title">المظهر</string><string name="appearance_note">ألوان الاستديو والنص والخلفية</string><string name="font_size">حجم الخط</string><string name="text_color">لون النص</string><string name="accent_color">اللون البارز</string><string name="remove_background">إزالة الخلفية</string><string name="upload_background">رفع خلفية</string>
+    <string name="kanban_operations">العمليات والتشخيص</string><string name="kanban_dispatch">إرسال للتنفيذ</string><string name="kanban_complete">إكمال</string><string name="kanban_reassign">إعادة تعيين</string>
+    <string name="action_send">إرسال</string>
+    <string name="workflow_editor">محرر سير العمل</string><string name="workflow_workspace">مساحة العمل</string><string name="workflow_schedule_add">إضافة جدولة</string><string name="workflow_timezone">المنطقة الزمنية</string><string name="workflow_rerun">إعادة التشغيل</string><string name="workflow_batch_delete">حذف مسارات العمل</string><string name="workflow_batch_delete_body">حذف جميع مسارات العمل وعددها %1$d؟</string>
+    <string name="session_export">تصدير المحادثة</string><string name="session_workspace">مساحة عمل المحادثة</string><string name="session_category_edit">تعديل الفئة</string><string name="load_more">تحميل المزيد</string><string name="session_batch_delete">حذف المحادثات المعروضة</string><string name="session_batch_delete_body">حذف جميع المحادثات المعروضة وعددها %1$d؟</string>
+    <string name="queued_run_summary">في الطابور %1$d · %2$s</string>
+    <string name="queued_run_insert">تشغيل تالياً</string>
+    <string name="queued_run_cancel">إلغاء الرسالة من الطابور</string>
+    <string name="background_agent_summary">%1$s · %2$s</string>
 </resources>

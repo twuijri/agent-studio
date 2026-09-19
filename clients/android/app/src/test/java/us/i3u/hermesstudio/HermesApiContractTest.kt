@@ -2,6 +2,7 @@ package us.i3u.hermesstudio
 
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -67,7 +68,265 @@ class HermesApiContractTest {
 
         assertEquals("1710001234", session.updatedAt)
         assertEquals("openrouter", session.provider)
-        assertEquals("/api/hermes/sessions?profile=manager&limit=80", server.takeRequest().path)
+        assertEquals("/api/studio/sessions?profile=manager&limit=80", server.takeRequest().path)
+    }
+
+    @Test
+    fun `v0712 agent inventory is grouped into canonical families`() {
+        enqueue(
+            """{"revision":4,"agents":[{"id":"hermes","installed":true,"source":"managed-runtime","version":"0.8"},{"id":"ekko-agent","installed":true,"source":"built-in","version":"0.7.12"},{"id":"claude-code","installed":false,"source":"not-installed"},{"id":"codex","installed":true,"source":"user-cli","version":"1.2"},{"id":"pi","installed":true,"source":"user-cli"}]}""",
+        )
+
+        val agents = api.agentRuntimes()
+
+        assertEquals(listOf("hermes", "ekko", "coding", "coding", "coding"), agents.map { it.family })
+        assertEquals("Ekko", agents[1].name)
+        assertFalse(agents[2].installed)
+        assertEquals("/api/agents/status", server.takeRequest().path)
+    }
+
+    @Test
+    fun `coding runtime uses canonical v0712 run fields`() {
+        enqueue("""{"ok":true,"output":"done","session_id":"coding-1"}""")
+
+        api.sendMessage(
+            profile = "default",
+            input = "fix this",
+            sessionId = "coding-1",
+            runtime = AgentRuntimeSelection("codex", "coding", "Codex"),
+        )
+
+        val body = JSONObject(server.takeRequest().body.readUtf8())
+        assertEquals("coding_agent", body.getString("source"))
+        assertEquals("codex", body.getString("coding_agent_id"))
+        assertEquals("global", body.getString("mode"))
+    }
+
+    @Test
+    fun `session categories archive and assignment use Studio APIs`() {
+        enqueue("""{"categories":[{"id":3,"name":"Research"}]}""")
+        assertEquals("Research", api.sessionCategories().single().name)
+        assertEquals("/api/studio/session-categories", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.setSessionCategory("session 1", 3)
+        val assignment = server.takeRequest()
+        assertEquals("/api/studio/sessions/session+1/category", assignment.path)
+        assertEquals(3, JSONObject(assignment.body.readUtf8()).getInt("categoryId"))
+
+        enqueue("""{"ok":true}""")
+        api.archiveSession("session 1", true)
+        assertEquals("/api/studio/sessions/session+1/archive", server.takeRequest().path)
+    }
+
+    @Test
+    fun `workflow execution and history follow v0712 contracts`() {
+        enqueue("""{"workflows":[{"id":"wf-1","name":"Release","profile":"manager","nodes":[{},{}],"edges":[{}]}]}""")
+        val workflow = api.workflows("manager").single()
+        assertEquals(2, workflow.nodeCount)
+        assertEquals("/api/studio/workflows?profile=manager", server.takeRequest().path)
+
+        enqueue("""{"ok":true,"status":"accepted"}""")
+        api.runWorkflow("wf-1", "ship")
+        val run = server.takeRequest()
+        assertEquals("/api/studio/workflows/wf-1/run", run.path)
+        assertEquals("ship", JSONObject(run.body.readUtf8()).getString("input"))
+    }
+
+    @Test
+    fun `Ekko memory revision and MCP tests use owned APIs`() {
+        enqueue("""{"ok":true,"memories":[{"id":"m1","title":"Preference","content":"Arabic","status":"active","revision":4,"tags":["user"]}]}""")
+        val memory = api.ekkoMemories("manager").single()
+        assertEquals(4, memory.revision)
+        assertEquals("manager", server.takeRequest().getHeader("X-Hermes-Profile"))
+
+        enqueue("""{"ok":true}""")
+        api.deleteEkkoMemory("manager", memory)
+        val deletion = server.takeRequest()
+        assertEquals("DELETE", deletion.method)
+        assertEquals(4, JSONObject(deletion.body.readUtf8()).getInt("expectedRevision"))
+
+        enqueue("""{"ok":true,"tools":[]}""")
+        api.testEkkoMcpServer("manager", "filesystem")
+        assertEquals("/api/ekko/mcp/servers/filesystem/test", server.takeRequest().path)
+    }
+
+    @Test
+    fun `profile restart and provider refresh use current Studio endpoints`() {
+        enqueue("""{"success":true}""")
+        api.restartProfileRuntime("manager")
+        assertEquals("/api/hermes/profiles/manager/restart", server.takeRequest().path)
+
+        enqueue("""{"ok":true}""")
+        api.refreshProviderModels("manager", "openrouter")
+        assertEquals("/api/hermes/config/providers/openrouter/models/refresh?profile=manager", server.takeRequest().path)
+    }
+
+    @Test
+    fun `Studio files logs and relay use canonical APIs`() {
+        enqueue("""{"entries":[{"name":"notes.md","path":"notes.md","isDir":false,"size":24}]}""")
+        assertEquals("notes.md", api.studioFiles("manager", "").single().name)
+        assertEquals("/api/studio/files/list?path=", server.takeRequest().path)
+
+        enqueue("""{"files":[{"name":"webui","size":"2KB","modified":"today"}]}""")
+        assertEquals("webui", api.studioLogs().single().name)
+        assertEquals("/api/studio/logs", server.takeRequest().path)
+
+        enqueue("""{"relay":{"connected":true,"machineId":"host","pairingCode":"123456","pairingExpiresAt":99,"route":"cloud"}}""")
+        assertTrue(api.appRelayStatus().connected)
+        assertEquals("/api/app-relay/status", server.takeRequest().path)
+    }
+
+    @Test
+    fun `file deletion carries explicit recursive scope`() {
+        enqueue("""{"ok":true}""")
+        api.deleteStudioFile("manager", StudioFile("tmp", "workspace/tmp", true, 0))
+        val request = server.takeRequest()
+        assertEquals("DELETE", request.method)
+        val body = JSONObject(request.body.readUtf8())
+        assertEquals("workspace/tmp", body.getString("path"))
+        assertTrue(body.getBoolean("recursive"))
+    }
+
+    @Test
+    fun `app connections and authorization use canonical endpoints`() {
+        enqueue("""{"connections":[{"id":7,"device_name":"Pixel","connection_type":"lan","active":true,"online":true}]}""")
+        assertEquals("Pixel", api.appConnections().single().name)
+        assertEquals("/api/app-connections", server.takeRequest().path)
+
+        enqueue("""{"connection_type":"cloud","matching_code":"483921","expires_at":123,"qr_payload":"hermes://connect/abc"} """)
+        val authorization = api.createAppAuthorization(true)
+        assertEquals("483921", authorization.code)
+        assertEquals("hermes://connect/abc", authorization.qrPayload)
+        assertEquals("/api/app-connections/authorization-codes/cloud", server.takeRequest().path)
+    }
+
+    @Test
+    fun `active profile switch uses Studio field name`() {
+        enqueue("""{"success":true,"active":"manager"}""")
+        api.switchActiveProfile("manager")
+        val request = server.takeRequest()
+        assertEquals("/api/hermes/profiles/active", request.path)
+        assertEquals("manager", JSONObject(request.body.readUtf8()).getString("name"))
+    }
+
+    @Test
+    fun `Ekko skill files and external directories use canonical endpoints`() {
+        enqueue("""{"ok":true,"files":[{"path":"SKILL.md"},{"path":"references/api.md"}]}""")
+        assertEquals(listOf("SKILL.md", "references/api.md"), api.ekkoSkillFiles("manager", "research"))
+        assertEquals("/api/ekko/skills/research/files", server.takeRequest().path)
+        enqueue("""{"ok":true}""")
+        api.saveEkkoExternalDirectories("manager", listOf("/opt/skills"))
+        assertEquals("/api/ekko/skills/external-directories", server.takeRequest().path)
+    }
+
+    @Test
+    fun `device pairing and peer disconnect use Studio controls`() {
+        enqueue("""{"link":"https://studio/#/hermes/devices?pairing_code=123"}""")
+        assertEquals("https://studio/#/hermes/devices?pairing_code=123", api.devicePairingLink())
+        assertEquals("/api/devices/pairing-link", server.takeRequest().path)
+        enqueue("""{"devices":[]}""")
+        api.manualDeviceRequest("https://remote.example/#/hermes/devices?pairing_code=456")
+        val manual = server.takeRequest()
+        assertEquals("/api/devices/manual-request", manual.path)
+        assertEquals("https://remote.example/#/hermes/devices?pairing_code=456", JSONObject(manual.body.readUtf8()).getString("url"))
+        enqueue("""{"ok":true}""")
+        api.disconnectPeer("peer-1")
+        assertEquals("/api/devices/peer-connections/peer-1/disconnect", server.takeRequest().path)
+    }
+
+    @Test fun `journey usage and webhooks use v0712 routes`() {
+        enqueue("""{"profile":"default","graph":{"nodes":[],"edges":[],"clusters":[]}}""")
+        assertEquals("default", api.journey().profile)
+        assertEquals("/api/hermes/journey", server.takeRequest().path)
+        enqueue("""{"summary":{"total_skill_loads":2,"total_skill_edits":1,"total_skill_actions":3,"distinct_skills_used":1},"top_skills":[]}""")
+        assertEquals(3, api.skillUsage(7).totalActions)
+        assertEquals("/api/hermes/skills/usage/stats?days=7", server.takeRequest().path)
+        enqueue("""{"ok":true}"""); api.createWebhook("Build", "https://example.test/hook")
+        assertEquals("/api/studio/webhooks/endpoints", server.takeRequest().path)
+    }
+
+    @Test fun `runtime theme and kanban operations use canonical routes`() {
+        enqueue("""{"platform":"linux","hermes":{"activeVersion":"1","installed":[],"remoteVersions":[]},"webui":{"activeVersion":"2","installed":[],"remoteVersions":[]}}""")
+        assertEquals("linux", api.runtimeVersions().platform)
+        assertEquals("/api/hermes/runtime-versions", server.takeRequest().path)
+        enqueue("""{"fontSize":17,"accentColor":"#ff0000"}""")
+        assertEquals(17, api.themeSettings().fontSize)
+        assertEquals("/api/theme", server.takeRequest().path)
+        enqueue("""{"ok":true}"""); api.kanbanCommand("main", "TASK-1", "block", "waiting")
+        val block = server.takeRequest()
+        assertEquals("/api/hermes/kanban/TASK-1/block?board=main", block.path)
+        assertEquals("waiting", JSONObject(block.body.readUtf8()).getString("reason"))
+    }
+
+    @Test fun `workflow definitions schedules and reruns follow v0712 contracts`() {
+        enqueue("""{"workflow":{"id":"wf","name":"Build","nodes":[],"edges":[]}}""")
+        api.createWorkflow("Build", "default", "/repo", "[]", "[]")
+        assertEquals("/api/studio/workflows", server.takeRequest().path)
+        enqueue("""{"schedule":{"id":"s1"}}""")
+        api.createWorkflowSchedule("wf", "0 9 * * *", "Asia/Riyadh")
+        assertEquals("/api/studio/workflows/wf/schedules", server.takeRequest().path)
+        enqueue("""{"ok":true,"status":"accepted"}""")
+        api.rerunWorkflow("wf", "run", "node")
+        val rerun = server.takeRequest()
+        assertEquals("/api/studio/workflows/wf/runs/run/rerun-from-node", rerun.path)
+        assertEquals("node", JSONObject(rerun.body.readUtf8()).getString("node_id"))
+    }
+
+    @Test fun `session categories batch workspace and export follow Studio contracts`() {
+        enqueue("""{"category":{"id":2,"name":"Work"}}""")
+        api.renameSessionCategory(2, "Work")
+        assertEquals("/api/studio/session-categories/2", server.takeRequest().path)
+        enqueue("""{"ok":true}""")
+        api.setSessionWorkspace("abc", "/repo")
+        assertEquals("/api/studio/sessions/abc/workspace", server.takeRequest().path)
+        enqueue("""{"deleted":2,"failed":0,"errors":[]}""")
+        api.batchDeleteSessions(listOf("a", "b"))
+        val batch = server.takeRequest()
+        assertEquals("/api/studio/sessions/batch-delete", batch.path)
+        assertEquals(2, JSONObject(batch.body.readUtf8()).getJSONArray("sessions").length())
+    }
+
+    @Test
+    fun `conversation history keeps the numeric Studio message timestamp`() {
+        enqueue(
+            """
+            {
+              "messages": [{
+                "id": 42,
+                "role": "assistant",
+                "content": "older reply",
+                "timestamp": 1786800123
+              }]
+            }
+            """.trimIndent(),
+        )
+
+        val message = api.messages("session-1").single()
+
+        assertEquals("1786800123", message.timestamp)
+        assertEquals(
+            "/api/hermes/sessions/conversations/session-1/messages?humanOnly=true",
+            server.takeRequest().path,
+        )
+    }
+
+    @Test
+    fun `generated files use the authenticated Studio download contract`() {
+        val url = api.downloadUrl(
+            "/home/agent/.hermes/profiles/mohamed/workspace/My%20Slides.pptx",
+            "My Slides.pptx",
+            "mohamed",
+        ).toHttpUrl()
+
+        assertEquals("/api/hermes/download", url.encodedPath)
+        assertEquals(
+            "/home/agent/.hermes/profiles/mohamed/workspace/My Slides.pptx",
+            url.queryParameter("path"),
+        )
+        assertEquals("My Slides.pptx", url.queryParameter("name"))
+        assertEquals("mohamed", url.queryParameter("profile"))
+        assertEquals("saved-token", url.queryParameter("token"))
     }
 
     @Test
@@ -98,8 +357,24 @@ class HermesApiContractTest {
     }
 
     @Test
-    fun `transcription remains compatible with servers before profile status`() {
+    fun `conversation context usage and model window preserve Studio values`() {
+        enqueue("""{"messages":[{"id":"1","role":"user","content":"hello"}],"contextTokens":24576}""")
+        enqueue("""{"context_length":131072}""")
+
+        val history = api.conversationHistory("session 1")
+        val window = api.contextLength("manager", "openai", "gpt-5")
+
+        assertEquals(24_576L, history.contextTokens)
+        assertEquals("hello", history.messages.single().content)
+        assertEquals(131_072L, window)
+        assertEquals("/api/hermes/sessions/conversations/session+1/messages?humanOnly=true", server.takeRequest().path)
+        assertEquals("/api/hermes/sessions/context-length?profile=manager&provider=openai&model=gpt-5", server.takeRequest().path)
+    }
+
+    @Test
+    fun `transcription falls back to the settings route used by the official app`() {
         enqueue("""{"error":"Not found"}""", code = 404)
+        enqueue("""{"activeProvider":"groq","providers":[]}""")
         enqueue("""{"text":"legacy transcript"}""")
 
         assertEquals(
@@ -108,8 +383,31 @@ class HermesApiContractTest {
         )
 
         server.takeRequest()
+        assertEquals("/api/hermes/stt/settings?profile=default", server.takeRequest().path)
         val multipart = server.takeRequest().body.readUtf8()
-        assertFalse(multipart.contains("name=\"provider\""))
+        assertTrue(multipart.contains("name=\"provider\""))
+        assertTrue(multipart.contains("\r\n\r\ngroq\r\n"))
+    }
+
+    @Test
+    fun `speech synthesis negotiates and preserves provider audio`() {
+        val wav = "RIFF1234WAVEfmt ".toByteArray()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "audio/wav")
+                .setBody(okio.Buffer().write(wav)),
+        )
+
+        val audio = api.synthesize("default", "هلا والله")
+
+        assertEquals("audio/wav", audio.mime)
+        assertEquals(".wav", audio.extension)
+        assertTrue(wav.contentEquals(audio.bytes))
+        val request = server.takeRequest()
+        assertEquals("/api/hermes/tts/synthesize", request.path)
+        assertEquals("audio/*", request.getHeader("Accept"))
+        assertFalse(JSONObject(request.body.readUtf8()).getJSONObject("options").has("format"))
     }
 
     @Test
@@ -446,6 +744,132 @@ class HermesApiContractTest {
         assertTrue(values.isNull("include"))
         assertEquals(true, values.getBoolean("enabled"))
         assertEquals("unified", values.getString("management"))
+    }
+
+    @Test
+    fun `kanban board task and drag move use Studio contracts`() {
+        enqueue(
+            """{"boards":[{"slug":"product","name":"Product","is_current":true,"counts":{"todo":2,"done":1}}]}""",
+        )
+        val board = api.kanbanBoards().single()
+        assertEquals("product", board.slug)
+        assertEquals(3, board.total)
+
+        enqueue(
+            """{"tasks":[{"id":"task-1","title":"Native mobile board","status":"todo","priority":3,"assignee":"manager","created_at":1710000000,"skills":["android"]},{"id":"task-2","title":"Unassigned","status":"triage","assignee":null,"body":null,"result":null}]}""",
+        )
+        val tasks = api.kanbanTasks("product")
+        val task = tasks.first()
+        assertEquals("manager", task.assignee)
+        assertEquals(listOf("android"), task.skills)
+        assertNull(tasks.last().assignee)
+
+        enqueue("""{"results":[{"id":"task-1","ok":true}]}""")
+        api.moveKanbanTask("product", task.id, "review")
+
+        assertEquals("/api/hermes/kanban/boards", server.takeRequest().path)
+        assertEquals("/api/hermes/kanban?board=product", server.takeRequest().path)
+        val move = server.takeRequest()
+        assertEquals("/api/hermes/kanban/tasks/bulk?board=product", move.path)
+        val body = JSONObject(move.body.readUtf8())
+        assertEquals("review", body.getString("status"))
+        assertEquals("task-1", body.getJSONArray("ids").getString(0))
+    }
+
+    @Test
+    fun `skills target profile toggles and content editor match Studio`() {
+        enqueue(
+            """{"categories":[{"name":"Local","description":"Phone ready","skills":[{"name":"android","description":"Build Android","enabled":true,"source":"local","pinned":true,"useCount":7}]}],"archived":[]}""",
+        )
+        val skill = api.skills("manager", "codex").single().skills.single()
+        assertTrue(skill.pinned)
+        assertEquals(7, skill.useCount)
+        val list = server.takeRequest()
+        assertEquals("/api/hermes/skills?profile=manager&target=codex", list.path)
+        assertEquals("manager", list.getHeader("X-Hermes-Profile"))
+
+        enqueue("""{"success":true}""")
+        api.setSkillEnabled("manager", "android", false)
+        val toggle = server.takeRequest()
+        assertEquals("PUT", toggle.method)
+        assertEquals("/api/hermes/skills/toggle", toggle.path)
+        assertFalse(JSONObject(toggle.body.readUtf8()).getBoolean("enabled"))
+
+        enqueue("""{"success":true}""")
+        api.saveSkill("manager", "Local", "android", "# Android\nNative")
+        val save = server.takeRequest()
+        assertEquals("/api/hermes/skills/Local/android", save.path)
+        assertEquals("# Android\nNative", JSONObject(save.body.readUtf8()).getString("content"))
+    }
+
+    @Test
+    fun `plugin inventory and control preserve encoded keys`() {
+        enqueue(
+            """{"plugins":[{"key":"local/mobile tools","name":"Mobile tools","kind":"standalone","source":"local","configStatus":"configured","effectiveStatus":"enabled","version":"1.2.0","providesTools":["build"],"providesHooks":["after_run"],"requiresEnv":[{"name":"TOKEN"}]}],"warnings":["restart suggested"]}""",
+        )
+        val (plugins, warnings) = api.plugins()
+        val plugin = plugins.single()
+        assertTrue(plugin.enabled)
+        assertTrue(plugin.manageable)
+        assertEquals(listOf("TOKEN"), plugin.requiredEnv)
+        assertEquals(listOf("restart suggested"), warnings)
+        assertEquals("/api/hermes/plugins", server.takeRequest().path)
+
+        enqueue("""{"success":true}""")
+        api.setPluginEnabled(plugin.key, false)
+        assertEquals("/api/hermes/plugins/local%2Fmobile+tools/disable", server.takeRequest().path)
+    }
+
+    @Test
+    fun `MCP inventory preserves advanced config and native mutations`() {
+        enqueue(
+            """{"servers":[{"name":"filesystem","transport":"stdio","connected":true,"tools":3,"tools_registered":2,"tool_details":[{"name":"read_file","description":"Reads a file"}],"raw_config":{"command":"npx","args":["-y","server"],"env":{"ROOT":"/tmp"}}}]}""",
+        )
+        val mcp = api.mcpServers().single()
+        assertTrue(mcp.connected)
+        assertEquals("read_file", mcp.tools.single().name)
+        assertTrue(mcp.rawConfig.contains("ROOT"))
+        assertEquals("/api/hermes/mcp/servers", server.takeRequest().path)
+
+        enqueue("""{"success":true}""")
+        api.saveMcpServer("filesystem", "filesystem", mcp.rawConfig)
+        val update = server.takeRequest()
+        assertEquals("PATCH", update.method)
+        assertEquals("/api/hermes/mcp/servers/filesystem", update.path)
+        assertEquals("npx", JSONObject(update.body.readUtf8()).getJSONObject("config").getString("command"))
+
+        enqueue("""{"ok":true}""")
+        api.testMcpServer("filesystem")
+        assertEquals("/api/hermes/mcp/servers/filesystem/test", server.takeRequest().path)
+    }
+
+    @Test
+    fun `Petdex adoption and active controls stay in the app`() {
+        enqueue(
+            """{"generatedAt":"2026-07-31","total":1,"pets":[{"slug":"luna","displayName":"Luna","kind":"cat","submittedBy":"Hermes","previewUrl":"/pets/luna.png"}]}""",
+        )
+        assertEquals("Luna", api.petdex().single().displayName)
+
+        enqueue(
+            """{"pet":{"enabled":true,"slug":"luna","displayName":"Luna","kind":"cat","scale":1.25,"spritesheetDataUrl":"data:image/png;base64,AQID"}}""",
+        )
+        val active = api.adoptPet("luna")
+        assertEquals(1.25, active.scale, 0.001)
+        val adopt = server.takeRequest()
+        // Consume the manifest request before asserting adoption.
+        assertEquals("/api/hermes/petdex/manifest", adopt.path)
+        val adoptRequest = server.takeRequest()
+        assertEquals("/api/hermes/pets/adopt", adoptRequest.path)
+        assertEquals("luna", JSONObject(adoptRequest.body.readUtf8()).getString("slug"))
+
+        enqueue(
+            """{"pet":{"enabled":false,"slug":"luna","displayName":"Luna","kind":"cat","scale":0.8}}""",
+        )
+        api.updateActivePet(enabled = false, scale = .8)
+        val patch = server.takeRequest()
+        assertEquals("PATCH", patch.method)
+        assertEquals("/api/hermes/pets/active", patch.path)
+        assertFalse(JSONObject(patch.body.readUtf8()).getBoolean("enabled"))
     }
 
     @Test

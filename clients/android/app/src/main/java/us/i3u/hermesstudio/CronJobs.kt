@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -101,6 +102,7 @@ internal fun CronJobsScreen(state: UiState, viewModel: AppViewModel) {
                 },
             )
         },
+        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -349,6 +351,7 @@ internal fun CronJobEditorScreen(state: UiState, viewModel: AppViewModel) {
                 onBack = { viewModel.back() },
             )
         },
+        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -618,7 +621,10 @@ private fun CronPickerField(
                     )
                 }
             }
-            Text("›", fontSize = 22.sp)
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+            )
         }
     }
 }
@@ -726,6 +732,7 @@ internal fun CronHistoryScreen(state: UiState, viewModel: AppViewModel) {
                 },
             )
         },
+        bottomBar = { StudioTabs(state, viewModel) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),

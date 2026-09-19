@@ -5,11 +5,24 @@
   See docs/adding-a-language.md.
 -->
 <resources>
-    <string name="app_name">Core Hub</string>
+    <string name="app_name">Hermes Studio</string>
+    <string name="launcher_name">H Studio</string>
 
     <!-- Shared actions and labels -->
     <string name="action_back">Back</string>
     <string name="action_refresh">Refresh</string>
+    <string name="message_actions">Message actions</string>
+    <string name="message_copy">Copy</string>
+    <string name="message_reply">Reply</string>
+    <string name="message_fork">Fork conversation</string>
+    <string name="message_replying">Replying to</string>
+    <string name="composer_expand">Open message composer</string>
+    <string name="skills_write_approval">Approve skill changes</string>
+    <string name="skills_write_approval_note">Require approval before the agent creates or modifies skills.</string>
+    <string name="skills_pending_approvals">Pending skill approvals (%1$d)</string>
+    <string name="skills_approve">Approve</string>
+    <string name="skills_reject">Reject</string>
+    <string name="conversation_jump_latest">Jump to latest message</string>
     <string name="action_dismiss">Dismiss</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_ok">OK</string>
@@ -26,10 +39,10 @@
     <!-- First run: launch screen and walkthrough -->
     <string name="intro_restoring">Restoring your session…</string>
     <string name="intro_chat_title">Your agents, on your phone</string>
-    <string name="intro_chat_body">A native client for Core Hub. Read your conversations, keep talking to your agents, attach photos and files, and dictate with your voice.</string>
+    <string name="intro_chat_body">A native client for Hermes Studio. Read your conversations, keep talking to your agents, attach photos and files, and dictate with your voice.</string>
     <string name="intro_server_title">You bring the server</string>
-    <string name="intro_server_body">This app is only the front end. It needs a Core Hub server that you run and control — there is no hosted service behind it.</string>
-    <string name="intro_server_step_install">Install Core Hub on a machine or VPS you own</string>
+    <string name="intro_server_body">This app is only the front end. It needs a Hermes Studio server that you run and control — there is no hosted service behind it.</string>
+    <string name="intro_server_step_install">Install Hermes Studio on a machine or VPS you own</string>
     <string name="intro_server_step_https">Make it reachable over HTTPS, for example https://hermes.example.com</string>
     <string name="intro_server_step_return">Come back here with that address and your login</string>
     <string name="intro_privacy_title">Nothing leaves your server</string>
@@ -52,16 +65,33 @@
     <string name="chats_tab">Chats</string>
     <string name="chats_all_profiles">All profiles</string>
     <string name="chats_empty">No conversations yet</string>
-    <string name="chats_section">CONVERSATIONS</string>
+    <string name="chats_section">conversations</string>
 
     <!-- Group chat -->
-    <string name="groups_title">Group chat</string>
+    <string name="groups_title">Groups</string>
     <string name="groups_tab">Groups</string>
     <string name="groups_empty">No rooms yet</string>
     <string name="groups_section">ROOMS</string>
     <string name="groups_counts">%1$d agents · %2$d members</string>
     <string name="room_title">Room</string>
     <string name="room_empty">No messages in this room yet</string>
+
+    <!-- Agent hub -->
+    <string name="agent_hub_title">Agent</string>
+    <string name="agent_hub_tab">Agent</string>
+    <string name="agent_hub_profile">Active profile: %1$s</string>
+    <string name="agent_hub_tools">Agent tools</string>
+    <string name="agent_hub_configuration">Agent configuration</string>
+    <string name="agent_hub_work">Work</string>
+    <string name="agent_hub_capabilities">Capabilities</string>
+    <string name="agent_hub_intelligence">Intelligence</string>
+    <string name="agent_status_active">Active</string>
+    <string name="agent_status_ready">Ready</string>
+    <string name="agent_hub_kanban">Kanban</string>
+    <string name="agent_hub_skills">Skills</string>
+    <string name="agent_hub_plugins">Plugins</string>
+    <string name="agent_hub_mcp">MCP</string>
+    <string name="agent_hub_pets">Pets</string>
 
     <!-- Conversation -->
     <string name="conversation_empty">Send a message to %1$s</string>
@@ -70,14 +100,25 @@
     <string name="conversation_your_agent">your agent</string>
     <string name="conversation_thinking">Thinking…</string>
     <string name="conversation_tool">Running %1$s…</string>
+    <string name="thinking_title">Thinking</string>
+    <string name="thinking_expand">Show thinking details</string>
+    <string name="thinking_collapse">Hide thinking details</string>
+    <string name="tool_status_done">Completed</string>
+    <string name="tool_status_failed">Failed</string>
     <string name="conversation_stop">Stop</string>
     <string name="reasoning_show">Reasoning</string>
+    <string name="download_action">Download file</string>
+    <string name="download_started">Downloading %1$s</string>
+    <string name="download_description">File from the %1$s profile</string>
+    <string name="download_failed">Could not download the file: %1$s</string>
 
     <!-- Composer -->
     <string name="composer_hint">Type a message…</string>
     <string name="composer_recording">Recording…</string>
+    <string name="context_usage">Context %1$s / %2$s</string>
+    <string name="context_loading">Context…</string>
+    <string name="context_unknown">Context —</string>
     <string name="composer_transcribing">Transcribing…</string>
-    <string name="composer_send_audio">Send audio</string>
     <string name="composer_uploading">Uploading…</string>
     <string name="composer_send">Send</string>
     <string name="composer_record">Record voice</string>
@@ -98,6 +139,7 @@
     <string name="reasoning_low">Low</string>
     <string name="reasoning_medium">Medium</string>
     <string name="reasoning_high">High</string>
+    <string name="reasoning_extra_high">Extra high</string>
     <string name="reasoning_use_profile">Use the profile default</string>
 
     <!-- Profiles -->
@@ -108,12 +150,27 @@
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
+    <string name="more_settings_title">More settings</string>
+    <string name="more_settings_note">All Hermes Studio settings in one place</string>
+    <string name="more_settings_footer">Agent tools stay in the Agent tab. Studio configuration is collected here to keep navigation simple.</string>
+    <string name="more_settings_subtitle">Studio settings in one place</string>
+    <string name="more_settings_studio">Studio behavior</string>
+    <string name="more_settings_agent">Agent</string>
+    <string name="more_settings_conversation">Conversation</string>
+    <string name="more_settings_network_privacy">Network &amp; privacy</string>
+    <string name="more_settings_management">Management</string>
     <string name="settings_section_server">Server</string>
     <string name="settings_section_profile">Active profile</string>
     <string name="settings_section_appearance">Appearance</string>
     <string name="settings_section_device">This device</string>
     <string name="settings_section_account">Account</string>
     <string name="settings_section_about">About</string>
+    <string name="settings_section_studio">Studio</string>
+    <string name="settings_studio_connection">Studio connection</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="appearance_system">System</string>
+    <string name="appearance_light">Light</string>
+    <string name="appearance_dark">Dark</string>
     <string name="settings_address">Address</string>
     <string name="settings_address_missing">not set</string>
     <string name="settings_account">Account</string>
@@ -137,7 +194,17 @@
     <string name="settings_reasoning_note">Reasoning effort is chosen per conversation from the + menu in the composer.</string>
     <string name="settings_sign_out_note">Removes the stored token from this device</string>
     <string name="settings_version">Version</string>
-    <string name="settings_about_note">Unofficial community client for Core Hub. Generated profile pictures: avatars by Multiavatar.com.</string>
+    <string name="update_available_title">Update available</string>
+    <string name="update_available_body">A newer Android build is ready on GitHub. Download and install it now?</string>
+    <string name="update_install">Update now</string>
+    <string name="update_later">Later</string>
+    <string name="update_downloading">Downloading update…</string>
+    <string name="update_failed">Could not download the update</string>
+    <string name="update_permission">Allow updates from Hermes Studio, then return and tap Update now again.</string>
+    <string name="settings_about_note">Unofficial community client for Hermes Studio. Generated profile pictures: avatars by Multiavatar.com.</string>
+    <string name="settings_phone_name">Hermes Studio Mobile</string>
+    <string name="settings_phone_github">Hermes Studio Mobile</string>
+    <string name="settings_studio_github">Hermes Studio</string>
 
     <string name="action_rename">Rename</string>
     <string name="action_delete">Delete</string>
@@ -173,6 +240,7 @@
     <string name="settings_channels_summary">%1$d of %2$d set up</string>
     <string name="channels_title">Channels</string>
     <string name="channel_configured">set up</string>
+    <string name="channel_connected">Connected</string>
     <string name="channel_missing">not set up</string>
     <string name="channel_off">turned off</string>
     <string name="channel_enabled">Enabled</string>
@@ -184,8 +252,96 @@
     <string name="channel_clear_title">Remove %1$s credentials?</string>
     <string name="channel_clear_body">The stored values are deleted from the server and the channel stops answering.</string>
     <string name="channel_note">Saving writes the values into your server and restarts the gateway so the channel picks them up.</string>
+    <string name="channel_credentials_section">Credentials</string>
+    <string name="channel_behavior_section">Behavior and access</string>
+    <string name="channel_exclusive_warning">This platform uses exclusive token locking. Each profile must use a different identity token to avoid conflicts with other profiles.</string>
+    <string name="channel_show_secret">Show value</string>
+    <string name="channel_hide_secret">Hide value</string>
+    <string name="channel_qr_link">Link Weixin with QR</string>
+    <string name="channel_qr_ready">Open a QR code and complete pairing without leaving the app.</string>
+    <string name="channel_qr_loading">Fetching a new QR code…</string>
+    <string name="channel_qr_waiting">Scan the code that opened, then return here.</string>
+    <string name="channel_qr_scanned">Code scanned — confirm the link in Weixin.</string>
+    <string name="channel_qr_confirmed">Weixin is linked.</string>
+    <string name="channel_qr_expired">The QR code expired. Tap to try again.</string>
+    <string name="channel_qr_error">Could not complete QR linking. Tap to retry.</string>
+    <string name="channel_bot_token">Bot token</string>
+    <string name="channel_bot_token_hint">Bot token from the developer portal</string>
+    <string name="channel_proxy_url">Proxy URL</string>
+    <string name="channel_proxy_url_hint">Optional platform proxy; supports HTTP, HTTPS and SOCKS5</string>
+    <string name="channel_require_mention">Require @mention</string>
+    <string name="channel_require_mention_group">Require @mention in groups to respond</string>
+    <string name="channel_require_mention_channel">Require @mention in channels to respond</string>
+    <string name="channel_require_mention_room">Require @mention in rooms to respond</string>
+    <string name="channel_reactions">Reactions</string>
+    <string name="channel_reactions_hint">React to messages with emoji</string>
+    <string name="channel_free_response_chats">Free response chats</string>
+    <string name="channel_free_response_chats_hint">Chat IDs that respond without @mention, comma-separated</string>
+    <string name="channel_free_response_channels">Free response channels</string>
+    <string name="channel_free_response_channels_hint">Channel IDs that respond without @mention, comma-separated</string>
+    <string name="channel_free_response_rooms">Free response rooms</string>
+    <string name="channel_free_response_rooms_hint">Room IDs that respond without @mention, comma-separated</string>
+    <string name="channel_mention_patterns">Custom mention patterns</string>
+    <string name="channel_mention_patterns_hint">Additional trigger patterns, comma-separated</string>
+    <string name="channel_auto_thread">Auto thread</string>
+    <string name="channel_auto_thread_channel">Create reply threads automatically after @mention</string>
+    <string name="channel_auto_thread_room">Create reply threads automatically in rooms</string>
+    <string name="channel_allow_bots">Allow bot messages</string>
+    <string name="channel_allow_bots_hint">Respond to messages from other bots</string>
+    <string name="channel_allowed_channels">Allowed channels</string>
+    <string name="channel_allowed_channels_hint">Whitelist channel IDs, comma-separated</string>
+    <string name="channel_ignored_channels">Ignored channels</string>
+    <string name="channel_ignored_channels_hint">Channels where the bot never responds</string>
+    <string name="channel_no_thread_channels">No-thread channels</string>
+    <string name="channel_no_thread_channels_hint">Channels where the bot responds without threads</string>
+    <string name="channel_whatsapp_enabled">WhatsApp enabled</string>
+    <string name="channel_whatsapp_enabled_hint">Enable the paired WhatsApp channel</string>
+    <string name="channel_access_token">Access token</string>
+    <string name="channel_access_token_hint">Matrix access token</string>
+    <string name="channel_matrix_user_id">Matrix user ID</string>
+    <string name="channel_matrix_user_id_hint">Required with password login; optional with an access token</string>
+    <string name="channel_matrix_password">Matrix password</string>
+    <string name="channel_matrix_password_hint">Alternative to an access token</string>
+    <string name="channel_homeserver">Homeserver URL</string>
+    <string name="channel_homeserver_hint">Matrix homeserver URL</string>
+    <string name="channel_dm_mention_threads">DM mention threads</string>
+    <string name="channel_dm_mention_threads_hint">Use thread replies for mentions in direct messages</string>
+    <string name="channel_app_id">App ID</string>
+    <string name="channel_app_id_hint">Platform application ID</string>
+    <string name="channel_app_secret">App secret</string>
+    <string name="channel_app_secret_hint">Platform application secret</string>
+    <string name="channel_encrypt_key">Encrypt key</string>
+    <string name="channel_encrypt_key_hint">Feishu encryption key</string>
+    <string name="channel_verification_token">Verification token</string>
+    <string name="channel_verification_token_hint">Feishu verification token</string>
+    <string name="channel_client_id">Client ID</string>
+    <string name="channel_client_id_hint">DingTalk client ID</string>
+    <string name="channel_client_secret">Client secret</string>
+    <string name="channel_client_secret_hint">DingTalk client secret</string>
+    <string name="channel_app_key">App key</string>
+    <string name="channel_app_key_hint">DingTalk app key</string>
+    <string name="channel_card_template_id">Card template ID</string>
+    <string name="channel_card_template_id_hint">DingTalk AI card template ID</string>
+    <string name="channel_allow_all_users">Allow all users</string>
+    <string name="channel_allow_all_users_hint">Allow messages from any user</string>
+    <string name="channel_allowed_users">Allowed users</string>
+    <string name="channel_allowed_users_hint">Allowed user IDs, comma-separated</string>
+    <string name="channel_qq_app_id">QQ app ID</string>
+    <string name="channel_qq_app_id_hint">QQ bot app ID</string>
+    <string name="channel_qq_secret">QQ app secret</string>
+    <string name="channel_qq_secret_hint">QQ bot client secret</string>
+    <string name="channel_qq_markdown">Markdown support</string>
+    <string name="channel_qq_markdown_hint">Render supported Markdown in QQ replies</string>
+    <string name="channel_weixin_token">Weixin token</string>
+    <string name="channel_weixin_token_hint">Token returned by Weixin login</string>
+    <string name="channel_account_id">Account ID</string>
+    <string name="channel_account_id_hint">Connected Weixin account ID</string>
+    <string name="channel_bot_id">Bot ID</string>
+    <string name="channel_bot_id_hint">WeCom bot ID</string>
+    <string name="channel_wecom_secret_hint">WeCom bot secret</string>
     <string name="notice_channel_saved">%1$s saved — the gateway is restarting</string>
     <string name="notice_channel_cleared">%1$s credentials removed</string>
+    <string name="notice_weixin_linked">Weixin linked — the gateway is restarting</string>
     <string name="settings_auto_start_note">When this is on, your server starts each profile’s gateway on boot, so channels answer without anyone opening Studio.</string>
 
     <string name="settings_group_server">Server and account</string>
@@ -222,7 +378,7 @@
     <string name="cron_create">Create job</string>
     <string name="cron_edit">Edit job</string>
     <string name="cron_empty">No scheduled jobs yet for this profile.</string>
-    <string name="cron_form_note">This job is stored and run by your Core Hub server under the active profile.</string>
+    <string name="cron_form_note">This job is stored and run by your Hermes Studio server under the active profile.</string>
     <string name="cron_name">Name</string>
     <string name="cron_name_hint">Daily inbox summary</string>
     <string name="cron_schedule">Schedule (Cron expression)</string>
@@ -301,11 +457,11 @@
     <string name="notice_logo_from_server">Using the logo from your Studio server</string>
     <string name="notice_default_model">Default model for %1$s is now %2$s</string>
     <string name="notice_gateway_restarting">Gateway restarting for %1$s</string>
-    <!-- Full Core Hub settings -->
+    <!-- Full Hermes Studio settings -->
     <string name="settings_category_account">Account</string>
     <string name="settings_category_profile">Active profile</string>
     <string name="settings_category_integrations">Integrations and automation</string>
-    <string name="settings_category_app">Interface and app</string>
+    <string name="settings_category_app">App</string>
     <string name="settings_group_users">Account management</string>
     <string name="settings_group_users_note">Create users, roles, status, and profile access</string>
     <string name="settings_group_models">Model providers</string>
@@ -451,4 +607,200 @@
     <string name="agent_management">Unified gateway management</string>
     <string name="agent_management_note">Let the default profile manage every profile gateway</string>
     <string name="agent_excluded_profiles">Profiles excluded from automatic start</string>
+
+    <string name="action_search">Search</string>
+    <string name="agent_hub_kanban_note">Mobile boards with drag-to-move tasks</string>
+    <string name="agent_hub_skills_note">Browse, enable, import, and edit agent skills</string>
+    <string name="agent_hub_plugins_note">Inspect and control Studio plugins</string>
+    <string name="agent_hub_mcp_note">Manage MCP servers and their tools</string>
+    <string name="agent_hub_pets_note">Choose and configure your companion</string>
+
+    <string name="kanban_title">Kanban</string>
+    <string name="kanban_mobile_note">Your Studio task boards, built for mobile</string>
+    <string name="kanban_add">Add task</string>
+    <string name="kanban_default_board">Default board</string>
+    <string name="kanban_drag_hint">Hold a card, then drag left or right to move it between stages.</string>
+    <string name="kanban_empty">No tasks here</string>
+    <string name="kanban_empty_note">Create a task or clear the search to see the board.</string>
+    <string name="kanban_move">Move task</string>
+    <string name="kanban_hold_drag">Hold and drag</string>
+    <string name="kanban_task">Task</string>
+    <string name="kanban_details">Details</string>
+    <string name="kanban_priority">Priority</string>
+    <string name="kanban_assignee">Assignee</string>
+    <string name="kanban_unassigned">Unassigned</string>
+    <string name="kanban_skills">Skills</string>
+    <string name="kanban_result">Result</string>
+    <string name="kanban_summary">Latest summary</string>
+    <string name="kanban_comments">Comments · %1$d</string>
+    <string name="kanban_comment_hint">Add a comment</string>
+    <string name="kanban_comment_add">Post comment</string>
+    <string name="kanban_runs">Runs · %1$d</string>
+    <string name="kanban_new_task">New task</string>
+    <string name="kanban_task_title">Task title</string>
+    <string name="kanban_description">Description</string>
+    <string name="kanban_priority_value">Priority %1$d</string>
+    <string name="kanban_skills_hint">Skills, separated by commas</string>
+    <string name="kanban_send_triage">Send to triage first</string>
+    <string name="kanban_created">Task created</string>
+    <string name="kanban_status_triage">Triage</string>
+    <string name="kanban_status_todo">To do</string>
+    <string name="kanban_status_scheduled">Scheduled</string>
+    <string name="kanban_status_ready">Ready</string>
+    <string name="kanban_status_running">Running</string>
+    <string name="kanban_status_blocked">Blocked</string>
+    <string name="kanban_status_review">Review</string>
+    <string name="kanban_status_done">Done</string>
+    <string name="kanban_status_archived">Archived</string>
+
+    <string name="skills_title">Skills</string>
+    <string name="skills_subtitle">Profile: %1$s</string>
+    <string name="skills_import">Import skill ZIP</string>
+    <string name="skills_search">Search skills</string>
+    <string name="skills_empty">No matching skills</string>
+    <string name="skills_empty_note">Try another target, clear the search, or import a skill package.</string>
+    <string name="skills_no_description">No description</string>
+    <string name="skills_uses">%1$d uses</string>
+    <string name="skills_pin">Pin skill</string>
+    <string name="skills_skill">Skill</string>
+    <string name="skills_delete_title">Delete skill?</string>
+    <string name="skills_delete_note">%1$s will be removed from Studio.</string>
+    <string name="skills_imported">Imported %1$s</string>
+    <string name="skills_saved">Skill saved</string>
+
+    <string name="plugins_title">Plugins</string>
+    <string name="plugins_summary">%1$d enabled · %2$d total</string>
+    <string name="plugins_search">Search plugins</string>
+    <string name="plugins_enabled_only">Enabled only</string>
+    <string name="plugins_empty">No matching plugins</string>
+    <string name="plugins_empty_note">Clear the filter or install plugins in Hermes Studio.</string>
+    <string name="plugins_tools">%1$d tools</string>
+    <string name="plugins_hooks">%1$d hooks</string>
+    <string name="plugins_env">%1$d environment values</string>
+    <string name="plugins_managed_by_studio">Managed by Studio</string>
+
+    <string name="mcp_title">MCP servers</string>
+    <string name="mcp_summary">%1$d connected · %2$d total</string>
+    <string name="mcp_reload_all">Reload all servers</string>
+    <string name="mcp_add">Add MCP server</string>
+    <string name="mcp_empty">No MCP servers</string>
+    <string name="mcp_empty_note">Add a local command or remote HTTP/SSE server.</string>
+    <string name="mcp_tools">%1$d/%2$d tools registered</string>
+    <string name="mcp_test">Test</string>
+    <string name="mcp_reload">Reload</string>
+    <string name="mcp_delete_title">Delete MCP server?</string>
+    <string name="mcp_delete_note">%1$s and its configuration will be removed.</string>
+    <string name="mcp_edit">Edit server</string>
+    <string name="mcp_name">Server name</string>
+    <string name="mcp_command">Command</string>
+    <string name="mcp_url">Server URL</string>
+    <string name="mcp_args">Arguments, one per line</string>
+    <string name="mcp_advanced_json">Advanced JSON</string>
+
+    <string name="pets_title">Petdex</string>
+    <string name="pets_count">%1$d companions</string>
+    <string name="pets_active">Active companion</string>
+    <string name="pets_scale">Size: %1$.1f×</string>
+    <string name="pets_search">Search companions</string>
+    <string name="pets_empty">No companions found</string>
+    <string name="pets_empty_note">Clear the search or refresh the Petdex manifest.</string>
+    <string name="pets_adopt">Adopt</string>
+    <string name="pets_adopted_button">Adopted</string>
+    <string name="pets_adopted">Your new companion is active</string>
+    <string name="insights_title">Insights</string>
+    <string name="insights_subtitle">Token usage and Studio runtime</string>
+    <string name="insights_days">%1$d days</string>
+    <string name="insights_usage">Usage</string>
+    <string name="insights_tokens">Tokens</string>
+    <string name="insights_sessions">Sessions</string>
+    <string name="insights_cost">Estimated cost</string>
+    <string name="insights_cache">Cache tokens</string>
+    <string name="insights_by_model">By model</string>
+    <string name="insights_runtime">Runtime</string>
+    <string name="insights_memory">System memory</string>
+    <string name="insights_workers">Bridge workers</string>
+    <string name="insights_live_sessions">Live sessions</string>
+    <string name="voice_stop_reply">Stop voice</string>
+    <string name="voice_playback_failed">The voice reply could not be played. Check the TTS provider in Studio.</string>
+    <string name="agent_runtimes_title">Agents</string>
+    <string name="agent_runtimes_subtitle">Choose the runtime that owns this conversation. Studio organizes five agents into three clear families.</string>
+    <string name="agent_runtimes_hub_note">Hermes, Ekko, Claude Code, Codex and Pi</string>
+    <string name="agent_family_hermes">Hermes family</string>
+    <string name="agent_family_ekko">Ekko family</string>
+    <string name="agent_family_coding">Coding agents</string>
+    <string name="agent_runtime_ready">Ready</string>
+    <string name="agent_runtime_not_installed">Not installed</string>
+    <string name="agent_runtime_unavailable">Unavailable</string>
+    <string name="run_approval_title">Approval required</string>
+    <string name="run_clarification_title">Agent question</string>
+    <string name="run_clarification_answer">Your answer</string>
+    <string name="run_action_resuming">Resuming the agent…</string>
+    <string name="action_approve">Approve</string>
+    <string name="action_reject">Reject</string>
+    <string name="approval_once">Allow once</string>
+    <string name="approval_session">Allow for session</string>
+    <string name="approval_always">Always allow</string>
+    <string name="session_archive">Archive</string>
+    <string name="session_unarchive">Unarchive</string>
+    <string name="session_archived">Conversation archived</string>
+    <string name="session_unarchived">Conversation restored</string>
+    <string name="session_move_category">Move to %1$s</string>
+    <string name="session_new_category">New category</string>
+    <string name="session_category_name">Category name</string>
+    <string name="workflows_title">Workflows</string>
+    <string name="workflows_hub_note">Run, monitor and approve automated work</string>
+    <string name="workflows_mobile_note">A touch-friendly view of Studio workflows, recent runs and approval gates.</string>
+    <string name="workflows_empty">No workflows in this profile</string>
+    <string name="workflow_run">Run</string>
+    <string name="workflow_run_title">Run %1$s</string>
+    <string name="workflow_input">Optional input</string>
+    <string name="workflow_summary">%1$s · %2$d nodes · %3$d connections</string>
+    <string name="global_agent_title">Global Agent</string>
+    <string name="global_agent_hub_note">One persistent agent across Studio devices</string>
+    <string name="global_agent_description">Continue a persistent Global Agent conversation using Studio’s built-in Ekko runtime.</string>
+    <string name="global_agent_profile">Active profile: %1$s</string>
+    <string name="global_agent_open">Open Global Agent chat</string>
+    <string name="global_agent_remote_note">The conversation remains on Studio and can continue from another connected device.</string>
+    <string name="action_stop">Stop</string>
+    <string name="global_agent_sessions">Recent sessions</string>
+    <string name="ekko_hub_title">Ekko configuration</string>
+    <string name="ekko_hub_note">Memory, skills and MCP owned by Ekko</string>
+    <string name="ekko_memory_title">Memory</string>
+    <string name="ekko_memory_edit">Edit memory</string>
+    <string name="ekko_memory_name">Title</string>
+    <string name="ekko_memory_content">Content</string>
+    <string name="ekko_skills_title">Skills</string>
+    <string name="ekko_mcp_title">MCP servers</string>
+    <string name="ekko_mcp_edit">MCP server</string>
+    <string name="ekko_mcp_test_ok">MCP connection succeeded</string>
+    <string name="profile_restart">Restart profile runtime</string>
+    <string name="profile_restarted">Profile runtime restarted</string>
+    <string name="models_refresh">Refresh models</string>
+    <string name="models_refreshed">Provider models refreshed</string>
+    <string name="action_test">Test</string>
+    <string name="action_add">Add</string>
+    <string name="profile_runtime_status">Runtime: %1$s</string>
+    <string name="files_title">Studio Files</string><string name="files_hub_note">Browse and edit profile workspace files</string><string name="files_new_folder">New folder</string><string name="files_edit">Read or edit</string><string name="files_open_external">Open externally</string><string name="files_saved">File saved</string>
+    <string name="logs_title">Logs</string><string name="logs_hub_note">Studio, bridge and agent diagnostics</string>
+    <string name="connections_title">Connections</string><string name="connections_hub_note">App Relay and paired Studio devices</string><string name="app_relay_title">App Relay</string><string name="devices_title">Devices</string><string name="connected">Connected</string><string name="disconnected">Disconnected</string><string name="connect">Connect</string><string name="disconnect">Disconnect</string><string name="refresh_pairing">New pairing code</string>
+    <string name="insights_by_agent">By agent</string><string name="insights_daily">Daily usage</string>
+    <string name="files_upload">Upload</string><string name="files_download">Download or open</string><string name="files_copy_to">Copy to path</string>
+    <string name="authorize_lan">Authorize LAN</string><string name="authorize_cloud">Authorize cloud</string><string name="authorization_code">Authorization code</string><string name="app_connections_title">Authorized apps</string>
+    <string name="profile_make_active">Make active profile</string><string name="profile_export">Export profile</string>
+    <string name="ekko_skill_new">New Ekko skill</string>
+    <string name="profile_import">Import profile</string><string name="profile_avatar">Choose profile avatar</string><string name="profile_avatar_clear">Remove profile avatar</string>
+    <string name="profile_export_started">Profile export started</string><string name="ekko_external_dirs">External directories</string><string name="revoke_connection">Revoke app connection?</string><string name="manual_device">Add device manually</string><string name="block">Block</string><string name="unblock">Unblock</string>
+    <string name="name">Name</string>
+    <string name="journey_title">Journey</string><string name="journey_note">Skill and memory graph with usage</string>
+    <string name="webhooks_title">Webhooks</string><string name="webhooks_note">Delivery endpoints, tests, and local events</string><string name="webhooks_add">Add webhook</string><string name="clear_events">Clear events</string><string name="local_events">Local test events</string>
+    <string name="runtime_versions_title">Runtime versions</string><string name="runtime_versions_note">Install, activate, and restart managed runtimes</string><string name="restart_webui">Restart Web UI</string><string name="activate">Activate</string>
+    <string name="appearance_title">Appearance</string><string name="appearance_note">Studio colors, text, and background</string><string name="font_size">Font size</string><string name="text_color">Text color</string><string name="accent_color">Accent color</string><string name="remove_background">Remove background</string><string name="upload_background">Upload background</string>
+    <string name="kanban_operations">Operations and diagnostics</string><string name="kanban_dispatch">Dispatch</string><string name="kanban_complete">Complete</string><string name="kanban_reassign">Reassign</string>
+    <string name="action_send">Send</string>
+    <string name="workflow_editor">Workflow editor</string><string name="workflow_workspace">Workspace</string><string name="workflow_schedule_add">Add schedule</string><string name="workflow_timezone">Timezone</string><string name="workflow_rerun">Rerun</string><string name="workflow_batch_delete">Delete workflows</string><string name="workflow_batch_delete_body">Delete all %1$d workflows?</string>
+    <string name="session_export">Export session</string><string name="session_workspace">Session workspace</string><string name="session_category_edit">Edit category</string><string name="load_more">Load more</string><string name="session_batch_delete">Delete shown sessions</string><string name="session_batch_delete_body">Delete all %1$d sessions currently shown?</string>
+    <string name="queued_run_summary">Queued %1$d · %2$s</string>
+    <string name="queued_run_insert">Run next</string>
+    <string name="queued_run_cancel">Cancel queued message</string>
+    <string name="background_agent_summary">%1$s · %2$s</string>
 </resources>
