@@ -55,7 +55,7 @@ describe('Core Hub branding without a data or deployment migration', () => {
     expect(text.match(/packages\/container\/\$\{\{ inputs\.image_repo \}\}/g)).toHaveLength(2)
     expect(text.match(/packages\/container\/core-hub\b/g)).toBeNull()
     // Every image reference goes through the input; no literal package name is left behind.
-    const imageReferences = text.match(/ghcr\.io\/twuijri\/[^\s:"']+/g) || []
+    const imageReferences = text.match(/ghcr\.io\/twuijri\/(?:\$\{\{ inputs\.image_repo \}\}|[a-z-]+)/g) || []
     expect(imageReferences.length).toBeGreaterThan(5)
     expect(new Set(imageReferences)).toEqual(new Set(['ghcr.io/twuijri/${{ inputs.image_repo }}']))
     expect(text).toContain('--install-agents')
