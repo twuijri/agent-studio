@@ -140,4 +140,3 @@ private struct StudioLogDetail: View { @EnvironmentObject var store: AppStore; l
     var body: some View { List { SearchBar(text: $search); Picker("Level", selection: $level) { Text("All").tag(""); ForEach(["error","warn","info","debug"], id: \.self) { Text($0.capitalized).tag($0) } }.pickerStyle(.segmented); ForEach(entries) { entry in VStack(alignment: .leading, spacing: 4) { HStack { StatusPill(text: entry.level, color: entry.level == "error" ? .red : (entry.level == "warn" ? .orange : .blue)); Text(entry.timestamp).font(.caption2).foregroundStyle(.secondary) }; Text(entry.message.nilIfEmpty ?? entry.raw).font(.caption.monospaced()).textSelection(.enabled) } } }.navigationTitle(file.name).task(id: "\(search)|\(level)") { try? await Task.sleep(for: .milliseconds(250)); entries = (await store.attempt({ try await store.api.logEntries(file.name, text: search, level: level) })) ?? entries } }
 }
 
-}
