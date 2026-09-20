@@ -103,7 +103,6 @@ packages/server/src/
         workflows.ts
         group-chat.ts
         global-agent.ts
-        pets.ts
         logs.ts
         voice.ts
       controllers/
@@ -128,7 +127,6 @@ packages/server/src/
         workflows.ts
         group-chat.ts
         global-agent.ts
-        pets.ts
         logs.ts
         voice.ts
       services/
@@ -163,7 +161,6 @@ packages/server/src/
         workflow/
         group-chat/
         global-agent/
-        pets/
         voice/
           stt/
           tts/
@@ -186,7 +183,6 @@ packages/server/src/
         chat-run.ts
         group-chat.ts
         global-agent.ts
-        pets.ts
 
     hermes/                        # Hermes Agent-owned API and behavior
       index.ts                     # exposes factory/registration to bootstrap
@@ -330,7 +326,7 @@ registry. Studio orchestration never imports a concrete agent module.
 | Studio update and Version Preview | Studio | Upgrades/restarts `hermes-web-ui`, not Hermes Agent. |
 | Auth, users, devices, files, app connections, relay, social messages | Studio | Product/platform capabilities shared across agents. |
 | Single Chat (Chat Run), Workflow, Group Chat, Global Agent | Studio | Cross-agent run and orchestration surfaces; dispatch through agent contracts. |
-| Pets/Petdex and aggregate logs | Studio | Stored or presented as Studio product state. |
+| Aggregate logs | Studio | Stored or presented as Studio product state. |
 | Common config, credentials, provider contracts, voice, run/session/usage helpers | Studio | Shared capabilities exposed through `studio/public` or `studio/contracts`. |
 | Studio SQLite tables and repositories | Studio | Application state owned by the Web UI. |
 | Hermes profiles, bridge, gateway, skills, plugins, memory, terminal, cron | Hermes | Direct Hermes Agent behavior or state. |

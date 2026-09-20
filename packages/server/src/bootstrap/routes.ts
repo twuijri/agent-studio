@@ -69,8 +69,6 @@ import { ekkoMemoryRoutes } from '../modules/ekko/routes/memory'
 import { ekkoSkillRoutes } from '../modules/ekko/routes/skills'
 import { ekkoMcpRoutes } from '../modules/ekko/routes/mcp'
 import { ekkoConfigRoutes } from '../modules/ekko/routes/config'
-import { petdexPublicRoutes, petdexRoutes } from '../modules/studio/routes/petdex'
-import { petRoutes } from '../modules/studio/routes/pets'
 import { legacyAppApiCompatibility } from '../modules/studio/middleware/legacy-app-api'
 
 /**
@@ -89,7 +87,6 @@ export function registerRoutes(app: any, authMiddleware: Array<(ctx: Context, ne
   app.use(codexProxyRoutes.routes())
   app.use(ttsRoutes.routes())
   app.use(apiDocsRoutes.routes())
-  app.use(petdexPublicRoutes.routes())
   app.use(groupChatPublicRoutes.routes())
   app.use(chatWebhookPublicRoutes.routes())
 
@@ -152,6 +149,4 @@ export function registerRoutes(app: any, authMiddleware: Array<(ctx: Context, ne
   app.use(runtimeVersionRoutes.routes())         // Runtime and version management
   app.use(legacyDataMigrationRoutes.routes())    // One-time legacy Windows Hermes data migration
   app.use(writeGateRoutes.routes())              // Hermes Agent write approval review
-  app.use(petdexRoutes.routes())
-  app.use(petRoutes.routes())
 }

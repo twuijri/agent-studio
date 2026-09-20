@@ -116,10 +116,6 @@ vi.mock('../../packages/server/src/modules/studio/public/profile-config', () => 
   getProfileDir: vi.fn(() => '/tmp/hermes-default'),
 }))
 
-vi.mock('../../packages/server/src/modules/studio/public/pet-events', () => ({
-  observeRunChatPetEvent: vi.fn(),
-}))
-
 vi.mock('../../packages/server/src/modules/studio/public/logging', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
