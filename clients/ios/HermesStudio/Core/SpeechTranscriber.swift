@@ -28,6 +28,9 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
     @Published private(set) var transcript = ""
     /// Set when recognition ended with an error and produced no text.
     @Published var lastError: String?
+    /// Live input level for the recording strip, read from the same tap that
+    /// feeds the recogniser (≈ 20 Hz). Flat while the microphone is closed.
+    @Published private(set) var waveform = RecordingWaveform()
 
     private let audioEngine = AVAudioEngine()
     private var recognizer: SFSpeechRecognizer?
@@ -74,8 +77,14 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
         inputNode.removeTap(onBus: 0)
+        // One tap, two readers: the recogniser gets every buffer, the strip
+        // gets a level from the same buffer about twenty times a second.
+        let meter = AudioLevelTap { [weak self] level in
+            Task { @MainActor in self?.waveform.push(level) }
+        }
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             request.append(buffer)
+            meter.process(buffer)
         }
         audioEngine.prepare()
         do {
@@ -90,6 +99,7 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
         self.request = request
         self.onUpdate = onUpdate
         transcript = ""; lastError = nil
+        waveform.reset()
         isListening = true; isFinishing = false
 
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
@@ -125,6 +135,7 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
         isFinishing = true
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
+        waveform.reset()
         request?.endAudio()
         finishTimeout?.cancel()
         finishTimeout = Task { [weak self] in
@@ -144,6 +155,7 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
         onUpdate = nil
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
+        waveform.reset()
         request?.endAudio()
         task?.cancel()
         cleanUp()

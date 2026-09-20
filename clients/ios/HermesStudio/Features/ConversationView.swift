@@ -199,7 +199,8 @@ struct ConversationView: View {
             reasoningEffort: stream.reasoningEffort ?? store.reasoningEffort, showToolCalls: store.showToolCalls,
             voiceMode: store.autoSpeakReplies, pushEnabled: stream.pushEnabled ?? session.pushEnabled,
             voiceState: dictation.voice, isRecording: recorder.isRecording, recordingElapsed: recorder.elapsed,
-            speechLanguage: store.activeSpeechLanguageLabel(for: session.profile)
+            speechLanguage: store.activeSpeechLanguageLabel(for: session.profile),
+            waveform: recorder.isRecording ? recorder.waveform : speech.waveform
         )
     }
 
@@ -210,6 +211,8 @@ struct ConversationView: View {
         actions.queue = { queueCurrentMessage() }
         actions.mic = { Task { await dictationRunner.toggle() } }
         actions.micLanguage = { openSpeechLanguagePicker() }
+        actions.cancelDictation = { dictationRunner.cancel() }
+        actions.stopDictation = { dictationRunner.stop() }
         actions.attachCamera = { if CameraPicker.isAvailable { showingCamera = true } else { store.errorMessage = String(localized: "No camera is available on this device.") } }
         actions.attachPhotos = { showingPhotos = true }
         actions.attachFiles = { importing = true }

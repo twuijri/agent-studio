@@ -7,6 +7,9 @@ import Foundation
 final class VoiceRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     @Published var isRecording = false
     @Published var elapsed: TimeInterval = 0
+    /// Live input level for the recording strip on the server path, from the
+    /// recorder's own metering (≈ 20 Hz). Flat while not recording.
+    @Published private(set) var waveform = RecordingWaveform()
     private var recorder: AVAudioRecorder?
     private var timer: Timer?
     private var outputURL: URL?
@@ -49,19 +52,30 @@ final class VoiceRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("hermes-\(UUID().uuidString).wav")
         let recorder = try AVAudioRecorder(url: url, settings: Self.wavSettings)
         recorder.delegate = self
+        recorder.isMeteringEnabled = true
         guard recorder.record() else {
             try? session.setActive(false)
             throw RecorderError.startFailed
         }
         self.recorder = recorder; outputURL = url; elapsed = 0; isRecording = true
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.elapsed = self?.recorder?.currentTime ?? 0 }
+        waveform.reset()
+        timer = Timer.scheduledTimer(withTimeInterval: AudioLevelMeter.publishInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.meter() }
         }
+    }
+
+    /// One tick of the recording: the elapsed time and one bar of the strip.
+    private func meter() {
+        guard let recorder else { return }
+        elapsed = recorder.currentTime
+        recorder.updateMeters()
+        waveform.push(AudioLevelMeter.normalized(decibels: Double(recorder.averagePower(forChannel: 0))))
     }
 
     /// Stops recording and returns the WAV file, or `nil` when nothing was recorded.
     func stop() -> URL? {
         recorder?.stop(); recorder = nil; timer?.invalidate(); timer = nil; isRecording = false
+        waveform.reset()
         try? AVAudioSession.sharedInstance().setActive(false)
         let url = outputURL; outputURL = nil
         return url
