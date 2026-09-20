@@ -437,6 +437,16 @@ final class AppStore: ObservableObject {
         path.append(destination)
     }
 
+    /// An Agent Manager card. The agent screen has to be an element of
+    /// `path` (a value push): its capability rows are value links, and a
+    /// `NavigationStack(path:)` honours those only from a path-tracked
+    /// screen (the rule in `RootShell.swift`). `focusedAgentID` goes first
+    /// because the `.agent*` cases carry no payload.
+    func openAgent(_ agentID: String) {
+        focusedAgentID = agentID
+        push(AgentFamily(agentID: agentID).destination)
+    }
+
     func popToRoot() {
         if !path.isEmpty { path = NavigationPath() }
         shownDestination = nil

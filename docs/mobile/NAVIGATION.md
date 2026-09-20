@@ -105,8 +105,8 @@
 - **Hermes** (`HermesConfigSidebar.vue:67-241`): `Jobs` · `Kanban` · `Channels`
   · `Skills` · `Plugins` · `MCP` · `Memory` (متصفّح الذاكرة) · `Journey` ·
   `Settings` بتبويبات `Agent` · `Memory` · `Session` (الأخيرة تحوي الموافقات
-  وموافقات المهارات وإعادة الضبط). بطاقة Hermes تحمل أيضًا «تفاصيل CLI» و
-  «إدارة وقت التشغيل» (إصدارات وقت التشغيل).
+  وموافقات المهارات وإعادة الضبط). بطاقة Hermes تحمل أيضًا «تفاصيل CLI».
+  مثبّت وقت التشغيل ليس على الهاتف (وقت التشغيل جزء من صورة الخادم).
 - **Ekko** (`EkkoConfigSidebar.vue:54-79`): `Memory` · `Skills` · `MCP` ·
   `Settings` (تبويبات: Runtime, Model, Compression, Tools, Modules, Advanced).
 - **وكيل برمجة** (`CodingAgentConfigSidebar.vue:19-24`): [`Plugins` · `Presets`

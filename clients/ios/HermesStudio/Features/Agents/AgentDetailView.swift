@@ -6,12 +6,19 @@ import SwiftUI
 ///
 /// - Hermes (`HermesConfigSidebar.vue:67-241`): Jobs · Kanban · Channels ·
 ///   Skills · Plugins · MCP · Memory · Journey · Settings, plus the card's
-///   CLI details and "Manage runtime".
+///   CLI details. The web's "Manage runtime" (the runtime installer) is not
+///   on the phone: the runtime ships in the server image (Docker) and the
+///   installer is the desktop app's.
 /// - Ekko (`EkkoConfigSidebar.vue:54-79`): Memory · Skills · MCP · Settings.
 /// - Coding agent (`CodingAgentConfigSidebar.vue:19-24`): [Plugins · Presets
 ///   for dsh] · Skills · MCP · Settings, with install/update/remove on the card.
 ///
 /// Everything here acts on the **Core Hub host**, never on the iPhone.
+///
+/// This screen is reached by value only (`AgentScreenLoader` for the
+/// `.agent*` cases; the Agent Manager card calls `store.openAgent`). Its
+/// rows are `NavigationLink(value:)`, and those resolve only from a screen
+/// that is in `store.path` — see the rule in `RootShell.swift`.
 struct AgentDetailView: View {
     @EnvironmentObject private var store: AppStore
 
@@ -73,11 +80,6 @@ struct AgentDetailView: View {
                 Text(agent.error).font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.error)
             }
             ForEach(agent.installations, id: \.path) { installation in AgentInstallationRow(installation: installation) }
-            if family == .hermes {
-                // The Hermes card's "Manage runtime" (`AgentManagerView.vue:517-536`):
-                // the only way to the runtime versions.
-                NavigationLink { RuntimeVersionsView() } label: { Label("Manage runtime", systemImage: "shippingbox.and.arrow.backward.fill") }
-            }
         } footer: {
             Text(footerNote)
         }
@@ -85,7 +87,7 @@ struct AgentDetailView: View {
 
     private var footerNote: LocalizedStringKey {
         switch family {
-        case .hermes: return "Core Hub installs complete runtime packages; it never installs the Hermes CLI on its own."
+        case .hermes: return "The Hermes runtime is part of the Core Hub server image. Install or update it on the server or in the desktop app, not from the phone."
         case .ekko: return "Ekko ships with Core Hub, so it is never installed or removed."
         case .coding: return "Everything on this screen runs on the Core Hub server, not on this iPhone."
         }
@@ -228,10 +230,7 @@ struct AgentDetailView: View {
         defer { working = "" }
         do {
             let result = try await store.api.installCodingAgent(agent.id)
-            // A failed npm run still answers 200, so the flag decides.
-            actionNote = result.success
-                ? String(localized: "Installed.")
-                : (result.message.nilIfEmpty ?? String(localized: "The install did not finish."))
+            actionNote = AgentInstallOutcome.note(success: result.success, message: result.message)
         } catch {
             actionNote = error.localizedDescription
         }
@@ -274,6 +273,17 @@ struct AgentDetailView: View {
             store.errorMessage = error.localizedDescription
         }
         await reload()
+    }
+}
+
+/// The note after `POST /api/coding-agents/{id}/install`. A failed npm run
+/// still answers HTTP 200, so the flag decides, and the server's message
+/// wins over the generic text. Shared by the detail screen's install/update
+/// buttons and the card's `Update` (`AgentManagerView`).
+enum AgentInstallOutcome {
+    static func note(success: Bool, message: String) -> String {
+        if success { return String(localized: "Installed.") }
+        return message.nilIfEmpty ?? String(localized: "The install did not finish.")
     }
 }
 

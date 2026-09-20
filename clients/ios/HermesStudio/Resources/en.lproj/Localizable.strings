@@ -168,14 +168,11 @@
 "Structured" = "Structured";
 "Skills Usage" = "Skills Usage";
 "Webhooks" = "Webhooks";
-"Runtime Versions" = "Runtime Versions";
 "Dispatch ready tasks" = "Dispatch ready tasks";
 "Preview dispatch" = "Preview dispatch";
 "Board health" = "Board health";
 "Webhook delivered" = "Webhook delivered";
 "Webhook failed" = "Webhook failed";
-"Download started" = "Download started";
-"Restart requested" = "Restart requested";
 "Explore connected skills and memories" = "Explore connected skills and memories";
 "See skill loads, edits and trends" = "See skill loads, edits and trends";
 "Deliver Studio chat events" = "Deliver Studio chat events";
@@ -288,7 +285,6 @@
 "On-device speech is unavailable for %@; using the Core Hub server" = "On-device speech is unavailable for %@; using the Core Hub server";
 "The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead." = "The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead.";
 
-"Download" = "Download";
 "Open with Quick Look" = "Open with Quick Look";
 "Downloading…" = "Downloading…";
 
@@ -721,11 +717,11 @@
 "Command" = "Command";
 "Connected, %lld tools." = "Connected, %lld tools.";
 "Core Hub did not return an agent inventory." = "Core Hub did not return an agent inventory.";
-"Core Hub installs complete runtime packages; it never installs the Hermes CLI on its own." = "Core Hub installs complete runtime packages; it never installs the Hermes CLI on its own.";
 "Core Hub reports these agents but this version of the app has no screen for them yet." = "Core Hub reports these agents but this version of the app has no screen for them yet.";
 "Core Hub uninstalls the package on the server and stops any session using it." = "Core Hub uninstalls the package on the server and stops any session using it.";
 "Default model updated" = "Default model updated";
 "Delete this provider" = "Delete this provider";
+"The Hermes runtime is part of the Core Hub server image. Install or update it on the server or in the desktop app, not from the phone." = "The Hermes runtime is part of the Core Hub server image. Install or update it on the server or in the desktop app, not from the phone.";
 "Ekko ships with Core Hub, so it is never installed or removed." = "Ekko ships with Core Hub, so it is never installed or removed.";
 "Everything on this screen runs on the Core Hub server, not on this iPhone." = "Everything on this screen runs on the Core Hub server, not on this iPhone.";
 "In use" = "In use";
@@ -778,7 +774,7 @@
 "Unknown" = "Unknown";
 "Unknown version" = "Unknown version";
 "Up to date" = "Up to date";
-"Update %@" = "Update %@";
+"Update" = "Update";
 "Update available" = "Update available";
 "Update status" = "Update status";
 "Update to %@" = "Update to %@";
@@ -879,7 +875,6 @@
 "Make default" = "Make default";
 "Use as default" = "Use as default";
 "New dsh sessions start from the default preset. Choose it here; copying a preset and editing its file need the desktop client." = "New dsh sessions start from the default preset. Choose it here; copying a preset and editing its file need the desktop client.";
-"Manage runtime" = "Manage runtime";
 "Maximum tokens" = "Maximum tokens";
 "Maximum tool calls" = "Maximum tool calls";
 "Message push" = "Message push";

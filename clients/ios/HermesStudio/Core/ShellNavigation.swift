@@ -45,6 +45,17 @@ enum AgentFamily: Equatable {
         }
     }
 
+    /// The registry case that opens this agent's screen (`AgentScreenLoader`);
+    /// the three cases carry no payload, so `store.focusedAgentID` is set
+    /// alongside (`AppStore.openAgent`).
+    var destination: NavDestination {
+        switch self {
+        case .hermes: return .agentHermes
+        case .ekko: return .agentEkko
+        case .coding: return .agentCoding
+        }
+    }
+
     /// The `target` query of `/api/hermes/skills` (`CodingAgentConfigView.vue`).
     var skillTarget: String {
         switch self {

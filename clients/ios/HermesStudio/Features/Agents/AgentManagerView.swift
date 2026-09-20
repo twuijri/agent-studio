@@ -17,6 +17,8 @@ struct AgentManagerView: View {
     @State private var loading = true
     /// Shown when the inventory had to be rebuilt from a narrower endpoint.
     @State private var inventoryNote = ""
+    /// Agents whose card `Update` is running on the server right now.
+    @State private var updating: Set<String> = []
 
     var body: some View {
         List {
@@ -42,7 +44,9 @@ struct AgentManagerView: View {
                 .accessibilityLabel("Refresh")
             }
         }
-        .task { await load() }
+        // `onAppear`, not `task`: it fires again when an agent screen pops
+        // back, so an install or update done there shows on the cards.
+        .onAppear { Task { await load() } }
     }
 
     // MARK: Sections
@@ -69,12 +73,33 @@ struct AgentManagerView: View {
         }
     }
 
+    /// The card pushes by value (`store.openAgent` → `.agentHermes` /
+    /// `.agentEkko` / `.agentCoding`, loaded by `AgentScreenLoader`). A
+    /// view-destination link here put the agent screen outside `store.path`,
+    /// and its capability rows — value links — stopped working; see the rule
+    /// in `RootShell.swift`.
     private func row(_ agent: AgentRuntimeStatus) -> some View {
-        NavigationLink {
-            AgentDetailView(agent: agent, tool: tools[agent.id], policy: policies[agent.id]) { await load() }
-        } label: {
-            AgentSummaryRow(agent: agent, tool: tools[agent.id], policy: policies[agent.id])
+        Button { store.openAgent(agent.id) } label: {
+            AgentSummaryRow(agent: agent, tool: tools[agent.id], policy: policies[agent.id], updating: updating.contains(agent.id)) {
+                await update(agent)
+            }
         }
+        .tint(CoreHubTokens.Palette.textPrimary)
+    }
+
+    /// The card's `Update`: the same `npm install -g` on the Core Hub host
+    /// that the detail screen's "Update to vX" runs.
+    private func update(_ agent: AgentRuntimeStatus) async {
+        updating.insert(agent.id)
+        do {
+            let result = try await store.api.installCodingAgent(agent.id)
+            let note = AgentInstallOutcome.note(success: result.success, message: result.message)
+            if result.success { store.notify(note) } else { store.errorMessage = note }
+        } catch {
+            store.errorMessage = error.localizedDescription
+        }
+        await load()
+        updating.remove(agent.id)
     }
 
     // MARK: Loading
@@ -115,7 +140,7 @@ struct AgentManagerView: View {
     private func reprobe() async {
         loading = true
         _ = try? await store.api.codingAgents()
-        _ = try? await store.api.runtimeVersions(remote: false)
+        try? await store.api.probeHermesRuntime()
         loading = false
         await load()
     }
@@ -136,12 +161,18 @@ struct AgentManagerView: View {
     }
 }
 
-/// One agent in the list: logo, name, provider, install state, and the one
-/// line of detail that matters (source and version, or the error).
+/// One agent in the list: logo, name, provider, the one line of detail that
+/// matters (source and version, or the error), and at the trailing edge the
+/// state pill with the compact `Update` button under it. The row is the
+/// label of the card's button, so nothing here navigates on its own; the
+/// `Update` button is `.bordered`, which is what makes a tap on it stay on
+/// the button instead of opening the card.
 struct AgentSummaryRow: View {
     let agent: AgentRuntimeStatus
     let tool: CodingAgentTool?
     let policy: AgentUpdatePolicy?
+    let updating: Bool
+    let update: () async -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -154,14 +185,15 @@ struct AgentSummaryRow: View {
                 detail
             }
             Spacer(minLength: 0)
-            StatusPill(
-                text: agent.installed ? String(localized: "Installed") : String(localized: "Not installed"),
-                color: agent.installed ? CoreHubTokens.Palette.success : CoreHubTokens.Palette.warning
-            )
+            trailing
+            CoreHubIconView(icon: .chevronForward, size: 14).foregroundStyle(CoreHubTokens.Palette.textMuted)
         }
         .padding(.vertical, 3)
     }
 
+    /// The version line, unchanged: `Local CLI · v0.154.0`, or the error.
+    /// The offered version no longer sits here as a pill; that is the
+    /// `Update` button's job, and the version stays on one line.
     @ViewBuilder
     private var detail: some View {
         if !agent.error.isEmpty {
@@ -171,13 +203,52 @@ struct AgentSummaryRow: View {
                 Text(AgentSourceLabel.text(agent.source))
                 Text(verbatim: "·")
                 Text(AgentSourceLabel.version(agent.version.nilIfEmpty ?? tool?.version ?? ""))
-                if let offered = policy?.offeredVersion.nilIfEmpty {
-                    StatusPill(text: String(localized: "Update \(AgentSourceLabel.version(offered))"), color: CoreHubTokens.Palette.info)
-                }
             }
             .font(CoreHubTokens.Typography.metaFont)
             .foregroundStyle(CoreHubTokens.Palette.textMuted)
         }
+    }
+
+    /// A trailing-aligned column: the state pill, and under it `Update` when
+    /// the policy offers a newer version. `.trailing` follows the layout
+    /// direction, so in Arabic the column hugs the left edge with the chevron
+    /// beside it, mirroring the rest of the row.
+    private var trailing: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            StatusPill(
+                text: agent.installed ? String(localized: "Installed") : String(localized: "Not installed"),
+                color: agent.installed ? CoreHubTokens.Palette.success : CoreHubTokens.Palette.warning
+            )
+            if agent.installed, let offered = policy?.offeredVersion.nilIfEmpty {
+                AgentUpdateButton(offeredVersion: offered, working: updating, run: update)
+            }
+        }
+    }
+}
+
+/// The compact update control of a card. Label only — the offered version
+/// is spoken by accessibility, not drawn — so the control never wraps
+/// (`lineLimit(1)` + `fixedSize`); build 41 drew "Update v0.155.1" as a pill
+/// that broke over three lines inside a circle.
+struct AgentUpdateButton: View {
+    let offeredVersion: String
+    let working: Bool
+    let run: () async -> Void
+
+    var body: some View {
+        Button { Task { await run() } } label: {
+            if working {
+                ProgressView().controlSize(.mini)
+            } else {
+                Text("Update").lineLimit(1).fixedSize()
+            }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(CoreHubTokens.Palette.info)
+        .font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.meta, weight: .semibold))
+        .disabled(working)
+        .accessibilityLabel(Text("Update to \(AgentSourceLabel.version(offeredVersion))"))
     }
 }
 

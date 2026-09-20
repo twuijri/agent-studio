@@ -500,12 +500,12 @@ final class APIClient: @unchecked Sendable {
     func localWebhookTarget() async throws -> JSON { try await object("/api/studio/webhooks/local-test-target") }
     func localWebhookEvents() async throws -> [JSON] { try await array("/api/studio/webhooks/local-test-events", keys: ["events"]) }
     func clearLocalWebhookEvents() async throws { _ = try await object("/api/studio/webhooks/local-test-events", method: "DELETE") }
-    func runtimeVersions(remote: Bool = true) async throws -> RuntimeVersionStatus { RuntimeVersionStatus(try await object("/api/hermes/runtime-versions?remote=\(remote ? "true" : "false")")) }
-    func runtimeJobs() async throws -> [JSON] { try await array("/api/hermes/runtime-versions/jobs", keys: ["jobs"]) }
-    func downloadVersion(_ version: String, kind: String, source: String) async throws { _ = try await object("/api/hermes/runtime-versions/\(kind)/download", method: "POST", body: ["version": version, "source": source]) }
-    func activateVersion(_ version: String, kind: String) async throws { _ = try await object("/api/hermes/runtime-versions/active-\(kind == "runtime" ? "runtime" : "webui")", method: "POST", body: ["version": version]) }
-    func deleteVersion(_ version: String, kind: String) async throws { _ = try await object("/api/hermes/runtime-versions/\(kind)/\(version.urlEncoded)", method: "DELETE") }
-    func restartVersionedWebUI() async throws { _ = try await object("/api/hermes/runtime-versions/restart-webui", method: "POST") }
+    /// `GET /api/hermes/runtime-versions?remote=false` for its side effect
+    /// only: the server re-probes the Hermes CLI and fills the agent status
+    /// registry (`AgentManagerView.reprobe`). The runtime installer itself
+    /// (download, activate, delete, restart) has no screen on the phone: the
+    /// runtime ships in the server image and the installer is the desktop's.
+    func probeHermesRuntime() async throws { _ = try await object("/api/hermes/runtime-versions?remote=false") }
     func themeSettings() async throws -> ThemeSettings { ThemeSettings(try await object("/api/theme")) }
     func saveTheme(fontSize: Double, textColor: String?, accentColor: String?) async throws -> ThemeSettings {
         let body: JSON = [
