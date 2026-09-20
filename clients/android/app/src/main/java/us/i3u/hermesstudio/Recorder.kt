@@ -23,6 +23,15 @@ class Recorder {
 
     val isRecording: Boolean get() = record != null
 
+    /**
+     * The level (0…1) of each chunk as it is captured, measured from the PCM
+     * this recorder is already writing — the recording strip's waveform for a
+     * server take, without opening the microphone a second time. Called on
+     * the reader thread.
+     */
+    @Volatile
+    var onLevel: ((Float) -> Unit)? = null
+
     /** Opens the microphone; throws with a reason when the device refuses. */
     @SuppressLint("MissingPermission") // RECORD_AUDIO is requested by the composer before this runs.
     fun start() {
@@ -48,7 +57,12 @@ class Recorder {
             val chunk = ByteArray(4_096)
             while (running) {
                 val read = instance.read(chunk, 0, chunk.size)
-                if (read > 0) synchronized(pcm) { pcm.write(chunk, 0, read) } else if (read < 0) break
+                if (read > 0) {
+                    synchronized(pcm) { pcm.write(chunk, 0, read) }
+                    onLevel?.invoke(DictationLevels.fromPcm16(chunk, read))
+                } else if (read < 0) {
+                    break
+                }
             }
         }, "voice-recorder").also { it.start() }
     }

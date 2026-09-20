@@ -148,6 +148,9 @@ object CoreHubTokens {
 
         /** Unread halo around the 6 px dot. */
         const val UNREAD_HALO = SELECTED
+
+        /** A waveform bar that heard nothing is a dot at 40 % of the accent. */
+        const val WAVEFORM_IDLE = 0.4f
     }
 
     /** Type ramp. Inter/system sans for text, JetBrains Mono/monospace for code. */
@@ -367,6 +370,21 @@ object CoreHubTokens {
         val actionButton: Dp = 24.dp
         val composerButton: Dp = 30.dp
         val composerMinHeight: Dp = 150.dp
+
+        /**
+         * The recording strip's waveform, between the ✕ and the ■: 36 bars
+         * 2 dp wide and 2 dp apart, never shorter than a 2 dp dot, drawn as
+         * tall as the round controls beside them, one new bar every 50 ms.
+         * The strip fades in and out with [transitionFastMs], the drawer's
+         * own tween. The same numbers as the iOS client's.
+         */
+        const val waveformBars = 36
+        const val waveformTickMs = 50L
+        val waveformBar: Dp = 2.dp
+        val waveformGap: Dp = 2.dp
+        val waveformDot: Dp = 2.dp
+        val waveformHeight: Dp = composerButton
+        val waveformPaddingH: Dp = 10.dp
         val contextBarWidth: Dp = 42.dp
         val contextBarHeight: Dp = 4.dp
         val workspaceIcon: Dp = 12.dp

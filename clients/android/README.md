@@ -163,6 +163,32 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   instead, which records a 16 kHz WAV and transcribes it with the STT provider
   configured in Studio. The mic shows idle, listening, transcribing and error states,
   and every failure is shown in words
+- **A recording mode, modelled on the Claude app's.** Tapping the microphone turns the
+  row of pills under the text into a recording strip — a round **✕** at the leading
+  edge, a **live waveform** filling the middle, a round **■** and the round **↑** —
+  with the drawer's 150 ms fade (an immediate swap when animations are off in the
+  system settings). The transcript keeps appearing in the field above and the field
+  stays editable throughout. The three endings are different things: **✕ cancels** the
+  take and puts the draft back exactly as it was before the take began; **■ stops** it
+  and keeps the text, and the pills return; **↑ stops** it and sends once the engine's
+  final text has landed in the draft. The mic's long press still opens the language
+  list whenever the strip is not showing
+  - The waveform is **real audio levels, from the source already open**: the
+    recognizer's own `onRmsChanged` reading for an on-device take (about −2…10 dB on
+    Google's engine, normalised to 0…1), or the PCM the server recorder is already
+    capturing. Nothing opens the microphone a second time. Levels go through the same
+    `AudioLevelMeter` as on iOS — instant attack, an exponential release of 0.8 per
+    50 ms tick, idle under 0.06 — and are published about twenty times a second on a
+    flow of their own, so the strip redraws without recomposing the composer.
+    Thirty-six bars in the accent, newest last; a bar that heard nothing is a dot at
+    40 %
+  - The strip **mirrors under RTL** so ✕ stays at the leading edge, while the waveform
+    itself is a timeline and stays pinned LTR. TalkBack meets the same three controls
+    with the same labels and hints as VoiceOver on iOS, and the waveform's description
+    names the take's language and the current level (*Recording in العربية, Level 40 %*)
+  - The rules (`RecordingStrip.kt`) and the levels (`DictationLevels.kt`,
+    `AudioLevelMeter`) are pure and covered by unit tests; only the drawing
+    (`ui/chat/RecordingStripRow.kt`, `RecordingWaveform`) is Compose
 - **Dictation language, per profile**: *Settings → Dictation language* chooses what the
   microphone listens for — *follow the app language* (the default, and what earlier
   builds always did), a specific language, or *detect automatically*. **Long-press the
@@ -301,7 +327,8 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   "{used} / {limit} · remaining {rest}" top-end (amber above 80 %), a borderless 16 sp
   textarea that never auto-focuses, and the toolbar [+ attach]
   [🧠 reasoning] [⚙ Voice mode · Show tool calls · Push] [model] … [mic] [send / stop].
-  Pill labels collapse to icons on narrow phones. Attachments go through the chunked
+  Pill labels collapse to icons on narrow phones. While dictating the same row is the
+  recording strip [✕] [waveform] [■] [↑] (see *Voice* above). Attachments go through the chunked
   `POST /api/studio/app-uploads` (256 KiB PUTs, 50 MB max) with a progress chip that can
   be cancelled; a server without the route falls back to `/upload`
 - **One composer, two screens**: the conversation and a group room draw the same
@@ -402,6 +429,15 @@ app/src/main/java/us/i3u/hermesstudio/
   ContentDirection.kt     per-paragraph first-strong content direction, the Android
                           half of docs/CONTENT-DIRECTION.md
   DictationHint.kt        how often the mic long-press is worth mentioning
+  DictationLevels.kt      the recording strip's levels: dB → 0…1, the AudioLevelMeter
+                          (instant attack, 0.8 release per tick), the 36-bar history,
+                          and the PCM measure for a server take
+  RecordingStrip.kt       the strip's rules: idle → recording → stop / cancel / send,
+                          with the draft ✕ restores and the send ↑ defers until the
+                          final text has landed
+  ui/chat/RecordingStripRow.kt
+                          the strip itself: ✕ · waveform canvas · ■ · ↑, and the
+                          reduced-motion check
   ProfileScope.kt         the one rule for which profile a screen acts under
   ui/chat/                conversation screen, chat header, message rows (bubbles, tool
                           card, thinking block, action row, media), run cards

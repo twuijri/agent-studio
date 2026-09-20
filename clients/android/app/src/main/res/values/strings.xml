@@ -785,6 +785,13 @@
     <string name="composer_listening">Listening…</string>
     <string name="composer_stop_listening">Stop listening</string>
     <string name="composer_voice_failed">Voice input failed</string>
+    <string name="composer_dictation_cancel">Cancel dictation</string>
+    <string name="composer_dictation_cancel_hint">Discards what was dictated and restores the draft</string>
+    <string name="composer_dictation_stop">Stop dictation</string>
+    <string name="composer_dictation_stop_hint">Keeps the text and closes the recording strip</string>
+    <string name="composer_recording_label">Recording</string>
+    <string name="composer_recording_in">Recording in %1$s</string>
+    <string name="composer_recording_level">Level %1$d%%</string>
     <string name="notice_voice_fallback_server">Speech recognition is not available on this device, so the Core Hub server is used instead.</string>
     <string name="error_stt_not_configured">The Core Hub server has no speech-to-text provider ready: %1$s</string>
     <string name="error_speech_no_match">No speech was recognized</string>
