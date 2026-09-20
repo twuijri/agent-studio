@@ -117,6 +117,14 @@ enum CoreHubTokens {
         static let thinkingText = 0.85
         /// An idle bar of the recording strip's waveform (drawn as a dot).
         static let waveformIdle = 0.40
+        /// Agent Manager (`AgentManagerScreen.kt`): the state pill, the
+        /// `Update` pill and a capability row's icon tile sit on their
+        /// colour at 16 %; a disabled `Update` at 8 %; the "runs on the
+        /// server" note on info at 10 %.
+        static let agentPill = 0.16
+        static let agentPillDisabled = 0.08
+        static let agentNoteFill = 0.10
+        static let agentIconTile = 0.16
     }
 
     // MARK: Typography (system sans / system mono)
@@ -190,6 +198,11 @@ enum CoreHubTokens {
         /// Category tag, workspace chip.
         static let tag: CGFloat = 4
         static let segment: CGFloat = 5
+        /// An Agent Manager card and a settings row (`AgentManagerScreen.kt`,
+        /// `SettingsRowContent`): the composer radius.
+        static let agentCard: CGFloat = 18
+        /// The "runs on the server" note above the agent list.
+        static let agentNote: CGFloat = 12
     }
 
     // MARK: Shadows (CSS `0 y blur alpha`; SwiftUI radius ≈ blur / 2)
@@ -281,6 +294,79 @@ enum CoreHubTokens {
         static let sheetHeaderHeight: CGFloat = 60
         static let sheetGroupHeaderHeight: CGFloat = 30
         static let sheetFooterHeight: CGFloat = 84
+
+        /// Every screen's horizontal gutter (`StudioHorizontalPadding`).
+        static let screenPaddingH: CGFloat = 16
+
+        /**
+         Agent Manager (`clients/android/.../ui/agents/AgentManagerScreen.kt`,
+         the reference the owner chose): a list 10 apart inside 16 × 8/28,
+         section headers 8 below the item above them, cards at the composer
+         radius with a 1 pt border and 16 of padding, lines 8 apart; a 34 pt
+         avatar 12 from the name; the state pill and the `Update` pill 6
+         apart at the trailing edge (10 × 5 and 12 × 5 of padding); the
+         actions row 6 apart — a 40 pt outlined pill (24 of padding, a 16 pt
+         gear 6 from its label) and 40 pt text buttons (12 of padding).
+         The button heights and paddings are Material's `ButtonDefaults`.
+         */
+        static let agentListPaddingTop: CGFloat = 8
+        static let agentListPaddingBottom: CGFloat = 28
+        static let agentListGap: CGFloat = 10
+        static let agentSectionTop: CGFloat = 8
+        static let agentNotePadding: CGFloat = 12
+        static let agentCardPadding: CGFloat = 16
+        static let agentCardGap: CGFloat = 8
+        static let agentCardBorder: CGFloat = 1
+        static let agentCardAvatar: CGFloat = 34
+        static let agentCardAvatarGap: CGFloat = 12
+        static let agentCardTrailingGap: CGFloat = 6
+        static let agentPillPaddingH: CGFloat = 10
+        static let agentPillPaddingV: CGFloat = 5
+        static let agentUpdatePaddingH: CGFloat = 12
+        static let agentActionGap: CGFloat = 6
+        static let agentActionHeight: CGFloat = 40
+        static let agentActionIcon: CGFloat = 16
+        static let agentActionIconGap: CGFloat = 6
+        static let agentOutlinedPaddingH: CGFloat = 24
+        static let agentTextButtonPaddingH: CGFloat = 12
+
+        /**
+         The agent screen (`AgentScreen.kt` + `StudioDestinationRow`): items
+         12 apart, a 40 pt avatar, and capability rows with a 38 pt icon tile
+         (bubble radius, 20 pt glyph) 12 from the title, 12 × 9 of padding,
+         and dividers indented 66.
+         */
+        static let agentScreenGap: CGFloat = 12
+        static let agentScreenAvatar: CGFloat = 40
+        static let agentRowIconTile: CGFloat = 38
+        static let agentRowIcon: CGFloat = 20
+        static let agentRowIconGap: CGFloat = 12
+        static let agentRowPaddingH: CGFloat = 12
+        static let agentRowPaddingV: CGFloat = 9
+        static let agentRowDividerInset: CGFloat = 66
+
+        /**
+         Settings rows (`SettingsRowContent` / `SettingsSection` in
+         `MainActivity.kt`): a card at the composer radius inside a 16 × 4
+         margin, 16 × 14 of padding, a 24 pt glyph 14 from two lines, a
+         section label inside 22 / 18 / 22 / 4, hints inside 20 × 4; the
+         Material tab row is 48 tall with a 2 pt indicator; the loading row
+         is a 22 pt spinner inside 16.
+         */
+        static let settingsRowOuterV: CGFloat = 4
+        static let settingsRowPaddingH: CGFloat = 16
+        static let settingsRowPaddingV: CGFloat = 14
+        static let settingsRowGap: CGFloat = 14
+        static let settingsRowIcon: CGFloat = 24
+        static let settingsSectionPaddingH: CGFloat = 22
+        static let settingsSectionPaddingTop: CGFloat = 18
+        static let settingsSectionPaddingBottom: CGFloat = 4
+        static let settingsHintPaddingH: CGFloat = 20
+        static let settingsHintPaddingV: CGFloat = 4
+        static let tabRowHeight: CGFloat = 48
+        static let tabIndicator: CGFloat = 2
+        static let loadingRowPadding: CGFloat = 16
+        static let loadingRowSpinner: CGFloat = 22
 
         static let longPress: Double = 0.5
         static let recentDefault = 10

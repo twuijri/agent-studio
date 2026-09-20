@@ -59,14 +59,32 @@ enum StudioSettingsSection: String {
             .toggle("notify_on_complete", "Completion notification", false), .number("chat_input_height", "Chat input height", 0),
         ]
         case .proxy: return [.text("HTTPS_PROXY", "HTTPS proxy"), .text("HTTP_PROXY", "HTTP proxy"), .text("ALL_PROXY", "All-protocol proxy"), .text("NO_PROXY", "Exclude hosts")]
-        case .agent: return [.number("max_turns", "Maximum turns", 0), .number("gateway_timeout", "Gateway timeout", 0), .number("restart_drain_timeout", "Restart drain timeout", 30), .choice("tool_use_enforcement", "Tool use", "auto", ["auto", "required", "off"])]
-        case .memory: return [.toggle("memory_enabled", "Memory enabled", true), .toggle("user_profile_enabled", "User profile memory", true), .number("memory_char_limit", "Memory character limit", 2000), .number("user_char_limit", "User context limit", 2000), .toggle("write_approval", "Approve memory writes", false)]
+        case .agent: return [
+            .number("max_turns", "Maximum turns", 0).row("repeat", "Interaction rounds per conversation"),
+            .number("gateway_timeout", "Gateway timeout", 0).row("timer", "Request inactivity timeout in seconds; 0 means unlimited"),
+            .number("restart_drain_timeout", "Restart drain timeout", 30).row("hourglass.bottomhalf.filled", "Seconds to let work finish before a restart"),
+            .choice("tool_use_enforcement", "Tool use", "auto", ["auto", "required", "off"]).row("checklist"),
+        ]
+        case .memory: return [
+            .toggle("memory_enabled", "Memory enabled", true).row("memorychip", "Let the agent keep durable memories"),
+            .toggle("user_profile_enabled", "User profile memory", true).row("person", "Maintain a persistent profile about the user"),
+            .number("memory_char_limit", "Memory character limit", 2000).row("textformat", "Maximum characters in agent memory"),
+            .number("user_char_limit", "User context limit", 2000).row("person.text.rectangle", "Maximum characters in the user profile"),
+            .toggle("write_approval", "Approve memory writes", false).row("memorychip", "Ask before changing durable memory"),
+        ]
         case .compression: return [.toggle("enabled", "Compression enabled", true), .decimal("threshold", "Compression threshold", 0.5), .decimal("target_ratio", "Target ratio", 0.2), .number("protect_last_n", "Protect latest messages", 20), .number("protect_first_n", "Protect first messages", 3)]
-        case .session: return [.choice("mode", "Reset mode", "both", ["off", "idle", "daily", "both"]), .number("idle_minutes", "Idle minutes", 60), .number("at_hour", "Daily reset hour", 0)]
-        case .approvals: return [.choice("mode", "Approval mode", "off", ["off", "ask", "always"])]
-        case .skills: return [.toggle("write_approval", "Approve skill changes", false)]
+        case .session: return [
+            .choice("mode", "Reset mode", "both", ["off", "idle", "daily", "both"]).row("arrow.counterclockwise"),
+            .number("idle_minutes", "Idle minutes", 60).row("timer", "Inactivity before a new session"),
+            .number("at_hour", "Daily reset hour", 0).row("clock", "Server local time, from 0 to 23"),
+        ]
+        case .approvals: return [.choice("mode", "Approval mode", "off", ["off", "ask", "always"]).row("checkmark.seal")]
+        case .skills: return [.toggle("write_approval", "Approve skill changes", false).row("graduationcap", "Ask before changing installed skills")]
         case .privacy: return [.toggle("redact_pii", "Redact personal information", false)]
-        case .gateway: return [.toggle("enabled", "Start gateways automatically", true), .choice("management", "Management", "per_profile", ["per_profile", "all"])]
+        case .gateway: return [
+            .toggle("enabled", "Start gateways automatically", true).row("power", "When this is on, your server starts each profile's gateway on boot, so channels answer without anyone opening Studio."),
+            .choice("management", "Management", "per_profile", ["per_profile", "all"]).row("point.3.connected.trianglepath.dotted"),
+        ]
         }
     }
 }
@@ -74,7 +92,13 @@ enum StudioSettingsSection: String {
 struct ConfigField: Identifiable {
     enum Kind { case toggle, text, number, decimal, choice([String]) }
     let key: String; let title: LocalizedStringKey; let kind: Kind; let fallback: Any
+    /// The Android row's glyph and second line (`SettingsRow(icon, label,
+    /// value)`); the Hermes tabs set them with `row(_:_:)`.
+    var icon: String = "slider.horizontal.3"
+    var note: LocalizedStringKey? = nil
     var id: String { key }
+    var options: [String] { if case let .choice(options) = kind { return options }; return [] }
+    func row(_ icon: String, _ note: LocalizedStringKey? = nil) -> ConfigField { var copy = self; copy.icon = icon; copy.note = note; return copy }
     static func toggle(_ key: String, _ title: LocalizedStringKey, _ value: Bool) -> Self { .init(key: key, title: title, kind: .toggle, fallback: value) }
     static func text(_ key: String, _ title: LocalizedStringKey) -> Self { .init(key: key, title: title, kind: .text, fallback: "") }
     static func number(_ key: String, _ title: LocalizedStringKey, _ value: Int) -> Self { .init(key: key, title: title, kind: .number, fallback: value) }
