@@ -1098,6 +1098,7 @@
     <string name="notice_speech_detect_off">Automatic detection did not run, so this text was transcribed as %1$s. %2$s. Long-press the microphone to pick a language.</string>
     <string name="notice_speech_detect_silent">The engine was asked to detect the language but never named one, so this text was transcribed as %1$s. Long-press the microphone to pick a language.</string>
     <string name="notice_speech_language_fallback">This phone\'s speech engine has no model for %1$s, so this text was transcribed as %2$s.</string>
+    <string name="notice_dictation_ceiling">Dictation stopped after %1$d minutes; everything you said is kept. Tap the microphone to continue.</string>
     <string name="composer_take_detect_off">Not detecting — listening in %1$s (%2$s)</string>
     <string name="composer_take_detecting_among">Detecting the language between %1$s</string>
     <string name="composer_take_fallback">%1$s is not available here — listening in %2$s</string>

@@ -189,6 +189,24 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   - The rules (`RecordingStrip.kt`) and the levels (`DictationLevels.kt`,
     `AudioLevelMeter`) are pure and covered by unit tests; only the drawing
     (`ui/chat/RecordingStripRow.kt`, `RecordingWaveform`) is Compose
+  - **The take runs until you end it, across pauses.** Android's `SpeechRecognizer` is
+    built for one utterance: its endpointer ends the session at the first pause of a
+    second or two (`onEndOfSpeech` → `onResults`, or `ERROR_SPEECH_TIMEOUT` /
+    `ERROR_NO_MATCH` when it heard nothing usable), and the intent's silence extras are
+    documented as hints that "may have no effect" — Google's engine ignores them, which
+    is what made build 48 stop by itself after one sentence. So a take is now a **chain
+    of sessions** (`ContinuousDictation.kt`, pure and unit-tested): a session that ends on
+    its own is restarted at once with the very same intent (language, detection list and
+    switch settings included), its final text is committed into the draft with the
+    merge's own separators, the next session's partials append after it, and the strip
+    and the *Listening in …* line never change. `ERROR_NO_MATCH` and
+    `ERROR_SPEECH_TIMEOUT` mid-take are not errors. The chain ends only with **■ / ↑ / ✕**,
+    a real error (microphone, permission, network for a server-bound engine, or an engine
+    still busy after one retry on a fresh recognizer), or a **ten-minute ceiling** that
+    keeps the text and says so above the composer. ↑ that lands in the gap between two
+    sessions sends the committed text at once without waiting for an engine; ■ that the
+    engine never answers gives up after four seconds and keeps what it heard. The silence
+    extras are still set, generously, for engines that do honour them
 - **Dictation language, per profile**: *Settings → Dictation language* chooses what the
   microphone listens for — *follow the app language* (the default, and what earlier
   builds always did), a specific language, or *detect automatically*. **Long-press the
@@ -428,6 +446,8 @@ app/src/main/java/us/i3u/hermesstudio/
                           is reported rather than assumed away
   ContentDirection.kt     per-paragraph first-strong content direction, the Android
                           half of docs/CONTENT-DIRECTION.md
+  ContinuousDictation.kt  the session chain behind one take: restart at a pause, stop on
+                          ■/↑/✕, a real error or the ceiling; commit text between sessions
   DictationHint.kt        how often the mic long-press is worth mentioning
   DictationLevels.kt      the recording strip's levels: dB → 0…1, the AudioLevelMeter
                           (instant attack, 0.8 release per tick), the 36-bar history,
