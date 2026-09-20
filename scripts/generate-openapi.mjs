@@ -84,8 +84,6 @@ const tagMappings = {
   'modules/studio/routes/stt.ts': { name: 'STT', description: 'Speech-to-text transcription and settings' },
   'modules/studio/routes/media.ts': { name: 'Media', description: 'Media generation endpoints' },
   'modules/studio/routes/performance-monitor.ts': { name: 'Performance', description: 'Runtime performance monitoring' },
-  'modules/studio/routes/petdex.ts': { name: 'Petdex', description: 'Desktop pet catalog and assets' },
-  'modules/studio/routes/pets.ts': { name: 'Pets', description: 'Per-profile desktop pet settings' },
   'modules/studio/routes/health.ts': { name: 'Health', description: 'Health check' },
   'modules/studio/routes/update.ts': { name: 'Update', description: 'Studio self-update management' },
   'modules/studio/routes/upload.ts': { name: 'Studio Files', description: 'Studio runtime file upload' },

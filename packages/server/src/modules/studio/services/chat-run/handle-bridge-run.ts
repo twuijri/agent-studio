@@ -49,7 +49,6 @@ import { buildOutboundRunEvent } from './resume-payload'
 import { writeModelRunProfileToken } from './model-run-prompt'
 import type { AuthenticatedUser } from '../../public/auth'
 import { ensureHermesRunWorkspace } from './workspace'
-import { observeRunChatPetEvent } from '../../public/pet-events'
 import { completeWorkspaceRunCheckpoint, startWorkspaceRunCheckpoint } from './workspace-diff-tracker'
 import { resolveAuthorizedProviderRuntimeCredentials } from '../../public/authorized-provider-runtime'
 import { saveEnvValueForProfile } from '../../public/profile-config'
@@ -627,7 +626,6 @@ export async function handleBridgeRun(
   }
   const emit = (event: string, payload: any) => {
     const tagged = { ...payload, session_id }
-    observePetEvent(profile, event, tagged)
     data.onEvent?.(event, tagged)
     const outbound = buildOutboundRunEvent(event, tagged)
     nsp.to(`session:${session_id}`).emit(event, outbound)
@@ -1010,7 +1008,6 @@ export async function resumeBridgeRun(
 
   const emit = (event: string, payload: any) => {
     const tagged = { ...payload, session_id: sessionId }
-    observePetEvent(profile, event, tagged)
     args.onEvent?.(event, tagged)
     const outbound = buildOutboundRunEvent(event, tagged)
     nsp.to(`session:${sessionId}`).emit(event, outbound)
@@ -1127,14 +1124,6 @@ export async function resumeBridgeRun(
         bridgeLogger.warn(endErr, '[chat-run-socket] failed to write ended_at for session %s', sessionId)
       }
     }
-  }
-}
-
-function observePetEvent(profile: string, event: string, payload: Record<string, unknown>): void {
-  try {
-    observeRunChatPetEvent(profile, event, payload)
-  } catch (err) {
-    logger.debug(err, '[chat-run-socket] failed to update pet state')
   }
 }
 

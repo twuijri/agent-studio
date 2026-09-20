@@ -40,7 +40,6 @@ import {
 import type { ChatMessage } from '../context-compressor'
 import { logger } from '../../public/logging'
 import { recordSessionUsage } from '../usage/usage-recorder'
-import { observeRunChatPetEvent } from '../../public/pet-events'
 import { contentBlocksToString, convertContentBlocksForAgent, extractTextForPreview } from './content-blocks'
 import { buildCompressedHistory, getOrCreateSession } from './compression'
 import { resolveBridgeRunModelConfig, type RunModelGroup } from './model-config'
@@ -503,7 +502,6 @@ export async function handleEkkoAgentRun(
         : 'coding_agent'
   const emit = (event: string, payload: any) => {
     const tagged = { ...payload, session_id: sessionId }
-    observeRunChatPetEvent(profile, event, tagged)
     data.onEvent?.(event, tagged)
     appendStateEvent(state, event, tagged)
     const outbound = buildOutboundRunEvent(event, tagged)
