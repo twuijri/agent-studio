@@ -60,8 +60,11 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
     Skills · MCP · Settings`; a coding agent lists `Skills · MCP · Settings` —
     the DeepSeek Harness (`dsh`) alone puts `Plugins · Presets` in front of them
     (`CodingAgentConfigSidebar.vue:19-24`) — and keeps install, update and remove
-    on its card. The Hermes card also carries
-    `CLI details` and `Manage runtime` (the runtime versions, as a sheet)
+    on its card: when a check finds a newer version the card shows one compact
+    `Update` button under the state pill and the offered version on its meta
+    line. The Hermes card also carries `CLI details`. There is no runtime
+    installer on the phone: the server's Hermes runtime is part of its Docker
+    image, so `Manage runtime` (runtime packages) stays in the desktop app
   - **No menu entry, as on the web**: the Global Agent (reached from search hits
     and from the banner that appears when a Global Agent session needs you) and
     Files (a profile card's `Edit config`)
@@ -412,8 +415,12 @@ app/src/main/java/us/i3u/hermesstudio/
   ui/models/              the Models page: provider cards, their catalogues, the
                           fallback chain — the web's ModelsView, not the key form
   ui/agents/              the Agent Manager cards, one agent's section list, the
-                          runtime-manager sheet, Hermes › Settings / Memory, the
+                          CLI-details dialog, Hermes › Settings / Memory, the
                           four Ekko screens, a coding agent's settings files
+  navigation/AgentSectionRoute.kt
+                          which screen (and skills target / MCP agent) each row
+                          under an agent card lands on; AgentSectionRouteTest
+                          walks every row of every agent through it
   AgentCatalog.kt         the fixed agent catalogue and the merge of the two agent
                           endpoints, so a short answer never shortens the list
   BoringAvatar.kt         the boring-avatars `beam` generator, ported from the web

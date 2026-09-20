@@ -141,7 +141,8 @@ class NavigationParityTest {
             .split(",").map { it.trim() }.filter { it.isNotBlank() }
 
     private val uiSources: Map<String, String> = src.walkTopDown()
-        .filter { it.extension == "kt" && it.name != "AppViewModel.kt" && it.name != "NavDestination.kt" }
+        // The registry and the resolver of an agent's rows are not UI sources.
+        .filter { it.extension == "kt" && it.name != "AppViewModel.kt" && it.name != "NavDestination.kt" && it.name != "AgentSectionRoute.kt" }
         .associate { it.relativeTo(src).path to it.readText() }
 
     private fun uiCount(needle: String) = uiSources.values.sumOf { text -> Regex.escape(needle).toRegex().findAll(text).count() }

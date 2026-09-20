@@ -738,7 +738,7 @@
     <string name="ekko_skill_new">New Ekko skill</string>
     <string name="profile_import">Import profile</string><string name="profile_avatar">Choose profile avatar</string><string name="profile_avatar_clear">Remove profile avatar</string>
     <string name="profile_export_started">Profile export started</string><string name="ekko_external_dirs">External directories</string><string name="revoke_connection">Revoke app connection?</string><string name="manual_device">Add device manually</string><string name="block">Block</string><string name="unblock">Unblock</string>
-    <string name="name">Name</string><string name="webhooks_note">Delivery endpoints, tests, and local events</string><string name="webhooks_add">Add webhook</string><string name="clear_events">Clear events</string><string name="local_events">Local test events</string><string name="restart_webui">Restart Web UI</string><string name="activate">Activate</string><string name="font_size">Font size</string><string name="text_color">Text color</string><string name="accent_color">Accent color</string><string name="remove_background">Remove background</string><string name="upload_background">Upload background</string>
+    <string name="name">Name</string><string name="webhooks_note">Delivery endpoints, tests, and local events</string><string name="webhooks_add">Add webhook</string><string name="clear_events">Clear events</string><string name="local_events">Local test events</string><string name="font_size">Font size</string><string name="text_color">Text color</string><string name="accent_color">Accent color</string><string name="remove_background">Remove background</string><string name="upload_background">Upload background</string>
     <string name="kanban_operations">Operations and diagnostics</string><string name="kanban_dispatch">Dispatch</string><string name="kanban_complete">Complete</string><string name="kanban_reassign">Reassign</string>
     <string name="action_send">Send</string>
     <string name="workflow_editor">Workflow editor</string><string name="workflow_workspace">Workspace</string><string name="workflow_schedule_add">Add schedule</string><string name="workflow_timezone">Timezone</string><string name="workflow_rerun">Rerun</string><string name="workflow_batch_delete">Delete workflows</string><string name="workflow_batch_delete_body">Delete all %1$d workflows?</string>
@@ -1156,7 +1156,8 @@
     <string name="agent_auto_update">Update automatically</string>
     <string name="agent_install">Install</string>
     <string name="agent_reinstall">Reinstall</string>
-    <string name="agent_update_to">Update to %1$s</string>
+    <string name="agent_update">Update</string>
+    <string name="agent_update_offered">%1$s available</string>
     <string name="agent_check_update">Check for an update</string>
     <string name="agent_update_available">Version %1$s is available.</string>
     <string name="agent_update_none">Already up to date.</string>
@@ -1184,7 +1185,6 @@
     <string name="search_recent">Recent</string>
     <string name="search_no_results">No matching sessions</string>
     <string name="global_agent_banner">The Global Agent has new activity</string>
-    <string name="agent_manage_runtime">Manage runtime</string>
     <string name="agent_cli_details">CLI details</string>
     <string name="agent_card_open">Open agent</string>
     <string name="agent_sections_note">Capabilities first, settings last. Back returns to the Agent Manager.</string>

@@ -737,7 +737,7 @@
     <string name="ekko_skill_new">مهارة Ekko جديدة</string>
     <string name="profile_import">استيراد بروفايل</string><string name="profile_avatar">اختيار صورة البروفايل</string><string name="profile_avatar_clear">حذف صورة البروفايل</string>
     <string name="profile_export_started">بدأ تنزيل البروفايل</string><string name="ekko_external_dirs">المجلدات الخارجية</string><string name="revoke_connection">إلغاء تفويض التطبيق؟</string><string name="manual_device">إضافة جهاز يدويًا</string><string name="block">حظر</string><string name="unblock">إلغاء الحظر</string>
-    <string name="name">الاسم</string><string name="webhooks_note">نقاط الإرسال والاختبارات والأحداث المحلية</string><string name="webhooks_add">إضافة خطاف ويب</string><string name="clear_events">مسح الأحداث</string><string name="local_events">أحداث الاختبار المحلية</string><string name="restart_webui">إعادة تشغيل واجهة الويب</string><string name="activate">تفعيل</string><string name="font_size">حجم الخط</string><string name="text_color">لون النص</string><string name="accent_color">اللون البارز</string><string name="remove_background">إزالة الخلفية</string><string name="upload_background">رفع خلفية</string>
+    <string name="name">الاسم</string><string name="webhooks_note">نقاط الإرسال والاختبارات والأحداث المحلية</string><string name="webhooks_add">إضافة خطاف ويب</string><string name="clear_events">مسح الأحداث</string><string name="local_events">أحداث الاختبار المحلية</string><string name="font_size">حجم الخط</string><string name="text_color">لون النص</string><string name="accent_color">اللون البارز</string><string name="remove_background">إزالة الخلفية</string><string name="upload_background">رفع خلفية</string>
     <string name="kanban_operations">العمليات والتشخيص</string><string name="kanban_dispatch">إرسال للتنفيذ</string><string name="kanban_complete">إكمال</string><string name="kanban_reassign">إعادة تعيين</string>
     <string name="action_send">إرسال</string>
     <string name="workflow_editor">محرر سير العمل</string><string name="workflow_workspace">مساحة العمل</string><string name="workflow_schedule_add">إضافة جدولة</string><string name="workflow_timezone">المنطقة الزمنية</string><string name="workflow_rerun">إعادة التشغيل</string><string name="workflow_batch_delete">حذف مسارات العمل</string><string name="workflow_batch_delete_body">حذف جميع مسارات العمل وعددها %1$d؟</string>
@@ -1151,7 +1151,8 @@
     <string name="agent_auto_update">التحديث تلقائيًا</string>
     <string name="agent_install">تثبيت</string>
     <string name="agent_reinstall">إعادة التثبيت</string>
-    <string name="agent_update_to">التحديث إلى %1$s</string>
+    <string name="agent_update">تحديث</string>
+    <string name="agent_update_offered">%1$s متاح</string>
     <string name="agent_check_update">البحث عن تحديث</string>
     <string name="agent_update_available">الإصدار %1$s متاح.</string>
     <string name="agent_update_none">محدَّث أصلًا.</string>
@@ -1179,7 +1180,6 @@
     <string name="search_recent">الأخيرة</string>
     <string name="search_no_results">لا جلسات مطابقة</string>
     <string name="global_agent_banner">لدى الوكيل العام نشاط جديد</string>
-    <string name="agent_manage_runtime">إدارة وقت التشغيل</string>
     <string name="agent_cli_details">تفاصيل CLI</string>
     <string name="agent_card_open">فتح الوكيل</string>
     <string name="agent_sections_note">القدرات أولًا والإعدادات آخرًا. الرجوع يعيدك إلى مدير الوكلاء.</string>

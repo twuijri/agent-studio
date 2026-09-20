@@ -246,10 +246,7 @@ class HermesApiContractTest {
         assertEquals("/api/studio/webhooks/endpoints", server.takeRequest().path)
     }
 
-    @Test fun `runtime theme and kanban operations use canonical routes`() {
-        enqueue("""{"platform":"linux","hermes":{"activeVersion":"1","installed":[],"remoteVersions":[]},"webui":{"activeVersion":"2","installed":[],"remoteVersions":[]}}""")
-        assertEquals("linux", api.runtimeVersions().platform)
-        assertEquals("/api/hermes/runtime-versions", server.takeRequest().path)
+    @Test fun `theme and kanban operations use canonical routes`() {
         enqueue("""{"fontSize":17,"accentColor":"#ff0000"}""")
         assertEquals(17, api.themeSettings().fontSize)
         assertEquals("/api/theme", server.takeRequest().path)

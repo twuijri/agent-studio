@@ -81,9 +81,7 @@ import us.i3u.hermesstudio.ui.theme.CoreHub
 fun AgentManagerScreen(state: UiState, viewModel: AppViewModel) {
     val palette = CoreHub.palette
     var deleting by remember { mutableStateOf<AgentCard?>(null) }
-    var runtimeSheet by remember { mutableStateOf(false) }
     var cliDetails by remember { mutableStateOf<AgentCard?>(null) }
-    if (runtimeSheet) RuntimeManagerSheet(state, viewModel) { runtimeSheet = false }
     cliDetails?.let { card -> HermesCliDetailsDialog(card) { cliDetails = null } }
 
     deleting?.let { card ->
@@ -183,7 +181,6 @@ fun AgentManagerScreen(state: UiState, viewModel: AppViewModel) {
                             busy = state.agentBusyId == card.id,
                             viewModel = viewModel,
                             onDelete = { deleting = card },
-                            onManageRuntime = { runtimeSheet = true },
                             onCliDetails = { cliDetails = card },
                         )
                     }
@@ -200,7 +197,6 @@ private fun AgentRow(
     busy: Boolean,
     viewModel: AppViewModel,
     onDelete: () -> Unit,
-    onManageRuntime: () -> Unit,
     onCliDetails: () -> Unit,
 ) {
     val palette = CoreHub.palette
@@ -215,6 +211,7 @@ private fun AgentRow(
         modifier = Modifier.fillMaxWidth().clickable(onClick = openAgent),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val offered = card.updateVersion.takeIf { card.installable && it.isNotBlank() }?.let(::versionLabel)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AgentAvatar(ChatAgentAvatars.forRuntime(card.id), size = 34.dp)
                 Spacer(Modifier.width(12.dp))
@@ -232,12 +229,20 @@ private fun AgentRow(
                         color = palette.textSecondary,
                     )
                 }
-                PresenceBadge(card)
+                // The state pill, and under it — only when check-update found
+                // something — one compact "Update" button. iOS build 41 put the
+                // offered version inside the badge and it wrapped into a blob;
+                // the version goes on the meta line instead, on both phones.
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PresenceBadge(card)
+                    if (offered != null) UpdateButton(enabled = !busy) { viewModel.installAgent(card.id) }
+                }
             }
 
             val detail = listOfNotNull(
                 sourceLabel(card.source),
-                card.version.takeIf { it.isNotBlank() }?.let { if (it.startsWith("v")) it else "v$it" },
+                card.version.takeIf { it.isNotBlank() }?.let(::versionLabel),
+                offered?.let { stringResource(R.string.agent_update_offered, it) },
             ).joinToString(" · ")
             if (detail.isNotBlank()) {
                 Text(detail, style = MaterialTheme.typography.bodySmall, color = palette.textMuted)
@@ -296,29 +301,16 @@ private fun AgentRow(
                     Spacer(Modifier.width(6.dp))
                     Text(stringResource(R.string.agent_card_open))
                 }
-                // The Hermes card carries "CLI details" and "Manage runtime"
-                // (AgentManagerView.vue:517-536): the runtime versions are a
-                // sheet here, never a screen with an entry of its own.
-                if (card.definition.kind == AgentKind.Hermes) {
-                    if (card.installed && card.source == "user-cli") {
-                        TextButton(onClick = onCliDetails, enabled = !busy) { Text(stringResource(R.string.agent_cli_details)) }
-                    }
-                    if (!card.installed || card.source == "managed-runtime") {
-                        TextButton(onClick = onManageRuntime, enabled = !busy) {
-                            Text(if (card.installed) stringResource(R.string.agent_manage_runtime) else stringResource(R.string.agent_install))
-                        }
-                    }
+                // The Hermes card carries "CLI details" (AgentManagerView.vue:517-536)
+                // and nothing else: the phone talks to a server whose runtime
+                // is part of its Docker image, so the runtime installer stays
+                // on the desktop app.
+                if (card.definition.kind == AgentKind.Hermes && card.installed && card.source == "user-cli") {
+                    TextButton(onClick = onCliDetails, enabled = !busy) { Text(stringResource(R.string.agent_cli_details)) }
                 }
                 if (card.installable) {
                     TextButton(onClick = { viewModel.installAgent(card.id) }, enabled = !busy) {
-                        Text(
-                            when {
-                                card.updateVersion.isNotBlank() ->
-                                    stringResource(R.string.agent_update_to, card.updateVersion)
-                                card.installed -> stringResource(R.string.agent_reinstall)
-                                else -> stringResource(R.string.agent_install)
-                            },
-                        )
+                        Text(if (card.installed) stringResource(R.string.agent_reinstall) else stringResource(R.string.agent_install))
                     }
                     TextButton(onClick = { viewModel.checkAgentUpdate(card.id) }, enabled = !busy) {
                         Text(stringResource(R.string.agent_check_update))
@@ -344,6 +336,37 @@ private fun AgentRow(
         }
     }
 }
+
+/**
+ * The coding-agent card's update action: one line, tinted, at the trailing
+ * edge under the state pill (`Alignment.End` flips with the layout direction,
+ * so it sits at the start edge in Arabic). The label is the verb alone —
+ * `Update` / «تحديث», the same words as iOS — and never wraps.
+ */
+@Composable
+private fun UpdateButton(enabled: Boolean, onClick: () -> Unit) {
+    val palette = CoreHub.palette
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(50),
+        color = palette.info.copy(alpha = if (enabled) 0.16f else 0.08f),
+    ) {
+        Text(
+            stringResource(R.string.agent_update),
+            Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = palette.info,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+        )
+    }
+}
+
+/** `formatVersion` in the web view: prefix `v` unless there is one. */
+private fun versionLabel(raw: String): String = if (raw.startsWith("v")) raw else "v$raw"
 
 @Composable
 private fun PresenceBadge(card: AgentCard) {
