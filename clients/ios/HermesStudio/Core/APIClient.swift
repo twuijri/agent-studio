@@ -107,8 +107,8 @@ final class APIClient: @unchecked Sendable {
         throw HermesError.malformedResponse
     }
 
-    func array(_ path: String, keys: [String], profile: String? = nil) async throws -> [JSON] {
-        let result = try await request(path, profile: profile)
+    func array(_ path: String, keys: [String], profile: String? = nil, timeout: TimeInterval? = nil) async throws -> [JSON] {
+        let result = try await request(path, profile: profile, timeout: timeout)
         if let list = result as? [Any] { return list.objects }
         guard let json = result as? JSON else { return [] }
         for key in keys where json[key] != nil { return json.objects(key) }
@@ -475,12 +475,23 @@ final class APIClient: @unchecked Sendable {
     func deleteProfile(_ name: String) async throws { _ = try await object("/api/hermes/profiles/\(name.urlEncoded)", method: "DELETE") }
     func restartGateway(profile: String) async throws { _ = try await object("/api/hermes/profiles/\(profile.urlEncoded)/gateway/restart", method: "POST") }
 
+    /// Kanban reads spawn the Hermes CLI on the server; a hung CLI must end in
+    /// the error banner well before the session's 60 s default.
+    static let kanbanReadTimeout: TimeInterval = 25
+
     func boards() async throws -> [KanbanBoard] {
-        var rows = try await array("/api/hermes/kanban/boards", keys: ["boards"])
+        var rows = try await array("/api/hermes/kanban/boards", keys: ["boards"], timeout: Self.kanbanReadTimeout)
         if rows.isEmpty { rows = [["id": "default", "name": String(localized: "Default")]] }
         return rows.map(KanbanBoard.init)
     }
-    func kanbanTasks(board: String) async throws -> [KanbanTask] { try await array("/api/hermes/kanban?board=\(board.urlEncoded)", keys: ["tasks", "items"]).map(KanbanTask.init) }
+    /// `includeArchived=true` like the web store: the archive is folded under the done column.
+    func kanbanTasks(board: String) async throws -> [KanbanTask] {
+        try await array("/api/hermes/kanban?board=\(board.urlEncoded)&includeArchived=true", keys: ["tasks", "items"], timeout: Self.kanbanReadTimeout).map(KanbanTask.init)
+    }
+    /// Runs one board transition on the route the web store uses (`KanbanTransitionRequest`).
+    func runKanbanTransition(_ request: KanbanTransitionRequest, board: String) async throws {
+        _ = try await object("\(request.path)?board=\(board.urlEncoded)", method: "POST", body: request.body)
+    }
     func createTask(board: String, title: String, description: String, priority: String) async throws {
         let numericPriority = priority == "high" ? 3 : (priority == "low" ? 1 : 2)
         _ = try await object("/api/hermes/kanban?board=\(board.urlEncoded)", method: "POST", body: ["title": title, "body": description, "priority": numericPriority, "triage": true, "skills": []])
