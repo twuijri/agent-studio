@@ -7,12 +7,6 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     {
-      path: '/desktop-pet',
-      name: 'desktop.pet',
-      component: () => import('@/views/hermes/DesktopPetView.vue'),
-      meta: { public: true },
-    },
-    {
       path: '/',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
@@ -132,11 +126,6 @@ const router = createRouter({
       name: 'hermes.plugins',
       component: () => import('@/views/hermes/PluginsView.vue'),
       meta: { hermesConfig: true },
-    },
-    {
-      path: '/hermes/petdex',
-      name: 'hermes.petdex',
-      component: () => import('@/views/hermes/PetdexView.vue'),
     },
     {
       path: '/hermes/memory',

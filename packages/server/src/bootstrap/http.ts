@@ -55,7 +55,6 @@ import { ensureAppRelayHostClient } from '../modules/studio/services/app-relay/c
 import { setupGlobalEkkoAgent } from './ekko'
 import { injectManagedEkkoMcpServers } from '../modules/ekko/services/mcp'
 import { WorkflowSocketServer } from '../modules/studio/sockets/workflow'
-import { PetStateSocketServer } from '../modules/studio/sockets/pet-state'
 import { logger } from '../modules/studio/public/logging'
 import { createStaticCompressionMiddleware } from '../modules/studio/middleware/static-compression'
 import { getStaticCacheControl, SPA_ENTRY_CACHE_CONTROL } from '../modules/studio/middleware/static-cache'
@@ -97,7 +96,6 @@ const servers: any[] = []
 let groupChatServer: GroupChatServer | null = null
 let chatRunServer: any = null
 let workflowSocketServer: WorkflowSocketServer | null = null
-let petStateSocketServer: PetStateSocketServer | null = null
 let groupAgentRelayServer: GroupAgentRelayServer | null = null
 let agentBridgeManager: any = null
 let desktopShutdownHandler: ShutdownHandler | null = null
@@ -713,9 +711,6 @@ export async function bootstrap() {
     name: 'Workflow Socket.IO runtime',
     close: () => workflowSocketServer?.close(),
   })
-
-  petStateSocketServer = new PetStateSocketServer(activeGroupChatServer.getIO())
-  petStateSocketServer.init()
 
   startGlobalAgentServer(activeGroupChatServer.getIO(), { localBaseUrl: loopbackBaseUrl })
   console.log('[bootstrap] global agent server ready')
