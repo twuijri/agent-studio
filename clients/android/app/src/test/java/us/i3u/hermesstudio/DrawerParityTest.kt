@@ -235,9 +235,9 @@ class DrawerParityTest {
     @Test
     fun everyDrawerStringExistsInBothLanguages() {
         val keys = listOf(
-            "segment_chat", "segment_group_chat", "segment_workflow", "segment_history",
+            "nav_chat", "nav_group_chat", "nav_workflow", "nav_history",
             "room_agent_count", "room_member_count", "groups_new", "groups_empty",
-            "room_join_title", "workflows_empty", "settings_language", "settings_entry_theme",
+            "room_join_title", "workflows_empty", "settings_language", "nav_theme",
             "appearance_system", "appearance_light", "appearance_dark",
         )
         val english = strings("src/main/res/values/strings.xml")
