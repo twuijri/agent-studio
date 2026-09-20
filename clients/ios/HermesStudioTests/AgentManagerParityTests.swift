@@ -151,7 +151,9 @@ final class AgentManagerParityTests: XCTestCase {
         try same(#"\.height\(([\d.]+)\.dp\)"#, in: loading, "loadingRowSpinner")
         try same(#"agent_autostart_note\),[\s\S]*?padding\(horizontal = ([\d.]+)\.dp, vertical = ([\d.]+)\.dp\)"#, in: activity, "settingsHintPaddingH", "settingsHintPaddingV")
         // Every change is its own PUT with one key, and "Saved" follows it.
-        XCTAssertTrue(activity.contains("fun setAgentValue(key: String, value: Any)") || (try kotlin("AppViewModel.kt")).contains("fun setAgentValue(key: String, value: Any)"))
+        let viewModel = try kotlin("AppViewModel.kt")
+        let setter = "fun setAgentValue(key: String, value: Any)"
+        XCTAssertTrue(activity.contains(setter) || viewModel.contains(setter))
         let rows = SwiftSources.code(of: try swift("Features/Agents/HermesSettingsView.swift"))
         XCTAssertTrue(rows.contains("values: [edit.field.key: value]"), "one key per PUT")
         XCTAssertTrue(rows.contains(#"store.notify(String(localized: "Saved"))"#))
