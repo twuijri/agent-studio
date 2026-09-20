@@ -42,8 +42,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Check
@@ -1276,7 +1276,7 @@ internal fun ComposerActionButton(
             showStop -> Box(
                 modifier = Modifier.size(12.dp).background(tint, RoundedCornerShape(2.dp)),
             )
-            else -> Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.composer_send), tint = tint, modifier = Modifier.size(16.dp))
+            else -> Icon(Icons.Filled.ArrowUpward, contentDescription = stringResource(R.string.composer_send), tint = tint, modifier = Modifier.size(16.dp))
         }
     }
 }
