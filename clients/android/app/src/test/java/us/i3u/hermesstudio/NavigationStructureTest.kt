@@ -208,23 +208,50 @@ class NavigationStructureTest {
         // The Agent Manager is cards, and a card is the only way under an agent.
         assertFalse("the Hermes tools grab-bag must not come back", activity.contains("HermesToolsSection") || agentManager.contains("hermesTools"))
         assertTrue(agentManager.contains("modifier = Modifier.fillMaxWidth().clickable(onClick = openAgent)"))
-        assertTrue("runtime versions are the Hermes card's sheet", agentManager.contains("RuntimeManagerSheet(state, viewModel)"))
-        assertTrue(agentManager.contains("R.string.agent_manage_runtime") && agentManager.contains("R.string.agent_cli_details"))
+        // The runtime installer is the desktop app's; the phone keeps CLI details only.
+        assertFalse("the runtime-versions sheet must not come back", agentManager.contains("RuntimeManagerSheet") || agentScreen.contains("RuntimeManagerSheet"))
+        assertFalse(agentManager.contains("agent_manage_runtime") || viewModel.contains("loadRuntimeVersions") || viewModel.contains("RuntimeVersions"))
+        assertTrue(agentManager.contains("R.string.agent_cli_details") && agentScreen.contains("fun HermesCliDetailsDialog"))
+        // The update offer is one compact button under the state pill; the version is on the meta line.
+        assertTrue(agentManager.contains("if (offered != null) UpdateButton(enabled = !busy)"))
+        assertTrue(agentManager.contains("offered?.let { stringResource(R.string.agent_update_offered, it) }"))
+        assertTrue(agentManager.contains("maxLines = 1,\n            softWrap = false,"))
         assertFalse("the standalone Agents (runtimes) entry is gone", viewModel.contains("Screen.AgentRuntimes") || activity.contains("AgentRuntimeScreen"))
         assertTrue("Agent Manager is opened from the drawer rail", viewModel.contains("NavDestination.agentManager -> openAgentManager()"))
         // The section list is the registry's, and every section resolves to a screen.
         assertTrue(agentScreen.contains("NavDestination.agentSections(agent.kind, agent.id)"))
         assertTrue(agentScreen.contains("viewModel.openAgentSection(agent, destination)"))
+        // `AgentSectionRouteTest` walks every row of every agent kind through the
+        // resolver; here we pin that the view-model calls it and that every screen
+        // it can resolve to has an opener that actually sets that screen.
+        assertTrue(viewModel.contains("val route = AgentSectionRoute.resolve(definition, destination) ?: return"))
         listOf(
-            "NavDestination.jobs -> openCronJobs()", "NavDestination.kanban -> openKanban()", "NavDestination.channels -> openChannels()",
-            "NavDestination.plugins -> if (definition.id == DSH_AGENT_ID) openDshPlugins() else openPlugins()",
-            "NavDestination.presets -> openDshPresets()", "NavDestination.journey -> openJourney()",
-            "NavDestination.hermesSettings -> openHermesSettings()", "NavDestination.ekkoSettings -> openEkkoSettings()",
-            "NavDestination.codingAgentSettings -> openAgentSettings(definition)",
-            "AgentKind.BuiltIn -> openEkkoMcp()", "AgentKind.Coding -> openMcp(definition.id)", "AgentKind.Hermes -> openMcp()",
+            "Screen.CronJobs -> openCronJobs()", "Screen.Kanban -> openKanban()", "Screen.Channels -> openChannels()",
+            "Screen.Plugins -> openPlugins()", "Screen.DshPlugins -> openDshPlugins()", "Screen.DshPresets -> openDshPresets()",
+            "Screen.Journey -> openJourney()", "Screen.HermesSettings -> openHermesSettings()", "Screen.EkkoSettings -> openEkkoSettings()",
+            "Screen.AgentSettings -> openAgentSettings(definition)", "Screen.Skills -> openSkills(route.skillsTarget",
+            "Screen.EkkoSkills -> openEkkoSkills()", "Screen.Mcp -> openMcp(route.mcpAgentId)", "Screen.EkkoMcp -> openEkkoMcp()",
+            "Screen.Memory -> openHermesMemory()", "Screen.EkkoMemory -> openEkkoMemory()",
         ).forEach { branch -> assertTrue("openAgentSection lost $branch", viewModel.contains(branch)) }
-        assertTrue(viewModel.contains("if (definition.kind == AgentKind.BuiltIn) openEkkoSkills() else openSkills(skillsTarget(definition))"))
-        assertTrue(viewModel.contains("if (definition.kind == AgentKind.BuiltIn) openEkkoMemory() else openHermesMemory()"))
+        mapOf(
+            "fun openCronJobs()" to "screen = Screen.CronJobs", "fun openKanban()" to "screen = Screen.Kanban",
+            "fun openChannels()" to "screen = Screen.Channels", "fun openPlugins()" to "screen = Screen.Plugins",
+            "fun openDshPlugins()" to "screen = Screen.DshPlugins", "fun openDshPresets()" to "screen = Screen.DshPresets",
+            "fun openJourney()" to "screen = Screen.Journey", "fun openHermesSettings(" to "screen = Screen.HermesSettings",
+            "fun openEkkoSettings()" to "screen = Screen.EkkoSettings", "fun openAgentSettings(" to "screen = Screen.AgentSettings",
+            "fun openSkills(" to "screen = Screen.Skills, skillsUi = it.skillsUi.copy(target = target",
+            "fun openMcp(" to "screen = Screen.Mcp, mcpUi = it.mcpUi.copy(agentId = agentId",
+            "fun openHermesMemory()" to "screen = Screen.Memory",
+        ).forEach { (opener, effect) ->
+            val body = viewModel.substringAfter(opener).substringBefore("\n    fun ")
+            assertTrue("$opener does not set $effect", body.contains(effect))
+        }
+        listOf("fun openEkkoMemory() = openEkko(Screen.EkkoMemory)", "fun openEkkoSkills() = openEkko(Screen.EkkoSkills)", "fun openEkkoMcp() = openEkko(Screen.EkkoMcp)")
+            .forEach { assertTrue(viewModel.contains(it)) }
+        assertTrue(viewModel.substringAfter("private fun openEkko(screen: Screen)").substringBefore("\n    fun ").contains("screen = screen"))
+        val route = File(src, "navigation/AgentSectionRoute.kt").readText()
+        assertTrue(route.contains("if (ekko) AgentSectionRoute(Screen.EkkoSkills)") && route.contains("AgentSectionRoute(Screen.Skills, skillsTarget = skillsTarget(definition))"))
+        assertTrue(route.contains("AgentSectionRoute(if (ekko) Screen.EkkoMemory else Screen.Memory)"))
         // Hermes › Settings: Agent (+ gateway auto-start), Memory, Session (approvals, skill approvals, reset).
         assertTrue(hermes.contains("SettingsGroup.Agent -> AgentSettings(state, viewModel)"))
         assertTrue(hermes.contains("SettingsGroup.Memory -> MemoryStudioSettings(state, viewModel)"))

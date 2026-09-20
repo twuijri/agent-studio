@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import us.i3u.hermesstudio.navigation.AgentSectionRoute
 import us.i3u.hermesstudio.navigation.NavDestination
 
 /**
@@ -342,7 +343,6 @@ data class UiState(
     /** Files opened for another profile than the chat's (a profile card's "Edit config"). */
     val filesProfile: String? = null,
     val loadingWebhooks: Boolean = false,
-    val loadingRuntimeVersions: Boolean = false,
     val loadingSkillsUsage: Boolean = false,
     val loadingJourney: Boolean = false,
     val agentSettings: AgentSettings? = null,
@@ -465,7 +465,6 @@ data class UiState(
     val skillUsage: SkillUsage? = null,
     val webhooks: List<WebhookEndpoint> = emptyList(),
     val webhookEvents: List<String> = emptyList(),
-    val runtimeVersions: RuntimeVersions? = null,
     val themeSettings: ThemeSettings? = null,
     val kanbanDiagnostics: List<String> = emptyList(),
     val kanbanStats: String = "",
@@ -1330,11 +1329,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteWebhook(item: WebhookEndpoint) = launchWork(work = { api.deleteWebhook(item.id) }, onSuccess = { loadWebhooks() })
     fun testWebhook(item: WebhookEndpoint) = launchWork(work = { api.testWebhook(item.id) }, onSuccess = { result -> _state.update { it.copy(notice = result) } })
     fun clearWebhookEvents() = launchWork(work = { api.clearWebhookEvents() }, onSuccess = { loadWebhooks() })
-    /** The Hermes card's "Manage runtime" sheet (AgentManagerView.vue:517-536); no screen of its own. */
-    fun loadRuntimeVersions() { _state.update { it.copy(loadingRuntimeVersions = true) }; launchWork(work = { api.runtimeVersions() }, onSuccess = { versions -> _state.update { it.copy(runtimeVersions = versions, loadingRuntimeVersions = false) } }, onFailure = { failure -> _state.update { it.copy(loadingRuntimeVersions = false, error = failure.readableMessage(localized)) } }) }
-    fun activateVersion(version: RuntimeVersion) = launchWork(work = { api.activateVersion(version.version, version.kind == "webui") }, onSuccess = { loadRuntimeVersions() })
-    fun downloadVersion(version: String, webUi: Boolean) = launchWork(work = { api.downloadVersion(version, webUi) }, onSuccess = { loadRuntimeVersions() })
-    fun restartWebUi() = launchWork(work = { api.restartWebUi() }, onSuccess = { loadRuntimeVersions() })
     /** Settings › Tools › Theme (ThemeView.vue): the server-side colours, text and background. */
     fun openTheme() = launchWork(work = { api.themeSettings() }, onSuccess = { theme -> _state.update { it.copy(screen = Screen.Theme, themeSettings = theme, error = null, notice = null) } })
     private fun loadTheme() = launchWork(work = { api.themeSettings() }, onSuccess = { theme -> _state.update { it.copy(themeSettings = theme) } })
@@ -5509,31 +5503,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (definition.kind == AgentKind.Hermes) refreshServerConfig()
     }
 
-    /** A row under an agent card. The same destination is a different screen per agent. */
+    /**
+     * A row under an agent card. [AgentSectionRoute] decides the screen (and
+     * the skills target / MCP agent) so the decision is unit-tested; this only
+     * calls the opener that puts that screen up.
+     */
     fun openAgentSection(definition: AgentDefinition, destination: NavDestination) {
-        when (destination) {
-            NavDestination.jobs -> openCronJobs()
-            NavDestination.kanban -> openKanban()
-            NavDestination.channels -> openChannels()
-            NavDestination.plugins -> if (definition.id == DSH_AGENT_ID) openDshPlugins() else openPlugins()
-            NavDestination.presets -> openDshPresets()
-            NavDestination.journey -> openJourney()
-            NavDestination.hermesSettings -> openHermesSettings()
-            NavDestination.ekkoSettings -> openEkkoSettings()
-            NavDestination.codingAgentSettings -> openAgentSettings(definition)
-            NavDestination.skills -> if (definition.kind == AgentKind.BuiltIn) openEkkoSkills() else openSkills(skillsTarget(definition))
-            NavDestination.mcp -> when (definition.kind) {
-                AgentKind.BuiltIn -> openEkkoMcp()
-                AgentKind.Coding -> openMcp(definition.id)
-                AgentKind.Hermes -> openMcp()
-            }
-            NavDestination.memory -> if (definition.kind == AgentKind.BuiltIn) openEkkoMemory() else openHermesMemory()
+        val route = AgentSectionRoute.resolve(definition, destination) ?: return
+        when (route.screen) {
+            Screen.CronJobs -> openCronJobs()
+            Screen.Kanban -> openKanban()
+            Screen.Channels -> openChannels()
+            Screen.Plugins -> openPlugins()
+            Screen.DshPlugins -> openDshPlugins()
+            Screen.DshPresets -> openDshPresets()
+            Screen.Journey -> openJourney()
+            Screen.HermesSettings -> openHermesSettings()
+            Screen.EkkoSettings -> openEkkoSettings()
+            Screen.AgentSettings -> openAgentSettings(definition)
+            Screen.Skills -> openSkills(route.skillsTarget ?: AgentSectionRoute.skillsTarget(definition))
+            Screen.EkkoSkills -> openEkkoSkills()
+            Screen.Mcp -> openMcp(route.mcpAgentId)
+            Screen.EkkoMcp -> openEkkoMcp()
+            Screen.Memory -> openHermesMemory()
+            Screen.EkkoMemory -> openEkkoMemory()
             else -> Unit
         }
     }
-
-    /** The `target` SkillsView.vue filters by: `claude` for Claude Code, otherwise the agent id. */
-    private fun skillsTarget(definition: AgentDefinition): String = if (definition.id == "claude-code") "claude" else definition.id
 
     /** Hermes › Memory (MemoryView.vue): MEMORY.md, USER.md and SOUL.md of the profile. */
     fun openHermesMemory() {

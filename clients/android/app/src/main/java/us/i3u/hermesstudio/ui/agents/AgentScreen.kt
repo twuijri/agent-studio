@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,29 +21,23 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import us.i3u.hermesstudio.AgentCard
 import us.i3u.hermesstudio.AgentKind
 import us.i3u.hermesstudio.AppViewModel
 import us.i3u.hermesstudio.ErrorNote
-import us.i3u.hermesstudio.LoadingRow
 import us.i3u.hermesstudio.NoticeNote
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.StudioCardDivider
@@ -140,58 +133,6 @@ private fun sectionIcon(destination: NavDestination): ImageVector = when (destin
     NavDestination.journey -> Icons.Filled.AccountTree
     NavDestination.hermesSettings, NavDestination.ekkoSettings, NavDestination.codingAgentSettings -> CoreHubIcons.Settings
     else -> Icons.Filled.Tune
-}
-
-/**
- * The Hermes card's "Manage runtime" (`AgentManagerView.vue:517-536`): the
- * runtime versions as a sheet over the Agent Manager, not a screen of their
- * own — installed versions, activation, downloads and the Web UI restart.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun RuntimeManagerSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit) {
-    val palette = CoreHub.palette
-    LaunchedEffect(Unit) { viewModel.loadRuntimeVersions() }
-    val versions = state.runtimeVersions
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        LazyColumn(
-            contentPadding = PaddingValues(StudioHorizontalPadding, 4.dp, StudioHorizontalPadding, 28.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            item { Text(stringResource(R.string.agent_manage_runtime), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-            if (state.loadingRuntimeVersions) item { LoadingRow() }
-            state.error?.let { item { ErrorNote(it) { viewModel.dismissError() } } }
-            item {
-                Text(
-                    "${versions?.platform.orEmpty()} · Runtime ${versions?.activeRuntime.orEmpty()} · WebUI ${versions?.activeWebUi.orEmpty()}",
-                    style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Ltr),
-                    color = palette.textSecondary,
-                )
-            }
-            item { Button(onClick = viewModel::restartWebUi) { Text(stringResource(R.string.restart_webui)) } }
-            val installed = versions?.runtime.orEmpty() + versions?.webUi.orEmpty()
-            items(installed.size, key = { installed[it].kind + installed[it].version }) { index ->
-                val version = installed[index]
-                StudioGroupedCard {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("${version.kind} ${version.version}", Modifier.weight(1f), fontFamily = FontFamily.Monospace)
-                        if (version.active) Text(stringResource(R.string.agent_status_active), color = palette.success)
-                        else TextButton(onClick = { viewModel.activateVersion(version) }) { Text(stringResource(R.string.activate)) }
-                    }
-                }
-            }
-            versions?.remoteRuntime?.let { remote ->
-                items(remote.size, key = { "runtime-$it" }) { index ->
-                    TextButton(onClick = { viewModel.downloadVersion(remote[index], false) }) { Text("Download Runtime ${remote[index]}") }
-                }
-            }
-            versions?.remoteWebUi?.let { remote ->
-                items(remote.size, key = { "webui-$it" }) { index ->
-                    TextButton(onClick = { viewModel.downloadVersion(remote[index], true) }) { Text("Download WebUI ${remote[index]}") }
-                }
-            }
-        }
-    }
 }
 
 /** The Hermes card's "CLI details": what the server found on its own PATH. */

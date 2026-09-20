@@ -105,8 +105,10 @@
 - **Hermes** (`HermesConfigSidebar.vue:67-241`): `Jobs` · `Kanban` · `Channels`
   · `Skills` · `Plugins` · `MCP` · `Memory` (متصفّح الذاكرة) · `Journey` ·
   `Settings` بتبويبات `Agent` · `Memory` · `Session` (الأخيرة تحوي الموافقات
-  وموافقات المهارات وإعادة الضبط). بطاقة Hermes تحمل أيضًا «تفاصيل CLI» و
-  «إدارة وقت التشغيل» (إصدارات وقت التشغيل).
+  وموافقات المهارات وإعادة الضبط). بطاقة Hermes تحمل أيضًا «تفاصيل CLI» فقط؛
+  «إدارة وقت التشغيل» (حزم وقت التشغيل) ليست على الهاتف لأن وقت تشغيل Hermes
+  جزء من صورة Docker على السيرفر، وتبقى في تطبيق سطح المكتب (قرار المالك بعد
+  اختبار iOS build 41).
 - **Ekko** (`EkkoConfigSidebar.vue:54-79`): `Memory` · `Skills` · `MCP` ·
   `Settings` (تبويبات: Runtime, Model, Compression, Tools, Modules, Advanced).
 - **وكيل برمجة** (`CodingAgentConfigSidebar.vue:19-24`): [`Plugins` · `Presets`
@@ -117,7 +119,7 @@
 `Global Agent` — بلا مدخل قائمة في الويب؛ يُوصَل إليه من نتائج البحث ومن
 شريط الإجراءات المعلّقة (`GlobalPendingActions.vue`). `Files` — من بطاقة
 الملف الشخصي «تحرير الإعدادات» (`ProfileCard.vue:100-107`). `Runtime
-versions` — من بطاقة Hermes. `Webhooks` — تبويب في الإعدادات فقط.
+versions` — سطح المكتب فقط، لا مدخل لها على الهاتف. `Webhooks` — تبويب في الإعدادات فقط.
 `Connections` — الشريط الأساسي فقط. `Insights` — تُفكَّك إلى `Usage` و
 `Performance`. `Appearance` — تُسمّى `Theme`. `Petdex` — يُسمّى `Pets`.
 
