@@ -776,3 +776,26 @@ approved») → السجل (مرشِّحا «كل الملفات» و«المؤ�
 `docs/changes/2026-09-20-twuijri-ios-navigation-unification.md`. أندرويد يطبّق
 الشكل نفسه على فرعه.
 
+
+## توحيد التنقّل — أندرويد (فرع `refactor/android-navigation`، 2026-09-20)
+
+المرجع الإلزامي `docs/mobile/NAVIGATION.md` (مشتق من عميل سطح المكتب). ما تغيّر:
+- **سجلّ واحد** `navigation/NavDestination.kt` بـ 36 وجهة بأسماء الحالات نفسها التي
+  ينفّذها iOS في `Core/NavDestination.swift`؛ لكل وجهة مفتاح `nav_*` يقرأه المدخل
+  وعنوان الشاشة معًا (إنجليزي/عربي من جدول العقد). `NavigationParityTest` يقارن
+  المنصتين والعقد ويسقط عند أي انحراف؛ فحوص iOS تُتخطّى بوضوح حتى يصل ملفها.
+- **الإعدادات شاشة واحدة**: تبويبات الويب ثم «هذا الجهاز» و«حول» ثم قسم «الأدوات»
+  (Logs · Usage · Performance · Skills Usage · Theme · Pets · Profiles) — كل صف
+  شاشة مختلفة بعنوان الصف نفسه. حُذفت «قائمة الإعدادات» الوسيطة، وانفصل Insights إلى
+  Usage وPerformance، وSkills Usage عن Journey، وسُمّي Appearance → Theme وPetdex → Pets.
+- **تحت الوكيل**: بطاقة الوكيل في مدير الوكلاء هي المدخل الوحيد إلى أقسامه
+  (Hermes: Jobs · Kanban · Channels · Skills · Plugins · MCP · Memory · Journey ·
+  Settings بتبويبات Agent/Memory/Session؛ Ekko: Memory · Skills · MCP · Settings؛
+  وكيل برمجة: Skills · MCP · Settings). حُذف قسم «أدوات هرمس» وشاشة «الوكلاء»
+  (إصدارات وقت التشغيل صارت ورقة على بطاقة Hermes).
+- **بحث حقيقي** فوق الجلسات (`/api/studio/sessions/search`)، و«اتصالات الأجهزة» بتبويبي
+  App/Devices، والعودة تتبع تاريخ الزيارة الفعلي بدل جدول ثابت، وفتح جلسة من السجل لا
+  يبدّل المقطع، وProfiles لها مدخل واحد، وFiles من «تحرير الإعدادات» في بطاقة الملف.
+- إصلاح مسارات الحيوانات إلى `/api/studio/petdex|pets` مع اختبار عقد.
+- **غير المنجَز**: Presets وPlugins لـ dsh (لا حالة لهما في السجل المشترك)، وإعدادات
+  Ekko تُحرَّر كأقسام JSON لا كنماذج حقول. السجل: `docs/changes/2026-09-20-twuijri-android-navigation.md`.
