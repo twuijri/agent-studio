@@ -113,7 +113,7 @@ internal fun KanbanScreen(state: UiState, viewModel: AppViewModel) {
     Scaffold(
         topBar = {
             StudioTopBar(
-                title = stringResource(R.string.kanban_title),
+                title = stringResource(R.string.nav_kanban),
                 subtitle = stringResource(R.string.kanban_mobile_note),
                 onBack = { viewModel.back() },
                 actions = {

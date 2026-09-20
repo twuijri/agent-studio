@@ -676,12 +676,6 @@ internal fun DisplayStudioSettings(state: UiState, viewModel: AppViewModel) {
     val language = APP_LANGUAGES.firstOrNull { it.tag == state.language } ?: APP_LANGUAGES.first()
 
     SettingsRow(
-        icon = Icons.Filled.Palette,
-        label = stringResource(R.string.display_theme_open),
-        value = state.themeSettings?.accentColor?.takeIf { it.isNotBlank() } ?: stringResource(R.string.settings_entry_theme),
-        onClick = { viewModel.openAppearance() },
-    )
-    SettingsRow(
         icon = Icons.Filled.Language,
         label = stringResource(R.string.settings_language),
         value = AppLocale.labelFor(context, language),

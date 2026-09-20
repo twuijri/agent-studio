@@ -115,7 +115,7 @@ internal fun SkillsScreen(state: UiState, viewModel: AppViewModel) {
     Scaffold(
         topBar = {
             StudioTopBar(
-                title = stringResource(R.string.skills_title),
+                title = stringResource(R.string.nav_skills),
                 subtitle = stringResource(R.string.skills_subtitle, state.activeProfile),
                 onBack = { viewModel.back() },
                 actions = {
@@ -165,7 +165,8 @@ internal fun SkillsScreen(state: UiState, viewModel: AppViewModel) {
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 7.dp),
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                listOf("hermes", "claude", "codex").forEach { target ->
+                // The web's targets, plus the agent this screen was opened under.
+                (listOf("hermes", "claude", "codex") + skills.target).distinct().forEach { target ->
                     FilterChip(
                         selected = skills.target == target,
                         onClick = { viewModel.selectSkillsTarget(target) },
@@ -342,7 +343,7 @@ internal fun PluginsScreen(state: UiState, viewModel: AppViewModel) {
     Scaffold(
         topBar = {
             StudioTopBar(
-                stringResource(R.string.plugins_title),
+                stringResource(R.string.nav_plugins),
                 stringResource(R.string.plugins_summary, ui.plugins.count { it.enabled }, ui.plugins.size),
                 onBack = { viewModel.back() },
                 actions = {
@@ -448,12 +449,14 @@ internal fun McpScreen(state: UiState, viewModel: AppViewModel) {
     Scaffold(
         topBar = {
             StudioTopBar(
-                stringResource(R.string.mcp_title),
-                stringResource(R.string.mcp_summary, ui.servers.count { it.connected }, ui.servers.size),
+                stringResource(R.string.nav_mcp),
+                ui.agentId?.let { agent -> state.agents.firstOrNull { it.id == agent }?.definition?.name ?: agent }
+                    ?: stringResource(R.string.mcp_summary, ui.servers.count { it.connected }, ui.servers.size),
                 onBack = { viewModel.back() },
                 actions = {
-                    IconButton(onClick = { viewModel.reloadMcpServer() }, enabled = ui.actionName == null) {
-                        Icon(Icons.Filled.Refresh, stringResource(R.string.mcp_reload_all))
+                    // Reload is a Hermes-only route; a coding agent's list only refreshes.
+                    IconButton(onClick = { if (ui.agentId == null) viewModel.reloadMcpServer() else viewModel.refreshMcp() }, enabled = ui.actionName == null) {
+                        Icon(Icons.Filled.Refresh, stringResource(if (ui.agentId == null) R.string.mcp_reload_all else R.string.action_refresh))
                     }
                 },
             )
@@ -617,7 +620,7 @@ internal fun PetsScreen(state: UiState, viewModel: AppViewModel) {
     Scaffold(
         topBar = {
             StudioTopBar(
-                stringResource(R.string.pets_title),
+                stringResource(R.string.nav_pets),
                 stringResource(R.string.pets_count, ui.pets.size),
                 onBack = { viewModel.back() },
                 actions = {

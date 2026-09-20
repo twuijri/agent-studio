@@ -90,12 +90,12 @@ import us.i3u.hermesstudio.ProfileAvatar
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.RoomInfo
 import us.i3u.hermesstudio.Screen
-import us.i3u.hermesstudio.SettingsGroup
 import us.i3u.hermesstudio.StudioWorkflow
 import us.i3u.hermesstudio.Tab
 import us.i3u.hermesstudio.TextPromptDialog
 import us.i3u.hermesstudio.UiState
 import us.i3u.hermesstudio.isSuperAdmin
+import us.i3u.hermesstudio.navigation.NavDestination
 import us.i3u.hermesstudio.ui.chat.STUDIO_REPOSITORY_URL
 import us.i3u.hermesstudio.ui.groups.AgentAvatarStack
 import us.i3u.hermesstudio.ui.groups.NewRoomDialog
@@ -279,13 +279,17 @@ fun CoreHubDrawerContent(state: UiState, viewModel: AppViewModel, onClose: () ->
                         ),
                         verticalArrangement = Arrangement.spacedBy(CoreHubTokens.Metrics.railRowGap),
                     ) {
-                        RailItem(CoreHubIcons.NewChat, stringResource(R.string.action_new_chat)) { go { viewModel.startNewConversation() } }
-                        RailItem(CoreHubIcons.Search, stringResource(R.string.nav_search), selected = state.screen == Screen.History) { go { viewModel.showTab(Tab.History) } }
-                        RailItem(CoreHubIcons.DeviceConnections, stringResource(R.string.nav_device_connections), selected = state.screen == Screen.Connections) { go { viewModel.openConnections() } }
-                        if (state.isSuperAdmin) {
-                            RailItem(CoreHubIcons.AgentManager, stringResource(R.string.nav_agent_manager), selected = state.screen == Screen.AgentHub) { go { viewModel.openAgentManager() } }
-                        }
-                        RailItem(CoreHubIcons.Models, stringResource(R.string.nav_models), selected = state.openGroup == SettingsGroup.Models && state.screen == Screen.SettingsGroup) { go { viewModel.openSettingsGroup(SettingsGroup.Models) } }
+                        // The registry owns the rail: its order, its labels, and
+                        // that Agent Manager is super-admin only (router/index.ts:196-201).
+                        NavDestination.rail
+                            .filter { it != NavDestination.agentManager || state.isSuperAdmin }
+                            .forEach { destination ->
+                                RailItem(destination, railIcon(destination), selected = railSelected(state, destination)) {
+                                    // Search is a sheet over the drawer, so the drawer stays.
+                                    if (destination == NavDestination.search) viewModel.openRailDestination(destination)
+                                    else go { viewModel.openRailDestination(destination) }
+                                }
+                            }
                     }
                 }
                 item(key = "switch") {
@@ -314,7 +318,9 @@ fun CoreHubDrawerContent(state: UiState, viewModel: AppViewModel, onClose: () ->
                     viewModel = viewModel,
                     modifier = listModifier,
                     header = drawerHeader,
-                    onOpen = { session -> go { viewModel.showTab(Tab.Chat); viewModel.openSession(session) } },
+                    // Opening a session leaves the selected segment alone: a
+                    // session picked under History returns to History.
+                    onOpen = { session -> go { viewModel.openSession(session) } },
                 )
             }
 
@@ -324,10 +330,26 @@ fun CoreHubDrawerContent(state: UiState, viewModel: AppViewModel, onClose: () ->
     }
 }
 
+private fun railIcon(destination: NavDestination): ImageVector = when (destination) {
+    NavDestination.newChat -> CoreHubIcons.NewChat
+    NavDestination.search -> CoreHubIcons.Search
+    NavDestination.deviceConnections -> CoreHubIcons.DeviceConnections
+    NavDestination.agentManager -> CoreHubIcons.AgentManager
+    else -> CoreHubIcons.Models
+}
+
+private fun railSelected(state: UiState, destination: NavDestination): Boolean = when (destination) {
+    NavDestination.deviceConnections -> state.screen == Screen.Connections
+    NavDestination.agentManager -> state.screen == Screen.AgentManager
+    NavDestination.models -> state.screen == Screen.Models
+    else -> false
+}
+
 /** Nav item: 36 dp tall, 14 sp, radius 6, selected = accent @ 12 % with text.primary at weight 500. */
 @Composable
-private fun RailItem(icon: ImageVector, label: String, selected: Boolean = false, onClick: () -> Unit) {
+private fun RailItem(destination: NavDestination, icon: ImageVector, selected: Boolean = false, onClick: () -> Unit) {
     val palette = CoreHub.palette
+    val label = stringResource(destination.labelKey)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -369,10 +391,10 @@ private fun RailItem(icon: ImageVector, label: String, selected: Boolean = false
 fun ConversationSwitch(selected: Tab, modifier: Modifier = Modifier, onSelect: (Tab) -> Unit) {
     val palette = CoreHub.palette
     val segments = listOf(
-        Triple(Tab.Chat, CoreHubIcons.Chat, R.string.segment_chat),
-        Triple(Tab.Group, CoreHubIcons.Group, R.string.segment_group_chat),
-        Triple(Tab.Workflow, CoreHubIcons.Workflow, R.string.segment_workflow),
-        Triple(Tab.History, CoreHubIcons.History, R.string.segment_history),
+        Triple(Tab.Chat, CoreHubIcons.Chat, NavDestination.chat.labelKey),
+        Triple(Tab.Group, CoreHubIcons.Group, NavDestination.groupChat.labelKey),
+        Triple(Tab.Workflow, CoreHubIcons.Workflow, NavDestination.workflow.labelKey),
+        Triple(Tab.History, CoreHubIcons.History, NavDestination.history.labelKey),
     )
     val gap = CoreHubTokens.Metrics.segmentGap
     val index by animateFloatAsState(
@@ -463,7 +485,7 @@ private fun DrawerRoomList(
     LazyColumn(modifier = modifier, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
         header()
         item(key = "rooms-header") {
-            DrawerSectionHeader(stringResource(R.string.segment_group_chat), state.rooms.size) {
+            DrawerSectionHeader(stringResource(R.string.nav_group_chat), state.rooms.size) {
                 DrawerSectionAction(CoreHubIcons.NewChat, stringResource(R.string.groups_new)) { creating = true }
                 DrawerSectionAction(CoreHubIcons.Link, stringResource(R.string.room_join_title)) { joining = true }
             }
@@ -535,7 +557,7 @@ private fun DrawerWorkflowList(
     val palette = CoreHub.palette
     LazyColumn(modifier = modifier, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
         header()
-        item(key = "workflows-header") { DrawerSectionHeader(stringResource(R.string.segment_workflow), state.workflows.size) }
+        item(key = "workflows-header") { DrawerSectionHeader(stringResource(R.string.nav_workflow), state.workflows.size) }
         if (state.loadingWorkflows && state.workflows.isEmpty()) {
             item { Text(stringResource(R.string.intro_restoring), style = CoreHubTextStyles.meta, color = palette.textMuted, modifier = Modifier.padding(10.dp)) }
         }
@@ -656,10 +678,6 @@ private fun DrawerFooter(
                             onClick = { profileMenu = false; onNavigate { viewModel.selectProfile(profile.name) } },
                         )
                     }
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_profiles)) },
-                        onClick = { profileMenu = false; onNavigate { viewModel.openProfiles() } },
-                    )
                 }
             }
             Box(Modifier.weight(1f)) {
@@ -747,7 +765,7 @@ private fun DrawerFooter(
             ) {
                 Icon(
                     CoreHubIcons.Settings,
-                    contentDescription = stringResource(R.string.settings_title),
+                    contentDescription = stringResource(NavDestination.settings.labelKey),
                     tint = if (state.screen == Screen.Settings) palette.textPrimary else palette.textSecondary,
                     modifier = Modifier.size(CoreHubTokens.Metrics.footerSettingsIcon),
                 )
@@ -861,7 +879,7 @@ private fun DrawerLanguageSwitch(state: UiState, viewModel: AppViewModel) {
 private fun DrawerThemeSwitch(state: UiState, viewModel: AppViewModel) {
     var menu by remember { mutableStateOf(false) }
     Box {
-        FooterToggle(stringResource(R.string.settings_entry_theme), onClick = { menu = true }) {
+        FooterToggle(stringResource(NavDestination.theme.labelKey), onClick = { menu = true }) {
             Icon(
                 when (state.appearance) {
                     "light" -> CoreHubIcons.ThemeLight

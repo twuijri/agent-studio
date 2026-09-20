@@ -87,7 +87,7 @@ internal fun CronJobsScreen(state: UiState, viewModel: AppViewModel) {
     Scaffold(
         topBar = {
             StudioTopBar(
-                title = stringResource(R.string.cron_title),
+                title = stringResource(R.string.nav_jobs),
                 subtitle = state.activeProfile.ifBlank { "default" },
                 onBack = { viewModel.back() },
                 actions = {

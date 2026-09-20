@@ -115,7 +115,7 @@ fun ModelsScreen(state: UiState, viewModel: AppViewModel) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.models_page_title)) },
+                title = { Text(stringResource(R.string.nav_models)) },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.back() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))

@@ -96,7 +96,7 @@ fun HistoryScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Unit) {
                 title = {
                     Text(
                         if (state.sessionSelectionMode) stringResource(R.string.session_selection_count, state.sessionSelection.size)
-                        else stringResource(R.string.segment_history),
+                        else stringResource(R.string.nav_history),
                         style = MaterialTheme.typography.titleLarge,
                     )
                 },
@@ -144,7 +144,7 @@ fun HistoryScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Unit) {
                 showSearch = true,
                 selectable = true,
                 contentPadding = PaddingValues(start = StudioHorizontalPadding, end = StudioHorizontalPadding, top = 8.dp, bottom = 28.dp),
-                onOpen = { session -> viewModel.showTab(Tab.Chat); viewModel.openSession(session) },
+                onOpen = { session -> viewModel.openSession(session) },
             )
         }
     }

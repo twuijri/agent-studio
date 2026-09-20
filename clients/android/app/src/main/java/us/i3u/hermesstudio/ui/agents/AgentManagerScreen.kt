@@ -54,6 +54,7 @@ import us.i3u.hermesstudio.NoticeNote
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.StudioHorizontalPadding
 import us.i3u.hermesstudio.UiState
+import us.i3u.hermesstudio.navigation.NavDestination
 import us.i3u.hermesstudio.ui.sessions.AgentAvatar
 import us.i3u.hermesstudio.ui.sessions.ChatAgentAvatars
 import us.i3u.hermesstudio.ui.theme.CoreHub
@@ -77,13 +78,13 @@ import us.i3u.hermesstudio.ui.theme.CoreHub
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AgentManagerScreen(
-    state: UiState,
-    viewModel: AppViewModel,
-    hermesTools: @Composable () -> Unit,
-) {
+fun AgentManagerScreen(state: UiState, viewModel: AppViewModel) {
     val palette = CoreHub.palette
     var deleting by remember { mutableStateOf<AgentCard?>(null) }
+    var runtimeSheet by remember { mutableStateOf(false) }
+    var cliDetails by remember { mutableStateOf<AgentCard?>(null) }
+    if (runtimeSheet) RuntimeManagerSheet(state, viewModel) { runtimeSheet = false }
+    cliDetails?.let { card -> HermesCliDetailsDialog(card) { cliDetails = null } }
 
     deleting?.let { card ->
         ConfirmDialog(
@@ -98,7 +99,7 @@ fun AgentManagerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.nav_agent_manager)) },
+                title = { Text(stringResource(NavDestination.agentManager.labelKey)) },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.back() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
@@ -182,15 +183,12 @@ fun AgentManagerScreen(
                             busy = state.agentBusyId == card.id,
                             viewModel = viewModel,
                             onDelete = { deleting = card },
+                            onManageRuntime = { runtimeSheet = true },
+                            onCliDetails = { cliDetails = card },
                         )
                     }
                 }
             }
-
-            // The Hermes side of Core Hub — Kanban, skills, memory and the
-            // rest — used to be this whole screen. It stays reachable, but
-            // under the agents rather than instead of them.
-            item { hermesTools() }
         }
     }
 }
@@ -202,17 +200,19 @@ private fun AgentRow(
     busy: Boolean,
     viewModel: AppViewModel,
     onDelete: () -> Unit,
+    onManageRuntime: () -> Unit,
+    onCliDetails: () -> Unit,
 ) {
     val palette = CoreHub.palette
-    val openSettings = { viewModel.openAgentSettings(card.definition) }
+    // Every card opens its agent (NAVIGATION.md §4): Jobs, Kanban, Skills,
+    // MCP, Memory and the rest live there, not on this screen.
+    val openAgent = { viewModel.openAgent(card.definition) }
 
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = palette.bgCard,
         border = BorderStroke(1.dp, palette.border),
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (card.hasSettings) Modifier.clickable { openSettings() } else Modifier),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = openAgent),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -291,11 +291,22 @@ private fun AgentRow(
             if (busy) LoadingRow()
 
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (card.hasSettings) {
-                    OutlinedButton(onClick = openSettings, enabled = !busy) {
-                        Icon(Icons.Filled.Settings, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.action_settings))
+                OutlinedButton(onClick = openAgent, enabled = !busy) {
+                    Icon(Icons.Filled.Settings, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.agent_card_open))
+                }
+                // The Hermes card carries "CLI details" and "Manage runtime"
+                // (AgentManagerView.vue:517-536): the runtime versions are a
+                // sheet here, never a screen with an entry of its own.
+                if (card.definition.kind == AgentKind.Hermes) {
+                    if (card.installed && card.source == "user-cli") {
+                        TextButton(onClick = onCliDetails, enabled = !busy) { Text(stringResource(R.string.agent_cli_details)) }
+                    }
+                    if (!card.installed || card.source == "managed-runtime") {
+                        TextButton(onClick = onManageRuntime, enabled = !busy) {
+                            Text(if (card.installed) stringResource(R.string.agent_manage_runtime) else stringResource(R.string.agent_install))
+                        }
                     }
                 }
                 if (card.installable) {

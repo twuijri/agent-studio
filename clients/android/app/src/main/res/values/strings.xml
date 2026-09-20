@@ -28,9 +28,7 @@
     <string name="action_ok">OK</string>
     <string name="action_skip">Skip</string>
     <string name="action_next">Next</string>
-    <string name="action_new_chat">New chat</string>
     <string name="action_settings">Settings</string>
-    <string name="action_profiles">Profiles</string>
     <string name="action_sign_out">Sign out</string>
     <string name="action_remove">Remove</string>
     <string name="action_selected">Selected</string>
@@ -77,21 +75,8 @@
     <string name="room_empty">No messages in this room yet</string>
 
     <!-- Agent hub -->
-    <string name="agent_hub_title">Agent</string>
-    <string name="agent_hub_tab">Agent</string>
-    <string name="agent_hub_profile">Active profile: %1$s</string>
-    <string name="agent_hub_tools">Agent tools</string>
-    <string name="agent_hub_configuration">Agent configuration</string>
-    <string name="agent_hub_work">Work</string>
-    <string name="agent_hub_capabilities">Capabilities</string>
-    <string name="agent_hub_intelligence">Intelligence</string>
     <string name="agent_status_active">Active</string>
     <string name="agent_status_ready">Ready</string>
-    <string name="agent_hub_kanban">Kanban</string>
-    <string name="agent_hub_skills">Skills</string>
-    <string name="agent_hub_plugins">Plugins</string>
-    <string name="agent_hub_mcp">MCP</string>
-    <string name="agent_hub_pets">Pets</string>
 
     <!-- Conversation -->
     <string name="conversation_empty">Send a message to %1$s</string>
@@ -158,15 +143,6 @@
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
-    <string name="more_settings_title">More settings</string>
-    <string name="more_settings_note">All Hermes Studio settings in one place</string>
-    <string name="more_settings_footer">Agent tools stay in the Agent tab. Studio configuration is collected here to keep navigation simple.</string>
-    <string name="more_settings_subtitle">Studio settings in one place</string>
-    <string name="more_settings_studio">Studio behavior</string>
-    <string name="more_settings_agent">Agent</string>
-    <string name="more_settings_conversation">Conversation</string>
-    <string name="more_settings_network_privacy">Network &amp; privacy</string>
-    <string name="more_settings_management">Management</string>
     <string name="settings_section_server">Server</string>
     <string name="settings_section_profile">Active profile</string>
     <string name="settings_section_appearance">Appearance</string>
@@ -264,9 +240,6 @@
     <string name="settings_auto_start_on">on</string>
     <string name="settings_auto_start_off">off</string>
     <string name="notice_saved">Saved</string>
-
-    <string name="settings_channels">Channels</string>
-    <string name="settings_channels_summary">%1$d of %2$d set up</string>
     <string name="channels_title">Channels</string>
     <string name="channel_configured">set up</string>
     <string name="channel_connected">Connected</string>
@@ -372,17 +345,6 @@
     <string name="notice_channel_cleared">%1$s credentials removed</string>
     <string name="notice_weixin_linked">Weixin linked — the gateway is restarting</string>
     <string name="settings_auto_start_note">When this is on, your server starts each profile’s gateway on boot, so channels answer without anyone opening Studio.</string>
-
-    <string name="settings_group_server">Server and account</string>
-    <string name="settings_group_server_note">Address, signed-in user, sign out</string>
-    <string name="settings_group_profile">Active profile</string>
-    <string name="settings_group_profile_note">Which agent new chats talk to, and its default model</string>
-    <string name="settings_group_agent">Agent</string>
-    <string name="settings_group_agent_note">Turn limits, timeouts, tool use, gateway auto-start</string>
-    <string name="settings_group_channels_note">Telegram, Discord, Slack and the rest</string>
-    <string name="settings_group_device">This device</string>
-    <string name="settings_group_device_note">Language, app logo, reasoning effort</string>
-    <string name="settings_group_about_note">Version and credits</string>
     <string name="agent_max_turns">Max turns</string>
     <string name="agent_max_turns_note">Interaction rounds per conversation</string>
     <string name="agent_gateway_timeout">Gateway timeout</string>
@@ -402,8 +364,6 @@
     <string name="agent_unset">server default</string>
 
     <!-- Scheduled jobs / Cron Jobs -->
-    <string name="settings_group_cron_note">Create, schedule, pause and inspect jobs for the active profile</string>
-    <string name="cron_title">Scheduled jobs</string>
     <string name="cron_create">Create job</string>
     <string name="cron_edit">Edit job</string>
     <string name="cron_empty">No scheduled jobs yet for this profile.</string>
@@ -491,22 +451,6 @@
     <string name="settings_category_profile">Active profile</string>
     <string name="settings_category_integrations">Integrations and automation</string>
     <string name="settings_category_app">App</string>
-    <string name="settings_group_users">Account management</string>
-    <string name="settings_group_users_note">Create users, roles, status, and profile access</string>
-    <string name="settings_group_models">Model providers</string>
-    <string name="settings_group_models_note">API keys for built-in and custom providers</string>
-    <string name="settings_group_memory">Memory</string>
-    <string name="settings_group_memory_note">Agent memory, user profile, and size limits</string>
-    <string name="settings_group_compression">Context compression</string>
-    <string name="settings_group_compression_note">When and how the conversation context is compressed</string>
-    <string name="settings_group_sessions">Sessions and approvals</string>
-    <string name="settings_group_sessions_note">Approvals, writes, and automatic session reset</string>
-    <string name="settings_group_privacy">Privacy</string>
-    <string name="settings_group_privacy_note">Redact personal information before model requests</string>
-    <string name="settings_group_proxy">Proxy</string>
-    <string name="settings_group_proxy_note">HTTP, HTTPS, SOCKS, and bypass addresses</string>
-    <string name="settings_group_display">Studio display</string>
-    <string name="settings_group_display_note">Streaming, reasoning, costs, diffs, and completion alerts</string>
 
     <string name="account_security_title">Security</string>
     <string name="account_change_username">Change username</string>
@@ -638,11 +582,6 @@
     <string name="agent_excluded_profiles">Profiles excluded from automatic start</string>
 
     <string name="action_search">Search</string>
-    <string name="agent_hub_kanban_note">Mobile boards with drag-to-move tasks</string>
-    <string name="agent_hub_skills_note">Browse, enable, import, and edit agent skills</string>
-    <string name="agent_hub_plugins_note">Inspect and control Studio plugins</string>
-    <string name="agent_hub_mcp_note">Manage MCP servers and their tools</string>
-    <string name="agent_hub_pets_note">Choose and configure your companion</string>
 
     <string name="kanban_title">Kanban</string>
     <string name="kanban_mobile_note">Your Studio task boards, built for mobile</string>
@@ -725,8 +664,6 @@
     <string name="mcp_url">Server URL</string>
     <string name="mcp_args">Arguments, one per line</string>
     <string name="mcp_advanced_json">Advanced JSON</string>
-
-    <string name="pets_title">Petdex</string>
     <string name="pets_count">%1$d companions</string>
     <string name="pets_active">Active companion</string>
     <string name="pets_scale">Size: %1$.1f×</string>
@@ -736,30 +673,17 @@
     <string name="pets_adopt">Adopt</string>
     <string name="pets_adopted_button">Adopted</string>
     <string name="pets_adopted">Your new companion is active</string>
-    <string name="insights_title">Insights</string>
-    <string name="insights_subtitle">Token usage and Studio runtime</string>
     <string name="insights_days">%1$d days</string>
-    <string name="insights_usage">Usage</string>
     <string name="insights_tokens">Tokens</string>
     <string name="insights_sessions">Sessions</string>
     <string name="insights_cost">Estimated cost</string>
     <string name="insights_cache">Cache tokens</string>
     <string name="insights_by_model">By model</string>
-    <string name="insights_runtime">Runtime</string>
     <string name="insights_memory">System memory</string>
     <string name="insights_workers">Bridge workers</string>
     <string name="insights_live_sessions">Live sessions</string>
     <string name="voice_stop_reply">Stop voice</string>
     <string name="voice_playback_failed">The voice reply could not be played. Check the TTS provider in Studio.</string>
-    <string name="agent_runtimes_title">Agents</string>
-    <string name="agent_runtimes_subtitle">Choose the runtime that owns this conversation. Studio organizes five agents into three clear families.</string>
-    <string name="agent_runtimes_hub_note">Hermes, Ekko, Claude Code, Codex and Pi</string>
-    <string name="agent_family_hermes">Hermes family</string>
-    <string name="agent_family_ekko">Ekko family</string>
-    <string name="agent_family_coding">Coding agents</string>
-    <string name="agent_runtime_ready">Ready</string>
-    <string name="agent_runtime_not_installed">Not installed</string>
-    <string name="agent_runtime_unavailable">Unavailable</string>
     <string name="run_approval_title">Approval required</string>
     <string name="run_clarification_title">Agent question</string>
     <string name="run_clarification_answer">Your answer</string>
@@ -777,7 +701,6 @@
     <string name="session_new_category">New category</string>
     <string name="session_category_name">Category name</string>
     <string name="workflows_title">Workflows</string>
-    <string name="workflows_hub_note">Run, monitor and approve automated work</string>
     <string name="workflows_mobile_note">A touch-friendly view of Studio workflows, recent runs and approval gates.</string>
     <string name="workflows_empty">No workflows in this profile</string>
     <string name="workflow_run">Run</string>
@@ -785,15 +708,12 @@
     <string name="workflow_input">Optional input</string>
     <string name="workflow_summary">%1$s · %2$d nodes · %3$d connections</string>
     <string name="global_agent_title">Global Agent</string>
-    <string name="global_agent_hub_note">One persistent agent across Studio devices</string>
     <string name="global_agent_description">Continue a persistent Global Agent conversation using Studio’s built-in Ekko runtime.</string>
     <string name="global_agent_profile">Active profile: %1$s</string>
     <string name="global_agent_open">Open Global Agent chat</string>
     <string name="global_agent_remote_note">The conversation remains on Studio and can continue from another connected device.</string>
     <string name="action_stop">Stop</string>
     <string name="global_agent_sessions">Recent sessions</string>
-    <string name="ekko_hub_title">Ekko configuration</string>
-    <string name="ekko_hub_note">Memory, skills and MCP owned by Ekko</string>
     <string name="ekko_memory_title">Memory</string>
     <string name="ekko_memory_edit">Edit memory</string>
     <string name="ekko_memory_name">Title</string>
@@ -809,9 +729,8 @@
     <string name="action_test">Test</string>
     <string name="action_add">Add</string>
     <string name="profile_runtime_status">Runtime: %1$s</string>
-    <string name="files_title">Studio Files</string><string name="files_hub_note">Browse and edit profile workspace files</string><string name="files_new_folder">New folder</string><string name="files_edit">Read or edit</string><string name="files_open_external">Open externally</string><string name="files_saved">File saved</string>
-    <string name="logs_title">Logs</string><string name="logs_hub_note">Studio, bridge and agent diagnostics</string>
-    <string name="connections_title">Connections</string><string name="connections_hub_note">App Relay and paired Studio devices</string><string name="app_relay_title">App Relay</string><string name="devices_title">Devices</string><string name="connected">Connected</string><string name="disconnected">Disconnected</string><string name="connect">Connect</string><string name="disconnect">Disconnect</string><string name="refresh_pairing">New pairing code</string>
+    <string name="files_title">Studio Files</string><string name="files_new_folder">New folder</string><string name="files_edit">Read or edit</string><string name="files_open_external">Open externally</string><string name="files_saved">File saved</string>
+    <string name="logs_title">Logs</string><string name="app_relay_title">App Relay</string><string name="devices_title">Devices</string><string name="connected">Connected</string><string name="disconnected">Disconnected</string><string name="connect">Connect</string><string name="disconnect">Disconnect</string><string name="refresh_pairing">New pairing code</string>
     <string name="insights_by_agent">By agent</string><string name="insights_daily">Daily usage</string>
     <string name="files_upload">Upload</string><string name="files_download">Download or open</string><string name="files_copy_to">Copy to path</string>
     <string name="authorize_lan">Authorize LAN</string><string name="authorize_cloud">Authorize cloud</string><string name="authorization_code">Authorization code</string><string name="app_connections_title">Authorized apps</string>
@@ -819,11 +738,7 @@
     <string name="ekko_skill_new">New Ekko skill</string>
     <string name="profile_import">Import profile</string><string name="profile_avatar">Choose profile avatar</string><string name="profile_avatar_clear">Remove profile avatar</string>
     <string name="profile_export_started">Profile export started</string><string name="ekko_external_dirs">External directories</string><string name="revoke_connection">Revoke app connection?</string><string name="manual_device">Add device manually</string><string name="block">Block</string><string name="unblock">Unblock</string>
-    <string name="name">Name</string>
-    <string name="journey_title">Journey</string><string name="journey_note">Skill and memory graph with usage</string>
-    <string name="webhooks_title">Webhooks</string><string name="webhooks_note">Delivery endpoints, tests, and local events</string><string name="webhooks_add">Add webhook</string><string name="clear_events">Clear events</string><string name="local_events">Local test events</string>
-    <string name="runtime_versions_title">Runtime versions</string><string name="runtime_versions_note">Install, activate, and restart managed runtimes</string><string name="restart_webui">Restart Web UI</string><string name="activate">Activate</string>
-    <string name="appearance_title">Appearance</string><string name="appearance_note">Studio colors, text, and background</string><string name="font_size">Font size</string><string name="text_color">Text color</string><string name="accent_color">Accent color</string><string name="remove_background">Remove background</string><string name="upload_background">Upload background</string>
+    <string name="name">Name</string><string name="webhooks_note">Delivery endpoints, tests, and local events</string><string name="webhooks_add">Add webhook</string><string name="clear_events">Clear events</string><string name="local_events">Local test events</string><string name="restart_webui">Restart Web UI</string><string name="activate">Activate</string><string name="font_size">Font size</string><string name="text_color">Text color</string><string name="accent_color">Accent color</string><string name="remove_background">Remove background</string><string name="upload_background">Upload background</string>
     <string name="kanban_operations">Operations and diagnostics</string><string name="kanban_dispatch">Dispatch</string><string name="kanban_complete">Complete</string><string name="kanban_reassign">Reassign</string>
     <string name="action_send">Send</string>
     <string name="workflow_editor">Workflow editor</string><string name="workflow_workspace">Workspace</string><string name="workflow_schedule_add">Add schedule</string><string name="workflow_timezone">Timezone</string><string name="workflow_rerun">Rerun</string><string name="workflow_batch_delete">Delete workflows</string><string name="workflow_batch_delete_body">Delete all %1$d workflows?</string>
@@ -881,18 +796,48 @@
     <string name="error_microphone_detail">Could not start the microphone: %1$s</string>
 
     <!-- Core Hub navigation (drawer rail, conversation switch, drawer footer) -->
-    <string name="nav_menu">Open menu</string>
+
+    <!-- Navigation registry (docs/mobile/NAVIGATION.md): entry label and screen title share the key. -->
+    <string name="nav_new_chat">New chat</string>
     <string name="nav_search">Search</string>
     <string name="nav_device_connections">Device connections</string>
     <string name="nav_agent_manager">Agent Manager</string>
     <string name="nav_models">Models</string>
-    <string name="segment_chat">Chat</string>
-    <string name="segment_group_chat">Group Chat</string>
-    <string name="segment_workflow">Workflow</string>
-    <string name="segment_history">History</string>
+    <string name="nav_chat">Chat</string>
+    <string name="nav_group_chat">Group Chat</string>
+    <string name="nav_workflow">Workflow</string>
+    <string name="nav_history">History</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_logs">Logs</string>
+    <string name="nav_usage">Usage</string>
+    <string name="nav_performance">Performance</string>
+    <string name="nav_skills_usage">Skills Usage</string>
+    <string name="nav_theme">Theme</string>
+    <string name="nav_pets">Pets</string>
+    <string name="nav_profiles">Profiles</string>
+    <string name="nav_conversation">Conversation</string>
+    <string name="nav_room">Room</string>
+    <string name="nav_workflow_detail">Workflow details</string>
+    <string name="nav_workflow_run">Workflow run</string>
+    <string name="nav_agent_hermes">Hermes</string>
+    <string name="nav_agent_ekko">Ekko</string>
+    <string name="nav_agent_coding">Coding agent</string>
+    <string name="nav_jobs">Jobs</string>
+    <string name="nav_kanban">Kanban</string>
+    <string name="nav_channels">Channels</string>
+    <string name="nav_skills">Skills</string>
+    <string name="nav_plugins">Plugins</string>
+    <string name="nav_mcp">MCP</string>
+    <string name="nav_memory">Memory</string>
+    <string name="nav_journey">Journey</string>
+    <string name="nav_hermes_settings">Settings</string>
+    <string name="nav_ekko_settings">Settings</string>
+    <string name="nav_coding_agent_settings">Settings</string>
+    <string name="nav_global_agent">Global Agent</string>
+    <string name="nav_files">Files</string>
+    <string name="nav_menu">Open menu</string>
     <string name="drawer_profile">Profile</string>
     <string name="drawer_model">Model</string>
-    <string name="drawer_back_to_chat">Back</string>
     <string name="footer_version">Core Hub v%1$s</string>
 
     <!-- Session list -->
@@ -906,14 +851,6 @@
     <string name="session_category">Category</string>
 
     <!-- Settings drawer and Settings page tabs -->
-    <string name="settings_entry_logs">Logs</string>
-    <string name="settings_entry_usage">Usage</string>
-    <string name="settings_entry_performance">Performance</string>
-    <string name="settings_entry_skills_usage">Skills Usage</string>
-    <string name="settings_entry_theme">Theme</string>
-    <string name="settings_entry_pets">Pets</string>
-    <string name="settings_entry_profiles">Profiles</string>
-    <string name="settings_entry_settings">Settings</string>
     <string name="settings_tab_current_account">Current Account</string>
     <string name="settings_tab_account_management">Account Management</string>
     <string name="settings_tab_webhooks">Webhooks</string>
@@ -924,8 +861,6 @@
     <string name="settings_tab_models">Models</string>
     <string name="settings_tab_device">This device</string>
     <string name="settings_tab_about">About</string>
-    <string name="webhooks_open">Open webhooks</string>
-    <string name="webhooks_count">%1$d endpoints</string>
 
     <!-- M3: chat parity (message row, tool card, thinking, composer, consent) -->
     <string name="tools_count">%1$d tools</string>
@@ -1112,7 +1047,6 @@
     <string name="workflow_status_skipped">skipped</string>
 
     <!-- M4: Display and Models tabs -->
-    <string name="display_theme_open">Theme and background</string>
     <string name="display_text_scale">Text size on this device</string>
     <string name="display_text_scale_note">Scales every message and label, 0.85 to 1.3.</string>
     <string name="models_default_model">Default model</string>
@@ -1172,7 +1106,6 @@
     <string name="speech_language_follow_app_value">%1$s (app language)</string>
 
     <!-- Models page: the web's ModelsView, i.e. providers and their catalogues. -->
-    <string name="models_page_title">Models</string>
     <string name="models_tab_general">Providers</string>
     <string name="models_tab_fallback">Fallback</string>
     <string name="models_refresh_cache">Refresh the model cache</string>
@@ -1238,5 +1171,56 @@
     <string name="agent_settings_preference">Instructions</string>
     <string name="agent_settings_configuration">Configuration</string>
     <string name="agent_settings_missing">This file does not exist yet; saving creates it.</string>
-    <string name="agent_hub_hermes_side">Hermes</string>
+    <!-- Screens re-parented by the navigation contract (2026-09-20). -->
+    <string name="settings_tools">Tools</string>
+    <string name="settings_models_provider_keys">Provider keys</string>
+    <string name="settings_open_models_page">Open the Models page</string>
+    <string name="connections_tab_app">App</string>
+    <string name="connections_tab_devices">Devices</string>
+    <string name="connections_app_direct">Direct</string>
+    <string name="connections_app_push">Message push</string>
+    <string name="search_hint">Search sessions</string>
+    <string name="search_recent">Recent</string>
+    <string name="search_no_results">No matching sessions</string>
+    <string name="global_agent_banner">The Global Agent has new activity</string>
+    <string name="agent_manage_runtime">Manage runtime</string>
+    <string name="agent_cli_details">CLI details</string>
+    <string name="agent_card_open">Open agent</string>
+    <string name="agent_sections_note">Capabilities first, settings last. Back returns to the Agent Manager.</string>
+    <string name="hermes_settings_tab_agent">Agent</string>
+    <string name="hermes_settings_tab_memory">Memory</string>
+    <string name="hermes_settings_tab_session">Session</string>
+    <string name="memory_section_memory">Agent memory (MEMORY.md)</string>
+    <string name="memory_section_user">User profile (USER.md)</string>
+    <string name="memory_section_soul">Soul (SOUL.md)</string>
+    <string name="memory_empty">Empty</string>
+    <string name="memory_saved">Memory saved</string>
+    <string name="ekko_config_saved">Ekko settings saved</string>
+    <string name="ekko_config_invalid_json">This section is not valid JSON</string>
+    <string name="ekko_config_path">Config file: %1$s</string>
+    <string name="ekko_config_note">Each tab is one section of the Ekko config as JSON. Save writes that section only.</string>
+    <string name="ekko_tab_runtime">Runtime</string>
+    <string name="ekko_tab_model">Model</string>
+    <string name="ekko_tab_tools">Tools</string>
+    <string name="ekko_tab_modules">Modules</string>
+    <string name="ekko_tab_advanced">Advanced</string>
+    <string name="performance_processes">Processes</string>
+    <string name="performance_uptime">Uptime</string>
+    <string name="performance_worker_memory">Worker memory</string>
+    <string name="performance_sessions_by_profile">Sessions by profile</string>
+    <string name="performance_no_workers">No bridge workers</string>
+    <string name="performance_running">Running</string>
+    <string name="performance_stopped">Stopped</string>
+    <string name="performance_total_worker_memory">Total worker memory</string>
+    <string name="performance_running_sessions">%1$d running</string>
+    <string name="skills_usage_actions">Total actions</string>
+    <string name="skills_usage_loads">Loads</string>
+    <string name="skills_usage_edits">Edits</string>
+    <string name="skills_usage_distinct">Distinct skills</string>
+    <string name="skills_usage_top">Top skills</string>
+    <string name="skills_usage_empty">No skill usage in this period</string>
+    <string name="journey_summary">%1$d nodes · %2$d links</string>
+    <string name="journey_clusters">Categories</string>
+    <string name="journey_empty">No journey data yet</string>
+    <string name="profile_edit_config">Edit config</string>
 </resources>

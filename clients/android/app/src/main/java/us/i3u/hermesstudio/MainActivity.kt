@@ -245,18 +245,13 @@ private fun App(viewModel: AppViewModel = viewModel()) {
 @Composable
 private fun AppContent(state: UiState, viewModel: AppViewModel) {
 
-    // The system back gesture belongs to the app while there is somewhere to go
-    // back to. Only the Chat section lets it fall through and close the app.
+    // The system back gesture belongs to the app while there is somewhere to
+    // go back to. The Chat root lets it fall through and close the app; the
+    // other three segments return to Chat first, as the drawer would.
     when (state.screen) {
-        Screen.Conversation, Screen.Room, Screen.Profiles, Screen.Settings, Screen.SettingsPage,
-        Screen.SettingsGroup, Screen.Channels, Screen.Channel, Screen.CronJobs, Screen.CronJob, Screen.CronHistory,
-        Screen.Kanban, Screen.KanbanTask, Screen.Skills, Screen.Skill, Screen.Plugins, Screen.Mcp, Screen.Pets,
-        Screen.Insights, Screen.AgentRuntimes, Screen.AgentHub, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files,
-        Screen.Logs, Screen.Connections, Screen.Journey, Screen.Webhooks, Screen.RuntimeVersions, Screen.Appearance,
-        Screen.Workflow, Screen.WorkflowRun, Screen.AgentSettings,
-        -> BackHandler { viewModel.back() }
+        Screen.Chats, Screen.Loading, Screen.Onboarding, Screen.Login -> Unit
         Screen.Groups, Screen.Workflows, Screen.History -> BackHandler { viewModel.showTab(Tab.Chat) }
-        else -> Unit
+        else -> BackHandler { viewModel.back() }
     }
 
     when (state.screen) {
@@ -271,44 +266,53 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
             languageAction = { LanguageAction(state, viewModel) },
             onDone = { viewModel.finishOnboarding() },
         )
-        Screen.Settings -> SettingsDrawerScreen(state, viewModel)
-        Screen.SettingsPage -> SettingsPageScreen(state, viewModel)
-        Screen.SettingsGroup -> SettingsGroupScreen(state, viewModel)
-        Screen.Channels -> ChannelsScreen(state, viewModel)
-        Screen.Channel -> ChannelScreen(state, viewModel)
-        Screen.CronJobs -> CronJobsScreen(state, viewModel)
-        Screen.CronJob -> CronJobEditorScreen(state, viewModel)
-        Screen.CronHistory -> CronHistoryScreen(state, viewModel)
-        Screen.Kanban -> KanbanScreen(state, viewModel)
-        Screen.KanbanTask -> KanbanTaskScreen(state, viewModel)
-        Screen.Skills -> SkillsScreen(state, viewModel)
-        Screen.Skill -> SkillScreen(state, viewModel)
-        Screen.Plugins -> PluginsScreen(state, viewModel)
-        Screen.Mcp -> McpScreen(state, viewModel)
-        Screen.Pets -> PetsScreen(state, viewModel)
-        Screen.Insights -> InsightsScreen(state, viewModel)
-        Screen.AgentRuntimes -> AgentRuntimeScreen(state, viewModel)
-        Screen.GlobalAgent -> GlobalAgentScreen(state, viewModel)
-        Screen.EkkoHub -> EkkoHubScreen(state, viewModel)
-        Screen.Files -> FilesScreen(state, viewModel)
-        Screen.Logs -> LogsScreen(state, viewModel)
-        Screen.Connections -> ConnectionsScreen(state, viewModel)
-        Screen.Journey -> JourneyScreen(state, viewModel)
-        Screen.Webhooks -> WebhooksScreen(state, viewModel)
-        Screen.RuntimeVersions -> RuntimeVersionsScreen(state, viewModel)
-        Screen.Appearance -> AppearanceScreen(state, viewModel)
-        Screen.AgentSettings -> AgentSettingsScreen(state, viewModel)
         Screen.Login -> LoginScreen(state, viewModel)
         // The four sections of the conversation switch share the drawer shell.
         Screen.Chats, Screen.Conversation -> HomeShell(state, viewModel) { openDrawer -> ConversationScreen(state, viewModel, onMenu = openDrawer) }
         Screen.Groups -> HomeShell(state, viewModel) { openDrawer -> GroupsScreen(state, viewModel, onMenu = openDrawer) }
         Screen.Workflows -> HomeShell(state, viewModel) { openDrawer -> WorkflowsScreen(state, viewModel, onMenu = openDrawer) }
         Screen.History -> HomeShell(state, viewModel) { openDrawer -> HistoryScreen(state, viewModel, onMenu = openDrawer) }
-        Screen.AgentHub -> AgentManagerScreen(state, viewModel) { HermesToolsSection(state, viewModel) }
         Screen.Room -> RoomScreen(state, viewModel)
         Screen.Workflow -> WorkflowScreen(state, viewModel)
         Screen.WorkflowRun -> WorkflowRunScreen(state, viewModel)
+        // The primary rail (NAVIGATION.md §1).
+        Screen.Connections -> ConnectionsScreen(state, viewModel)
+        Screen.AgentManager -> AgentManagerScreen(state, viewModel)
+        Screen.Models -> ModelsScreen(state, viewModel)
+        // Settings and its Tools (§2).
+        Screen.Settings -> SettingsScreen(state, viewModel)
+        Screen.Logs -> LogsScreen(state, viewModel)
+        Screen.Usage -> UsageScreen(state, viewModel)
+        Screen.Performance -> PerformanceScreen(state, viewModel)
+        Screen.SkillsUsage -> SkillsUsageScreen(state, viewModel)
+        Screen.Theme -> ThemeScreen(state, viewModel)
+        Screen.Pets -> PetsScreen(state, viewModel)
         Screen.Profiles -> ProfilesScreen(state, viewModel)
+        // Under an agent card (§4).
+        Screen.Agent -> AgentScreen(state, viewModel)
+        Screen.CronJobs -> CronJobsScreen(state, viewModel)
+        Screen.CronJob -> CronJobEditorScreen(state, viewModel)
+        Screen.CronHistory -> CronHistoryScreen(state, viewModel)
+        Screen.Kanban -> KanbanScreen(state, viewModel)
+        Screen.KanbanTask -> KanbanTaskScreen(state, viewModel)
+        Screen.Channels -> ChannelsScreen(state, viewModel)
+        Screen.Channel -> ChannelScreen(state, viewModel)
+        Screen.Skills -> SkillsScreen(state, viewModel)
+        Screen.Skill -> SkillScreen(state, viewModel)
+        Screen.Plugins -> PluginsScreen(state, viewModel)
+        Screen.Mcp -> McpScreen(state, viewModel)
+        Screen.Memory -> HermesMemoryScreen(state, viewModel)
+        Screen.Journey -> JourneyScreen(state, viewModel)
+        Screen.HermesSettings -> HermesSettingsScreen(state, viewModel)
+        Screen.EkkoMemory -> EkkoMemoryScreen(state, viewModel)
+        Screen.EkkoSkills -> EkkoSkillsScreen(state, viewModel)
+        Screen.EkkoMcp -> EkkoMcpScreen(state, viewModel)
+        Screen.EkkoSettings -> EkkoSettingsScreen(state, viewModel)
+        Screen.AgentSettings -> AgentSettingsScreen(state, viewModel)
+        // No menu entry, as on the web: search results and the pending banner
+        // reach the Global Agent; a profile card's "Edit config" reaches Files.
+        Screen.GlobalAgent -> GlobalAgentScreen(state, viewModel)
+        Screen.Files -> FilesScreen(state, viewModel)
     }
 }
 
@@ -449,6 +453,9 @@ private fun ProfilesScreen(state: UiState, viewModel: AppViewModel) {
                     confirmDelete = profile
                 },
             )
+            TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { manage = null; viewModel.openProfileConfig(profile.name) }) {
+                Text(stringResource(R.string.profile_edit_config), Modifier.fillMaxWidth())
+            }
             TextButton(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), onClick = { manage = null; viewModel.restartProfile(profile.name) }) {
                 Text(stringResource(R.string.profile_restart), Modifier.fillMaxWidth())
             }
@@ -500,7 +507,7 @@ private fun ProfilesScreen(state: UiState, viewModel: AppViewModel) {
     Scaffold(
         topBar = {
             StudioTopBar(
-                title = stringResource(R.string.profiles_title),
+                title = stringResource(R.string.nav_profiles),
                 subtitle = state.account?.let { stringResource(R.string.profiles_signed_in, it) },
                 onBack = { viewModel.back() },
                 actions = {
@@ -731,357 +738,6 @@ internal fun LanguageAction(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-/**
- * The Hermes side of Core Hub, as it hangs below the agent list on the Agent
- * Manager screen.
- *
- * This used to be the whole screen, which is why the owner read the Agent
- * Manager as a settings page: it opened a column of links and never showed an
- * agent. The links are still worth having — Kanban, skills, memory, MCP,
- * plugins and the rest have no other entry point on the phone — so they stay,
- * grouped and named, under the agents rather than instead of them.
- */
-@Composable
-private fun HermesToolsSection(state: UiState, viewModel: AppViewModel) {
-    val channels = state.serverConfig?.channels.orEmpty()
-    val profile = state.profiles.firstOrNull { it.name == state.activeProfile }
-        ?: state.profiles.firstOrNull { it.active }
-        ?: state.profiles.firstOrNull()
-    val profileName = profile?.name ?: state.activeProfile.ifBlank { "default" }
-
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        StudioSectionTitle(stringResource(R.string.agent_hub_hermes_side))
-            StudioGroupedCard {
-                StudioDestinationRow(
-                    icon = Icons.Filled.Psychology,
-                    color = Color(0xFF7A5CFF),
-                    title = stringResource(R.string.agent_runtimes_title),
-                    subtitle = stringResource(R.string.agent_runtimes_hub_note),
-                    onClick = { viewModel.openAgentRuntimes() },
-                )
-                StudioCardDivider()
-                Row(
-                    modifier = Modifier.fillMaxWidth().clickable { viewModel.openProfiles() }
-                        .padding(horizontal = 16.dp, vertical = 15.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    ProfileAvatar(profileName, profile?.avatar, size = 58.dp)
-                    Spacer(Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(profileName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text(
-                            profile?.model.orEmpty().ifBlank { stringResource(R.string.settings_default_model_server) },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Surface(
-                        color = Color(0xFF43C879).copy(alpha = 0.16f),
-                        shape = RoundedCornerShape(50.dp),
-                    ) {
-                        Text(
-                            if (profile?.active == true) stringResource(R.string.agent_status_active)
-                            else stringResource(R.string.agent_status_ready),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF43C879),
-                        )
-                    }
-                }
-            }
-
-            StudioSectionTitle(stringResource(R.string.agent_hub_work))
-            StudioGroupedCard {
-                StudioDestinationRow(
-                    icon = Icons.Filled.AccountTree,
-                    color = Color(0xFF35B7DB),
-                    title = stringResource(R.string.workflows_title),
-                    subtitle = stringResource(R.string.workflows_hub_note),
-                    onClick = { viewModel.showTab(Tab.Workflow) },
-                )
-                StudioCardDivider()
-                StudioDestinationRow(
-                    icon = Icons.Filled.Schedule,
-                    color = Color(0xFF4D8DFF),
-                    title = stringResource(R.string.cron_title),
-                    subtitle = stringResource(R.string.settings_group_cron_note),
-                    onClick = { viewModel.openCronJobs() },
-                )
-                StudioCardDivider()
-                StudioDestinationRow(
-                    icon = Icons.Filled.ViewKanban,
-                    color = Color(0xFFFF9F43),
-                    title = stringResource(R.string.agent_hub_kanban),
-                    subtitle = stringResource(R.string.agent_hub_kanban_note),
-                    onClick = { viewModel.openKanban() },
-                )
-                StudioCardDivider()
-                StudioDestinationRow(
-                    icon = Icons.Filled.Forum,
-                    color = Color(0xFF45C878),
-                    title = stringResource(R.string.settings_channels),
-                    subtitle = if (channels.isEmpty()) {
-                        stringResource(R.string.settings_group_channels_note)
-                    } else {
-                        stringResource(
-                            R.string.settings_channels_summary,
-                            channels.count { it.configured },
-                            channels.size.coerceAtLeast(CHANNELS.size),
-                        )
-                    },
-                    onClick = { viewModel.openChannels() },
-                )
-            }
-
-            StudioSectionTitle(stringResource(R.string.insights_title))
-            StudioGroupedCard {
-                StudioDestinationRow(
-                    icon = Icons.Filled.Insights,
-                    color = Color(0xFF7A5CFF),
-                    title = stringResource(R.string.insights_title),
-                    subtitle = stringResource(R.string.insights_subtitle),
-                    onClick = { viewModel.openInsights() },
-                )
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.Folder, Color(0xFFFFB547), stringResource(R.string.files_title), stringResource(R.string.files_hub_note), { viewModel.openFiles() })
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.History, Color(0xFF4D8DFF), stringResource(R.string.logs_title), stringResource(R.string.logs_hub_note), { viewModel.openLogs() })
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.Dns, Color(0xFF2AAE88), stringResource(R.string.connections_title), stringResource(R.string.connections_hub_note), { viewModel.openConnections() })
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.AccountTree, Color(0xFF35B7DB), stringResource(R.string.journey_title), stringResource(R.string.journey_note), { viewModel.openJourney() })
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.Link, Color(0xFFFF9F43), stringResource(R.string.webhooks_title), stringResource(R.string.webhooks_note), { viewModel.openWebhooks() })
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.SystemUpdate, Color(0xFF45C878), stringResource(R.string.runtime_versions_title), stringResource(R.string.runtime_versions_note), { viewModel.openRuntimeVersions() })
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.Palette, Color(0xFFB45CFF), stringResource(R.string.appearance_title), stringResource(R.string.appearance_note), { viewModel.openAppearance() })
-            }
-
-            StudioSectionTitle(stringResource(R.string.global_agent_title))
-            StudioGroupedCard {
-                StudioDestinationRow(Icons.Filled.AutoAwesome, Color(0xFF2AAE88), stringResource(R.string.global_agent_title), stringResource(R.string.global_agent_hub_note), { viewModel.openGlobalAgent() })
-            }
-
-            StudioSectionTitle(stringResource(R.string.agent_hub_capabilities))
-            StudioGroupedCard {
-                StudioDestinationRow(Icons.Filled.School, Color(0xFF7A5CFF), stringResource(R.string.agent_hub_skills), stringResource(R.string.agent_hub_skills_note), { viewModel.openSkills() })
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.Extension, Color(0xFFB45CFF), stringResource(R.string.agent_hub_plugins), stringResource(R.string.agent_hub_plugins_note), { viewModel.openPlugins() })
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.Cable, Color(0xFF35B7DB), stringResource(R.string.agent_hub_mcp), stringResource(R.string.agent_hub_mcp_note), { viewModel.openMcp() })
-                StudioCardDivider()
-            }
-
-            StudioSectionTitle(stringResource(R.string.ekko_hub_title))
-            StudioGroupedCard {
-                StudioDestinationRow(Icons.Filled.Psychology, Color(0xFF2AAE88), stringResource(R.string.ekko_hub_title), stringResource(R.string.ekko_hub_note), { viewModel.openEkkoHub() })
-            }
-
-            StudioSectionTitle(stringResource(R.string.agent_hub_intelligence))
-            StudioGroupedCard {
-                StudioDestinationRow(Icons.Filled.Memory, Color(0xFFFFB547), stringResource(R.string.settings_group_memory), stringResource(R.string.settings_group_memory_note), { viewModel.openSettingsGroup(SettingsGroup.Memory) })
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.ModelTraining, Color(0xFF39C6A3), stringResource(R.string.settings_group_models), stringResource(R.string.settings_group_models_note), { viewModel.openSettingsGroup(SettingsGroup.Models) })
-            }
-
-            // The agent-side configuration that used to hide behind "More settings".
-            StudioSectionTitle(stringResource(R.string.agent_hub_configuration))
-            StudioGroupedCard {
-                StudioDestinationRow(Icons.Filled.Tune, Color(0xFF7A5CFF), stringResource(R.string.settings_group_agent), stringResource(R.string.settings_group_agent_note), { viewModel.openSettingsGroup(SettingsGroup.Agent) })
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.History, Color(0xFF6F72E8), stringResource(R.string.settings_group_sessions), stringResource(R.string.settings_group_sessions_note), { viewModel.openSettingsGroup(SettingsGroup.Sessions) })
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.Compress, Color(0xFFFF9F43), stringResource(R.string.settings_group_compression), stringResource(R.string.settings_group_compression_note), { viewModel.openSettingsGroup(SettingsGroup.Compression) })
-                StudioCardDivider()
-                StudioDestinationRow(Icons.Filled.Person, Color(0xFF4D8DFF), stringResource(R.string.action_profiles), state.activeProfile, { viewModel.openProfiles() })
-            }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun InsightsScreen(state: UiState, viewModel: AppViewModel) {
-    val usage = state.usageStats
-    val performance = state.runtimePerformance
-    Scaffold(
-        topBar = {
-            StudioTopBar(
-                title = stringResource(R.string.insights_title),
-                subtitle = stringResource(R.string.insights_subtitle),
-                onBack = { viewModel.back() },
-                actions = {
-                    IconButton(onClick = { viewModel.refreshInsights() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.action_refresh))
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(StudioHorizontalPadding, 8.dp, StudioHorizontalPadding, 28.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (state.loadingInsights) item { LoadingRow() }
-            state.error?.let { item { ErrorNote(it) { viewModel.dismissError() } } }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(7, 30, 90, 365).forEach { days ->
-                        AssistChip(
-                            onClick = { viewModel.openInsights(days) },
-                            label = { Text(stringResource(R.string.insights_days, days)) },
-                            leadingIcon = if (days == state.usageDays) ({ Icon(Icons.Filled.Check, null, Modifier.size(16.dp)) }) else null,
-                        )
-                    }
-                }
-            }
-            usage?.let { stats ->
-                item { StudioSectionTitle(stringResource(R.string.insights_usage)) }
-                item {
-                    StudioGroupedCard {
-                        InsightMetric(stringResource(R.string.insights_tokens), compactNumber(stats.inputTokens + stats.outputTokens))
-                        StudioCardDivider()
-                        InsightMetric(stringResource(R.string.insights_sessions), stats.sessions.toString())
-                        StudioCardDivider()
-                        InsightMetric(stringResource(R.string.insights_cost), "$${"%.4f".format(stats.cost)}")
-                        StudioCardDivider()
-                        InsightMetric(stringResource(R.string.insights_cache), compactNumber(stats.cacheReadTokens + stats.cacheWriteTokens))
-                    }
-                }
-                if (stats.models.isNotEmpty()) {
-                    item { StudioSectionTitle(stringResource(R.string.insights_by_model)) }
-                    items(stats.models.take(8), key = { it.name }) { row ->
-                        StudioGroupedCard { InsightMetric(row.name, compactNumber(row.totalTokens), row.sessions.toString()) }
-                    }
-                }
-                if (stats.agents.isNotEmpty()) {
-                    item { StudioSectionTitle(stringResource(R.string.insights_by_agent)) }
-                    items(stats.agents.take(8), key = { it.name }) { row ->
-                        StudioGroupedCard { InsightMetric(row.name, compactNumber(row.totalTokens), row.sessions.toString()) }
-                    }
-                }
-                if (stats.daily.isNotEmpty()) {
-                    item { StudioSectionTitle(stringResource(R.string.insights_daily)) }
-                    items(stats.daily.takeLast(14).reversed(), key = { it.date }) { row ->
-                        StudioGroupedCard { InsightMetric(row.date, compactNumber(row.totalTokens), "$${"%.3f".format(row.cost)}") }
-                    }
-                }
-            }
-            performance?.let { runtime ->
-                item { StudioSectionTitle(stringResource(R.string.insights_runtime)) }
-                item {
-                    StudioGroupedCard {
-                        InsightMetric("CPU", runtime.cpuPercent?.let { "%.1f%%".format(it) } ?: "—")
-                        StudioCardDivider()
-                        InsightMetric(stringResource(R.string.insights_memory), runtime.memoryPercent?.let { "%.1f%%".format(it) } ?: "—")
-                        StudioCardDivider()
-                        InsightMetric(stringResource(R.string.insights_workers), "${runtime.runningWorkers}/${runtime.workerCount}")
-                        StudioCardDivider()
-                        InsightMetric(stringResource(R.string.insights_live_sessions), runtime.sessionCount.toString())
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun InsightMetric(label: String, value: String, supporting: String? = null) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyLarge)
-            supporting?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SettingsGroupScreen(state: UiState, viewModel: AppViewModel) {
-    val group = state.openGroup ?: return
-    // Models is a page, not a settings body: it mirrors the web's ModelsView
-    // (providers and their catalogues), while the key form it used to show
-    // stays on the Settings page's Models tab, as on the web. It keeps this
-    // destination so the drawer's Models item still marks itself selected.
-    if (group == SettingsGroup.Models) {
-        ModelsScreen(state, viewModel)
-        return
-    }
-    val title = stringResource(
-        when (group) {
-            SettingsGroup.Account -> R.string.settings_account
-            SettingsGroup.Server -> R.string.settings_group_server
-            SettingsGroup.Users -> R.string.settings_group_users
-            SettingsGroup.Webhooks -> R.string.settings_tab_webhooks
-            SettingsGroup.Profile -> R.string.settings_group_profile
-            SettingsGroup.Models -> R.string.settings_group_models
-            SettingsGroup.Agent -> R.string.settings_group_agent
-            SettingsGroup.Memory -> R.string.settings_group_memory
-            SettingsGroup.Compression -> R.string.settings_group_compression
-            SettingsGroup.Sessions -> R.string.settings_group_sessions
-            SettingsGroup.Privacy -> R.string.settings_group_privacy
-            SettingsGroup.Proxy -> R.string.settings_group_proxy
-            SettingsGroup.Display -> R.string.settings_group_display
-            SettingsGroup.Device -> R.string.settings_group_device
-            SettingsGroup.About -> R.string.settings_section_about
-        },
-    )
-
-    Scaffold(
-        topBar = { StudioTopBar(title = title, onBack = { viewModel.back() }) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .imePadding(),
-        ) {
-            if (state.savingSetting) LoadingRow()
-            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
-            state.notice?.let { NoticeNote(it) { viewModel.dismissNotice() } }
-
-            if (
-                !state.loadingAgentSettings && !state.loadingStudioSettings &&
-                !state.loadingAccountSettings && !state.loadingManagedUsers &&
-                !state.loadingModelProviders
-            ) {
-                when (group) {
-                    SettingsGroup.Account -> AccountSettings(state, viewModel)
-                    SettingsGroup.Server -> ServerSettings(state, viewModel)
-                    SettingsGroup.Users -> ManagedUsersSettings(state, viewModel)
-                    SettingsGroup.Webhooks -> WebhooksSettingsBody(state, viewModel)
-                    SettingsGroup.Profile -> ProfileSettings(state, viewModel)
-                    SettingsGroup.Models -> ModelProvidersSettings(state, viewModel)
-                    SettingsGroup.Agent -> AgentSettings(state, viewModel)
-                    SettingsGroup.Memory -> MemoryStudioSettings(state, viewModel)
-                    SettingsGroup.Compression -> CompressionStudioSettings(state, viewModel)
-                    SettingsGroup.Sessions -> SessionStudioSettings(state, viewModel)
-                    SettingsGroup.Privacy -> PrivacyStudioSettings(state, viewModel)
-                    SettingsGroup.Proxy -> ProxyStudioSettings(state, viewModel)
-                    SettingsGroup.Display -> DisplayStudioSettings(state, viewModel)
-                    SettingsGroup.Device -> DeviceSettings(state, viewModel)
-                    SettingsGroup.About -> AboutSettings(state, viewModel)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-internal fun ServerSettings(state: UiState, viewModel: AppViewModel) {
-    SettingsRow(
-        icon = Icons.Filled.Dns,
-        label = stringResource(R.string.settings_address),
-        value = state.baseUrl.ifBlank { stringResource(R.string.settings_address_missing) },
-    )
-}
-
 @Composable
 internal fun AccountSettings(state: UiState, viewModel: AppViewModel) {
     SettingsRow(
@@ -1092,67 +748,10 @@ internal fun AccountSettings(state: UiState, viewModel: AppViewModel) {
     AccountStudioSettings(state, viewModel)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ProfileSettings(state: UiState, viewModel: AppViewModel) {
-    var modelSheet by remember { mutableStateOf(false) }
-    var confirmRestart by remember { mutableStateOf(false) }
-    val profile = state.activeProfile.ifBlank { "default" }
-
-    if (modelSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { modelSheet = false },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            PickerSheet(
-                title = stringResource(R.string.settings_default_model_title, profile),
-                loading = state.loadingModels,
-                rows = state.models.map { option ->
-                    PickerRow(label = option.id, detail = option.provider, selected = option.id == state.defaultModel) {
-                        viewModel.setDefaultModel(option)
-                        modelSheet = false
-                    }
-                },
-            )
-        }
-    }
-    if (confirmRestart) {
-        ConfirmDialog(
-            title = stringResource(R.string.confirm_restart_title),
-            body = stringResource(R.string.confirm_restart_body, profile),
-            action = stringResource(R.string.settings_restart_gateway),
-            onConfirm = { viewModel.restartGateway() },
-            onDismiss = { confirmRestart = false },
-        )
-    }
-
-    SettingsRow(
-        icon = Icons.Filled.Person,
-        label = stringResource(R.string.settings_profile),
-        value = profile,
-        onClick = { viewModel.openProfiles() },
-    )
-    SettingsRow(
-        icon = Icons.Filled.ModelTraining,
-        label = stringResource(R.string.settings_default_model),
-        value = state.defaultModel ?: stringResource(R.string.settings_default_model_server),
-        onClick = {
-            viewModel.loadModels()
-            modelSheet = true
-        },
-    )
-    SettingsRow(
-        icon = Icons.Filled.RestartAlt,
-        label = stringResource(R.string.settings_restart_gateway),
-        value = stringResource(R.string.settings_restart_gateway_note),
-        onClick = { confirmRestart = true },
-    )
-}
-
 /** The agent knobs, with gateway auto-start where Studio keeps it. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun AgentSettings(state: UiState, viewModel: AppViewModel) {
+internal fun AgentSettings(state: UiState, viewModel: AppViewModel) {
     val agent = state.agentSettings
     val policy = state.autoStart
     var editing by remember { mutableStateOf<String?>(null) }
@@ -1647,7 +1246,7 @@ private fun ChannelsScreen(state: UiState, viewModel: AppViewModel) {
     Scaffold(
         topBar = {
             StudioTopBar(
-                title = stringResource(R.string.channels_title),
+                title = stringResource(R.string.nav_channels),
                 subtitle = state.activeProfile.ifBlank { null },
                 onBack = { viewModel.back() },
             )

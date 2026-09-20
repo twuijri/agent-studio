@@ -126,7 +126,7 @@ fun GroupsScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.segment_group_chat), style = MaterialTheme.typography.titleLarge) },
+                title = { Text(stringResource(R.string.nav_group_chat), style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = { MenuButton(onMenu) },
                 actions = {
                     IconButton(onClick = { joining = true }) { Icon(Icons.AutoMirrored.Filled.Login, contentDescription = stringResource(R.string.room_join_title), tint = palette.textSecondary) }

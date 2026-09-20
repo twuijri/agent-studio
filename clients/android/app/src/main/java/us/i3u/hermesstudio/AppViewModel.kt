@@ -19,12 +19,22 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import us.i3u.hermesstudio.navigation.NavDestination
 
+/**
+ * Every screen the phone can show. Each one is reached through exactly one
+ * `NavDestination` (or is a child of one: Channel, CronJob, CronHistory,
+ * KanbanTask, Skill), which `NavigationParityTest` enforces.
+ */
 enum class Screen {
-    Loading, Onboarding, Login, Chats, Groups, AgentHub, Conversation, Room, Profiles,
-    Settings, SettingsPage, SettingsGroup, History, Channels, Channel, CronJobs, CronJob, CronHistory,
-    Kanban, KanbanTask, Skills, Skill, Plugins, Mcp, Pets, Insights, AgentRuntimes, Workflows, Workflow, WorkflowRun, GlobalAgent, EkkoHub, Files, Logs, Connections, Journey, Webhooks, RuntimeVersions, Appearance,
-    AgentSettings,
+    Loading, Onboarding, Login,
+    Chats, Conversation, Groups, Room, Workflows, Workflow, WorkflowRun, History,
+    Connections, AgentManager, Models, Settings,
+    Logs, Usage, Performance, SkillsUsage, Theme, Pets, Profiles,
+    Agent, CronJobs, CronJob, CronHistory, Kanban, KanbanTask, Channels, Channel,
+    Skills, Skill, Plugins, Mcp, Memory, Journey, HermesSettings,
+    EkkoMemory, EkkoSkills, EkkoMcp, EkkoSettings, AgentSettings,
+    GlobalAgent, Files,
 }
 
 /**
@@ -43,11 +53,25 @@ data class AgentSettingsState(
     val configurationError: String = "",
 )
 
-/** Settings is a short list of these; each opens its own screen. */
+/**
+ * The tabs of the Settings screen (Account … About, `SettingsView.vue:104-129`
+ * plus the two phone-only ones) and of Hermes › Settings (Agent, Memory,
+ * Sessions — `HermesSettingsView.vue:66-76`). Compression appears in both.
+ */
 enum class SettingsGroup {
-    Account, Server, Users, Webhooks, Profile, Models, Agent, Memory, Compression, Sessions,
+    Account, Users, Webhooks, Models, Agent, Memory, Compression, Sessions,
     Privacy, Proxy, Display, Device, About,
 }
+
+/** The Search sheet over the sessions (`SessionSearchModal.vue`). */
+data class SearchSheetState(
+    val open: Boolean = false,
+    val query: String = "",
+    val loading: Boolean = false,
+    /** The eight most recent sessions, shown while the query is empty. */
+    val recent: List<SessionSummary> = emptyList(),
+    val results: List<SessionSummary> = emptyList(),
+)
 
 /** The four-segment conversation switch in the drawer, like the web's PageSidebarNav. */
 enum class Tab { Chat, Group, Workflow, History }
@@ -304,11 +328,23 @@ data class UiState(
     /** The channel whose settings are open, if any. */
     val openChannel: String? = null,
     val weixinQr: WeixinQrUi = WeixinQrUi(),
-    val openGroup: SettingsGroup? = null,
-    /** Parent hub for a settings group, channel list, or scheduled-jobs list. */
-    val toolReturnScreen: Screen = Screen.Settings,
-    /** Exact screen that opened Profiles; it is shared by several root surfaces. */
-    val profilesReturnScreen: Screen = Screen.Chats,
+    /** Which Settings tab is showing. */
+    val openGroup: SettingsGroup = SettingsGroup.Account,
+    /** Hermes › Settings: which of Agent / Memory / Session is showing. */
+    val hermesSettingsTab: SettingsGroup = SettingsGroup.Agent,
+    /** The agent whose section list (NAVIGATION.md §4) is open. */
+    val openAgent: AgentDefinition? = null,
+    val searchSheet: SearchSheetState = SearchSheetState(),
+    val hermesMemory: HermesMemory? = null,
+    val loadingHermesMemory: Boolean = false,
+    val ekkoConfig: EkkoConfig? = null,
+    val loadingEkkoConfig: Boolean = false,
+    /** Files opened for another profile than the chat's (a profile card's "Edit config"). */
+    val filesProfile: String? = null,
+    val loadingWebhooks: Boolean = false,
+    val loadingRuntimeVersions: Boolean = false,
+    val loadingSkillsUsage: Boolean = false,
+    val loadingJourney: Boolean = false,
     val agentSettings: AgentSettings? = null,
     val autoStart: AutoStartPolicy? = null,
     val loadingAgentSettings: Boolean = false,
@@ -357,12 +393,11 @@ data class UiState(
     val usageStats: UsageStats? = null,
     val usageDays: Int = 30,
     val runtimePerformance: RuntimePerformance? = null,
-    val loadingInsights: Boolean = false,
+    val loadingUsage: Boolean = false,
+    val loadingPerformance: Boolean = false,
     val notice: String? = null,
     /** The in-app update: the quiet notice above the composer, and the Settings row. */
     val update: UpdateUiState = UpdateUiState(),
-    val agentRuntimes: List<AgentRuntimeStatus> = emptyList(),
-    val loadingAgentRuntimes: Boolean = false,
     val selectedRuntime: AgentRuntimeSelection = AgentRuntimeSelection(),
     val pendingRunAction: PendingRunAction? = null,
     /** Composer ⚙ menu. */
@@ -844,9 +879,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Agent Manager (super-admin): every agent tool in one place. */
+    /** Agent Manager (super-admin): the agent cards; everything else is under a card. */
     fun openAgentManager() {
-        _state.update { it.copy(screen = Screen.AgentHub, error = null, notice = null) }
+        _state.update { it.copy(screen = Screen.AgentManager, error = null, notice = null) }
         loadAgents()
         refreshServerConfig()
         if (_state.value.cronJobs.isEmpty()) refreshCronJobs()
@@ -1186,8 +1221,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openGlobalAgent() = _state.update { it.copy(screen = Screen.GlobalAgent, error = null) }
 
-    fun openEkkoHub() {
-        _state.update { it.copy(screen = Screen.EkkoHub, loadingEkko = true, error = null) }
+    fun openEkkoMemory() = openEkko(Screen.EkkoMemory)
+    fun openEkkoSkills() = openEkko(Screen.EkkoSkills)
+    fun openEkkoMcp() = openEkko(Screen.EkkoMcp)
+
+    /** Ekko's Memory, Skills and MCP screens share one snapshot (EkkoConfigSidebar.vue:54-79). */
+    private fun openEkko(screen: Screen) {
+        _state.update { it.copy(screen = screen, error = null, notice = null) }
+        reloadEkko()
+    }
+
+    /** Refreshes the Ekko snapshot in place, whichever Ekko screen is open. */
+    fun reloadEkko() {
+        _state.update { it.copy(loadingEkko = true, error = null) }
         val profile = currentProfile()
         viewModelScope.launch {
             val memory = runCatching { withContext(Dispatchers.IO) { api.ekkoMemories(profile) } }
@@ -1199,28 +1245,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun saveEkkoMemory(memory: EkkoMemory, title: String, content: String) = launchWork(work = { api.updateEkkoMemory(currentProfile(), memory, title, content) }, onSuccess = { openEkkoHub() })
-    fun deleteEkkoMemory(memory: EkkoMemory) = launchWork(work = { api.deleteEkkoMemory(currentProfile(), memory) }, onSuccess = { openEkkoHub() })
-    fun toggleEkkoSkill(skill: SkillInfo) = launchWork(work = { api.setEkkoSkillEnabled(currentProfile(), skill.name, !skill.enabled) }, onSuccess = { openEkkoHub() })
-    fun saveEkkoMcp(original: String?, name: String, config: String) = launchWork(work = { api.saveEkkoMcpServer(currentProfile(), original, name, config) }, onSuccess = { openEkkoHub() })
-    fun toggleEkkoMcp(server: EkkoMcpServer) = launchWork(work = { api.toggleEkkoMcpServer(currentProfile(), server) }, onSuccess = { openEkkoHub() })
+    fun saveEkkoMemory(memory: EkkoMemory, title: String, content: String) = launchWork(work = { api.updateEkkoMemory(currentProfile(), memory, title, content) }, onSuccess = { reloadEkko() })
+    fun deleteEkkoMemory(memory: EkkoMemory) = launchWork(work = { api.deleteEkkoMemory(currentProfile(), memory) }, onSuccess = { reloadEkko() })
+    fun toggleEkkoSkill(skill: SkillInfo) = launchWork(work = { api.setEkkoSkillEnabled(currentProfile(), skill.name, !skill.enabled) }, onSuccess = { reloadEkko() })
+    fun saveEkkoMcp(original: String?, name: String, config: String) = launchWork(work = { api.saveEkkoMcpServer(currentProfile(), original, name, config) }, onSuccess = { reloadEkko() })
+    fun toggleEkkoMcp(server: EkkoMcpServer) = launchWork(work = { api.toggleEkkoMcpServer(currentProfile(), server) }, onSuccess = { reloadEkko() })
     fun testEkkoMcp(server: EkkoMcpServer) = launchWork(work = { api.testEkkoMcpServer(currentProfile(), server.name) }, onSuccess = { _state.update { it.copy(notice = str(R.string.ekko_mcp_test_ok)) } })
-    fun deleteEkkoMcp(server: EkkoMcpServer) = launchWork(work = { api.deleteEkkoMcpServer(currentProfile(), server.name) }, onSuccess = { openEkkoHub() })
+    fun deleteEkkoMcp(server: EkkoMcpServer) = launchWork(work = { api.deleteEkkoMcpServer(currentProfile(), server.name) }, onSuccess = { reloadEkko() })
 
     fun restartProfile(profile: String) = launchWork(work = { api.restartProfileRuntime(profile) }, onSuccess = { refreshProfiles(); _state.update { it.copy(notice = str(R.string.profile_restarted)) } })
     fun refreshProviderModels(provider: String) = launchWork(work = { api.refreshProviderModels(currentProfile(), provider) }, onSuccess = { loadModelProviders(); _state.update { it.copy(notice = str(R.string.models_refreshed)) } })
     fun testProvider(provider: String) = launchWork(work = { api.testProvider(currentProfile(), provider) }, onSuccess = { result -> _state.update { it.copy(notice = result) } })
 
-    fun openFiles(path: String = "") = launchWork(work = { api.studioFiles(currentProfile(), path) }, onSuccess = { files -> _state.update { it.copy(screen = Screen.Files, filesPath = path, studioFiles = files, openFile = null, error = null) } })
-    fun openStudioFile(file: StudioFile) = launchWork(work = { api.readStudioFile(currentProfile(), file.path) }, onSuccess = { content -> _state.update { it.copy(openFile = file, openFileContent = content) } })
+    /** The profile the Files screen acts under: the one whose card opened it, else the chat's. */
+    private fun filesProfile(): String = _state.value.filesProfile ?: currentProfile()
+    fun openFiles(path: String = "") = launchWork(work = { api.studioFiles(filesProfile(), path) }, onSuccess = { files -> _state.update { it.copy(screen = Screen.Files, filesPath = path, studioFiles = files, openFile = null, error = null) } })
+    /** A profile card's "Edit config": that profile's files, with config.yaml open when it exists. */
+    fun openProfileConfig(profile: String) = launchWork(
+        work = { val files = api.studioFiles(profile, ""); files to files.firstOrNull { !it.directory && it.name == "config.yaml" }?.let { api.readStudioFile(profile, it.path) } },
+        onSuccess = { (files, config) -> _state.update { it.copy(screen = Screen.Files, filesProfile = profile, filesPath = "", studioFiles = files, openFile = files.firstOrNull { f -> !f.directory && f.name == "config.yaml" }.takeIf { config != null }, openFileContent = config.orEmpty(), error = null) } },
+    )
+    fun openStudioFile(file: StudioFile) = launchWork(work = { api.readStudioFile(filesProfile(), file.path) }, onSuccess = { content -> _state.update { it.copy(openFile = file, openFileContent = content) } })
     fun closeStudioFile() = _state.update { it.copy(openFile = null, openFileContent = "") }
-    fun saveStudioFile(content: String) { val file = _state.value.openFile ?: return; launchWork(work = { api.writeStudioFile(currentProfile(), file.path, content) }, onSuccess = { _state.update { it.copy(openFileContent = content, notice = str(R.string.files_saved)) } }) }
-    fun createStudioFolder(name: String) { val path = listOf(_state.value.filesPath, name).filter(String::isNotBlank).joinToString("/"); launchWork(work = { api.mkdirStudioFile(currentProfile(), path) }, onSuccess = { openFiles(_state.value.filesPath) }) }
-    fun renameStudioFile(file: StudioFile, name: String) { val target = file.path.substringBeforeLast('/', "").let { if (it.isBlank()) name else "$it/$name" }; launchWork(work = { api.renameStudioFile(currentProfile(), file.path, target) }, onSuccess = { openFiles(_state.value.filesPath) }) }
-    fun copyStudioFile(file: StudioFile, destination: String) = launchWork(work = { api.copyStudioFile(currentProfile(), file.path, destination) }, onSuccess = { openFiles(_state.value.filesPath) })
-    fun deleteStudioFile(file: StudioFile) = launchWork(work = { api.deleteStudioFile(currentProfile(), file) }, onSuccess = { openFiles(_state.value.filesPath) })
-    fun studioFileUrl(file: StudioFile): String = api.studioFilePreviewUrl(currentProfile(), file.path)
-    fun uploadStudioFile(bytes: ByteArray, name: String, mime: String) = launchWork(work = { api.uploadStudioFile(currentProfile(), _state.value.filesPath, bytes, name, mime) }, onSuccess = { openFiles(_state.value.filesPath) })
+    fun saveStudioFile(content: String) { val file = _state.value.openFile ?: return; launchWork(work = { api.writeStudioFile(filesProfile(), file.path, content) }, onSuccess = { _state.update { it.copy(openFileContent = content, notice = str(R.string.files_saved)) } }) }
+    fun createStudioFolder(name: String) { val path = listOf(_state.value.filesPath, name).filter(String::isNotBlank).joinToString("/"); launchWork(work = { api.mkdirStudioFile(filesProfile(), path) }, onSuccess = { openFiles(_state.value.filesPath) }) }
+    fun renameStudioFile(file: StudioFile, name: String) { val target = file.path.substringBeforeLast('/', "").let { if (it.isBlank()) name else "$it/$name" }; launchWork(work = { api.renameStudioFile(filesProfile(), file.path, target) }, onSuccess = { openFiles(_state.value.filesPath) }) }
+    fun copyStudioFile(file: StudioFile, destination: String) = launchWork(work = { api.copyStudioFile(filesProfile(), file.path, destination) }, onSuccess = { openFiles(_state.value.filesPath) })
+    fun deleteStudioFile(file: StudioFile) = launchWork(work = { api.deleteStudioFile(filesProfile(), file) }, onSuccess = { openFiles(_state.value.filesPath) })
+    fun studioFileUrl(file: StudioFile): String = api.studioFilePreviewUrl(filesProfile(), file.path)
+    fun uploadStudioFile(bytes: ByteArray, name: String, mime: String) = launchWork(work = { api.uploadStudioFile(filesProfile(), _state.value.filesPath, bytes, name, mime) }, onSuccess = { openFiles(_state.value.filesPath) })
 
     fun openLogs() = launchWork(work = { api.studioLogs() }, onSuccess = { logs -> _state.update { it.copy(screen = Screen.Logs, studioLogs = logs, openLog = null, error = null) } })
     fun openLog(log: StudioLogFile) = launchWork(work = { api.studioLog(log.name, currentProfile()) }, onSuccess = { entries -> _state.update { it.copy(openLog = log, logEntries = entries) } })
@@ -1249,13 +1302,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun updateProfileAvatar(name: String, dataUrl: String) = launchWork(work = { api.updateProfileAvatar(name, dataUrl) }, onSuccess = { refreshProfiles() })
     fun clearProfileAvatar(name: String) = launchWork(work = { api.clearProfileAvatar(name) }, onSuccess = { refreshProfiles() })
 
-    fun saveEkkoSkill(name: String, content: String, creating: Boolean) = launchWork(work = { if (creating) api.createEkkoSkill(currentProfile(), name, content) else api.saveEkkoSkill(currentProfile(), name, content) }, onSuccess = { openEkkoHub() })
-    fun deleteEkkoSkill(skill: SkillInfo) = launchWork(work = { api.deleteEkkoSkill(currentProfile(), skill.name) }, onSuccess = { openEkkoHub() })
-    fun importEkkoSkill(bytes: ByteArray, name: String) = launchWork(work = { api.importEkkoSkill(currentProfile(), bytes, name) }, onSuccess = { openEkkoHub() })
+    fun saveEkkoSkill(name: String, content: String, creating: Boolean) = launchWork(work = { if (creating) api.createEkkoSkill(currentProfile(), name, content) else api.saveEkkoSkill(currentProfile(), name, content) }, onSuccess = { reloadEkko() })
+    fun deleteEkkoSkill(skill: SkillInfo) = launchWork(work = { api.deleteEkkoSkill(currentProfile(), skill.name) }, onSuccess = { reloadEkko() })
+    fun importEkkoSkill(bytes: ByteArray, name: String) = launchWork(work = { api.importEkkoSkill(currentProfile(), bytes, name) }, onSuccess = { reloadEkko() })
     fun openEkkoSkill(skill: SkillInfo) = launchWork(work = { Triple(api.ekkoSkillDetail(currentProfile(), skill.name), api.ekkoSkillFiles(currentProfile(), skill.name), skill) }, onSuccess = { (content, files, selected) -> _state.update { it.copy(ekkoOpenSkill = selected, ekkoSkillContent = content, ekkoSkillFiles = files) } })
     fun closeEkkoSkill() = _state.update { it.copy(ekkoOpenSkill = null, ekkoSkillContent = "", ekkoSkillFiles = emptyList(), ekkoSkillFilePreviewPath = null, ekkoSkillFilePreviewContent = "") }
     fun openEkkoSkillFile(path: String) { val skill = _state.value.ekkoOpenSkill ?: return; launchWork(work = { api.ekkoSkillFile(currentProfile(), skill.name, path) }, onSuccess = { content -> _state.update { it.copy(ekkoSkillFilePreviewPath = path, ekkoSkillFilePreviewContent = content) } }) }
-    fun saveExternalDirectories(lines: String) = launchWork(work = { api.saveEkkoExternalDirectories(currentProfile(), lines.lines().map(String::trim).filter(String::isNotBlank)) }, onSuccess = { openEkkoHub() })
+    fun saveExternalDirectories(lines: String) = launchWork(work = { api.saveEkkoExternalDirectories(currentProfile(), lines.lines().map(String::trim).filter(String::isNotBlank)) }, onSuccess = { reloadEkko() })
 
     fun downloadProfile(name: String) {
         val request = DownloadManager.Request(Uri.parse(api.profileExportUrl(name))).setTitle("hermes-profile-$name.tar.gz").setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED).setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "hermes-profile-$name.tar.gz")
@@ -1264,22 +1317,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(notice = str(R.string.profile_export_started)) }
     }
 
-    fun openJourney() = launchWork(work = { api.journey() to api.skillUsage() }, onSuccess = { (journey, usage) -> _state.update { it.copy(screen = Screen.Journey, journey = journey, skillUsage = usage) } })
-    fun openWebhooks() = launchWork(work = { api.webhooks() to api.webhookEvents() }, onSuccess = { (hooks, events) -> _state.update { it.copy(screen = Screen.Webhooks, webhooks = hooks, webhookEvents = events) } })
-    fun createWebhook(name: String, url: String) = launchWork(work = { api.createWebhook(name, url) }, onSuccess = { openWebhooks() })
-    fun toggleWebhook(item: WebhookEndpoint) = launchWork(work = { api.toggleWebhook(item) }, onSuccess = { openWebhooks() })
-    fun updateWebhook(item: WebhookEndpoint, name: String, url: String) = launchWork(work = { api.updateWebhook(item.id, name, url) }, onSuccess = { openWebhooks() })
-    fun deleteWebhook(item: WebhookEndpoint) = launchWork(work = { api.deleteWebhook(item.id) }, onSuccess = { openWebhooks() })
+    fun openJourney() { _state.update { it.copy(screen = Screen.Journey, loadingJourney = true, error = null, notice = null) }; refreshJourney() }
+    fun refreshJourney() = launchWork(work = { api.journey() }, onSuccess = { journey -> _state.update { it.copy(journey = journey, loadingJourney = false) } }, onFailure = { failure -> _state.update { it.copy(loadingJourney = false, error = failure.readableMessage(localized)) } })
+    fun openSkillsUsage(days: Int = _state.value.usageDays) { _state.update { it.copy(screen = Screen.SkillsUsage, error = null, notice = null) }; refreshSkillsUsage(days) }
+    fun refreshSkillsUsage(days: Int = _state.value.usageDays) { _state.update { it.copy(usageDays = days, loadingSkillsUsage = true, error = null) }; launchWork(work = { api.skillUsage(days) }, onSuccess = { usage -> _state.update { it.copy(skillUsage = usage, loadingSkillsUsage = false) } }, onFailure = { failure -> _state.update { it.copy(loadingSkillsUsage = false, error = failure.readableMessage(localized)) } }) }
+    /** Webhooks are a Settings tab, not a screen; this fills the tab. */
+    fun loadWebhooks() { _state.update { it.copy(loadingWebhooks = true) }; launchWork(work = { api.webhooks() to api.webhookEvents() }, onSuccess = { (hooks, events) -> _state.update { it.copy(webhooks = hooks, webhookEvents = events, loadingWebhooks = false) } }, onFailure = { failure -> _state.update { it.copy(loadingWebhooks = false, error = failure.readableMessage(localized)) } }) }
+    fun createWebhook(name: String, url: String) = launchWork(work = { api.createWebhook(name, url) }, onSuccess = { loadWebhooks() })
+    fun toggleWebhook(item: WebhookEndpoint) = launchWork(work = { api.toggleWebhook(item) }, onSuccess = { loadWebhooks() })
+    fun updateWebhook(item: WebhookEndpoint, name: String, url: String) = launchWork(work = { api.updateWebhook(item.id, name, url) }, onSuccess = { loadWebhooks() })
+    fun deleteWebhook(item: WebhookEndpoint) = launchWork(work = { api.deleteWebhook(item.id) }, onSuccess = { loadWebhooks() })
     fun testWebhook(item: WebhookEndpoint) = launchWork(work = { api.testWebhook(item.id) }, onSuccess = { result -> _state.update { it.copy(notice = result) } })
-    fun clearWebhookEvents() = launchWork(work = { api.clearWebhookEvents() }, onSuccess = { openWebhooks() })
-    fun openRuntimeVersions() = launchWork(work = { api.runtimeVersions() }, onSuccess = { versions -> _state.update { it.copy(screen = Screen.RuntimeVersions, runtimeVersions = versions) } })
-    fun activateVersion(version: RuntimeVersion) = launchWork(work = { api.activateVersion(version.version, version.kind == "webui") }, onSuccess = { openRuntimeVersions() })
-    fun downloadVersion(version: String, webUi: Boolean) = launchWork(work = { api.downloadVersion(version, webUi) }, onSuccess = { openRuntimeVersions() })
-    fun restartWebUi() = launchWork(work = { api.restartWebUi() }, onSuccess = { openRuntimeVersions() })
-    fun openAppearance() = launchWork(work = { api.themeSettings() }, onSuccess = { theme -> _state.update { it.copy(screen = Screen.Appearance, themeSettings = theme) } })
-    fun saveTheme(fontSize: Int, text: String, accent: String) = launchWork(work = { api.updateTheme(fontSize, text, accent) }, onSuccess = { openAppearance() })
-    fun removeThemeBackground() = launchWork(work = { api.removeThemeBackground() }, onSuccess = { openAppearance() })
-    fun uploadThemeBackground(bytes: ByteArray, name: String, mime: String) = launchWork(work = { api.uploadThemeBackground(bytes, name, mime) }, onSuccess = { openAppearance() })
+    fun clearWebhookEvents() = launchWork(work = { api.clearWebhookEvents() }, onSuccess = { loadWebhooks() })
+    /** The Hermes card's "Manage runtime" sheet (AgentManagerView.vue:517-536); no screen of its own. */
+    fun loadRuntimeVersions() { _state.update { it.copy(loadingRuntimeVersions = true) }; launchWork(work = { api.runtimeVersions() }, onSuccess = { versions -> _state.update { it.copy(runtimeVersions = versions, loadingRuntimeVersions = false) } }, onFailure = { failure -> _state.update { it.copy(loadingRuntimeVersions = false, error = failure.readableMessage(localized)) } }) }
+    fun activateVersion(version: RuntimeVersion) = launchWork(work = { api.activateVersion(version.version, version.kind == "webui") }, onSuccess = { loadRuntimeVersions() })
+    fun downloadVersion(version: String, webUi: Boolean) = launchWork(work = { api.downloadVersion(version, webUi) }, onSuccess = { loadRuntimeVersions() })
+    fun restartWebUi() = launchWork(work = { api.restartWebUi() }, onSuccess = { loadRuntimeVersions() })
+    /** Settings › Tools › Theme (ThemeView.vue): the server-side colours, text and background. */
+    fun openTheme() = launchWork(work = { api.themeSettings() }, onSuccess = { theme -> _state.update { it.copy(screen = Screen.Theme, themeSettings = theme, error = null, notice = null) } })
+    private fun loadTheme() = launchWork(work = { api.themeSettings() }, onSuccess = { theme -> _state.update { it.copy(themeSettings = theme) } })
+    fun saveTheme(fontSize: Int, text: String, accent: String) = launchWork(work = { api.updateTheme(fontSize, text, accent) }, onSuccess = { loadTheme() })
+    fun removeThemeBackground() = launchWork(work = { api.removeThemeBackground() }, onSuccess = { loadTheme() })
+    fun uploadThemeBackground(bytes: ByteArray, name: String, mime: String) = launchWork(work = { api.uploadThemeBackground(bytes, name, mime) }, onSuccess = { loadTheme() })
     fun loadKanbanOperations(taskId: String? = null) { val board = _state.value.kanban.board; if (board.isBlank()) return; launchWork(work = { val diagnostics = api.kanbanDiagnostics(board, taskId); val stats = api.kanbanStats(board); val extras = taskId?.let { api.kanbanLog(board, it) to api.kanbanAttachments(board, it) } ?: ("" to emptyList()); Triple(stats, diagnostics, extras) }, onSuccess = { (stats, diagnostics, extras) -> _state.update { it.copy(kanbanStats = stats, kanbanDiagnostics = diagnostics, kanbanLog = extras.first, kanbanAttachments = extras.second) } }) }
     fun kanbanCommand(task: KanbanTask, action: String, value: String = "") { val board = _state.value.kanban.board; launchWork(work = { api.kanbanCommand(board, task.id, action, value) }, onSuccess = { loadKanbanTask(task.id); loadKanbanOperations(task.id) }) }
 
@@ -1551,22 +1611,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 sessionPushEnabled = false,
             )
         }
-    }
-
-    fun openAgentRuntimes() {
-        _state.update { it.copy(screen = Screen.AgentRuntimes, loadingAgentRuntimes = true, error = null) }
-        viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.agentRuntimes() } }
-                .onSuccess { runtimes -> _state.update { it.copy(agentRuntimes = runtimes, loadingAgentRuntimes = false) } }
-                .onFailure { failure ->
-                    _state.update { it.copy(loadingAgentRuntimes = false, error = failure.readableMessage(localized)) }
-                }
-        }
-    }
-
-    fun startRuntimeConversation(runtime: AgentRuntimeStatus) {
-        if (!runtime.installed) return
-        startNewConversation(AgentRuntimeSelection(runtime.id, runtime.family, runtime.name))
     }
 
     /** Sends a generated Studio file to Android's public Downloads folder. */
@@ -3808,8 +3852,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun openSkills() {
-        _state.update { it.copy(screen = Screen.Skills, error = null, notice = null) }
+    /** Skills for one agent: the target the web's SkillsView filters by (`hermes`, `claude`, `codex`, …). */
+    fun openSkills(target: String = "hermes") {
+        _state.update { it.copy(screen = Screen.Skills, skillsUi = it.skillsUi.copy(target = target, openSkill = null, categories = emptyList()), error = null, notice = null) }
         loadSkills()
     }
 
@@ -3999,17 +4044,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun openMcp() {
-        _state.update { it.copy(screen = Screen.Mcp, error = null, notice = null) }
+    /** MCP for Hermes (`agentId` null) or for one coding agent (`/api/coding-agents/{id}/mcp`). */
+    fun openMcp(agentId: String? = null) {
+        _state.update { it.copy(screen = Screen.Mcp, mcpUi = it.mcpUi.copy(agentId = agentId, servers = emptyList()), error = null, notice = null) }
         loadMcp()
     }
 
     fun refreshMcp() = loadMcp()
 
     private fun loadMcp() {
+        val agentId = _state.value.mcpUi.agentId
         _state.update { it.copy(mcpUi = it.mcpUi.copy(loading = true)) }
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.mcpServers() } }
+            runCatching { withContext(Dispatchers.IO) { if (agentId == null) api.mcpServers() else api.codingAgentMcpServers(agentId) } }
                 .onSuccess { servers ->
                     _state.update { it.copy(mcpUi = it.mcpUi.copy(loading = false, actionName = null, servers = servers)) }
                 }
@@ -4025,7 +4072,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (name.isBlank()) return
         _state.update { it.copy(mcpUi = it.mcpUi.copy(actionName = originalName ?: "new"), error = null) }
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.saveMcpServer(originalName, name.trim(), config) } }
+            val agentId = _state.value.mcpUi.agentId
+            runCatching { withContext(Dispatchers.IO) { if (agentId == null) api.saveMcpServer(originalName, name.trim(), config) else api.saveCodingAgentMcpServer(agentId, originalName, name.trim(), config) } }
                 .onSuccess { loadMcp() }
                 .onFailure { failure ->
                     _state.update {
@@ -4035,9 +4083,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun deleteMcpServer(name: String) = mutateMcp(name) { api.deleteMcpServer(name) }
+    fun deleteMcpServer(name: String) = mutateMcp(name) { _state.value.mcpUi.agentId?.let { api.deleteCodingAgentMcpServer(it, name) } ?: api.deleteMcpServer(name) }
 
-    fun testMcpServer(name: String) = mutateMcp(name) { api.testMcpServer(name) }
+    fun testMcpServer(name: String) = mutateMcp(name) { _state.value.mcpUi.agentId?.let { api.testCodingAgentMcpServer(it, name) } ?: api.testMcpServer(name) }
 
     fun reloadMcpServer(name: String? = null) = mutateMcp(name ?: "all") { api.reloadMcpServer(name) }
 
@@ -4059,22 +4107,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         loadPets()
     }
 
-    fun openInsights(days: Int = _state.value.usageDays) {
-        _state.update { it.copy(screen = Screen.Insights, usageDays = days, loadingInsights = true, error = null) }
-        refreshInsights(days)
+    fun openUsage(days: Int = _state.value.usageDays) {
+        _state.update { it.copy(screen = Screen.Usage, error = null, notice = null) }
+        refreshUsage(days)
     }
 
-    fun refreshInsights(days: Int = _state.value.usageDays) {
-        _state.update { it.copy(usageDays = days, loadingInsights = true, error = null) }
+    fun refreshUsage(days: Int = _state.value.usageDays) {
+        _state.update { it.copy(usageDays = days, loadingUsage = true, error = null) }
         viewModelScope.launch {
-            val result = runCatching {
-                withContext(Dispatchers.IO) { api.usageStats(days) to api.runtimePerformance() }
-            }
-            result.onSuccess { (usage, performance) ->
-                _state.update { it.copy(usageStats = usage, runtimePerformance = performance, loadingInsights = false) }
-            }.onFailure { failure ->
-                _state.update { it.copy(loadingInsights = false, error = failure.readableMessage(localized)) }
-            }
+            runCatching { withContext(Dispatchers.IO) { api.usageStats(days) } }
+                .onSuccess { usage -> _state.update { it.copy(usageStats = usage, loadingUsage = false) } }
+                .onFailure { failure -> _state.update { it.copy(loadingUsage = false, error = failure.readableMessage(localized)) } }
+        }
+    }
+
+    fun openPerformance() {
+        _state.update { it.copy(screen = Screen.Performance, error = null, notice = null) }
+        refreshPerformance()
+    }
+
+    fun refreshPerformance() {
+        _state.update { it.copy(loadingPerformance = true, error = null) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.runtimePerformance() } }
+                .onSuccess { performance -> _state.update { it.copy(runtimePerformance = performance, loadingPerformance = false) } }
+                .onFailure { failure -> _state.update { it.copy(loadingPerformance = false, error = failure.readableMessage(localized)) } }
         }
     }
 
@@ -4130,46 +4187,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── settings ──────────────────────────────────────────────────────────
 
-    // ── settings groups ───────────────────────────────────────────────────
-
-    fun openSettingsGroup(group: SettingsGroup) {
-        _state.update {
-            it.copy(
-                screen = Screen.SettingsGroup,
-                openGroup = group,
-                toolReturnScreen = when (it.screen) {
-                    Screen.AgentHub -> Screen.AgentHub
-                    Screen.SettingsPage -> Screen.SettingsPage
-                    else -> Screen.Settings
-                },
-                error = null,
-                notice = null,
-                loadingAgentSettings = group == SettingsGroup.Agent,
-                loadingStudioSettings = group in STUDIO_CONFIG_GROUPS,
-                loadingAccountSettings = group == SettingsGroup.Account,
-                loadingManagedUsers = group == SettingsGroup.Users,
-                loadingModelProviders = group == SettingsGroup.Models,
-            )
-        }
-        loadSettingsGroup(group)
-        // Models is no longer a settings body — `SettingsGroupScreen` renders
-        // the provider page for it — so it needs the fallback chain too.
-        if (group == SettingsGroup.Models) loadFallbackChain()
-    }
-
-    /** The tabbed Settings page (web tab order); [group] is the tab shown first. */
-    fun openSettingsPage(group: SettingsGroup = SettingsGroup.Account) {
-        _state.update { it.copy(screen = Screen.SettingsPage, error = null, notice = null) }
+    /**
+     * The one Settings screen (NAVIGATION.md §2): the web's tabs, then This
+     * device and About, then the Tools section. [group] is the tab shown first.
+     */
+    fun openSettings(group: SettingsGroup = SettingsGroup.Account) {
+        _state.update { it.copy(screen = Screen.Settings, error = null, notice = null) }
+        refreshServerConfig()
         selectSettingsTab(group)
     }
 
-    /** Switches the Settings page tab in place and loads what that tab needs. */
+    /** Switches the Settings tab in place and loads what that tab needs. */
     fun selectSettingsTab(group: SettingsGroup) {
         _state.update {
             it.copy(
                 openGroup = group,
                 error = null,
-                loadingAgentSettings = group == SettingsGroup.Agent,
                 loadingStudioSettings = group in STUDIO_CONFIG_GROUPS,
                 loadingAccountSettings = group == SettingsGroup.Account,
                 loadingManagedUsers = group == SettingsGroup.Users,
@@ -4179,9 +4212,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         loadSettingsGroup(group)
     }
 
+    /** Hermes › Settings (HermesSettingsView.vue:66-76): Agent, Memory, Session tabs. */
+    fun openHermesSettings(tab: SettingsGroup = SettingsGroup.Agent) {
+        _state.update { it.copy(screen = Screen.HermesSettings, error = null, notice = null) }
+        selectHermesSettingsTab(tab)
+    }
+
+    fun selectHermesSettingsTab(tab: SettingsGroup) {
+        _state.update {
+            it.copy(
+                hermesSettingsTab = tab,
+                error = null,
+                loadingAgentSettings = tab == SettingsGroup.Agent,
+                loadingStudioSettings = tab in STUDIO_CONFIG_GROUPS,
+            )
+        }
+        loadSettingsGroup(tab)
+    }
+
     private fun loadSettingsGroup(group: SettingsGroup) {
         if (group == SettingsGroup.Agent) loadAgentSettings()
-        if (group == SettingsGroup.Profile) loadModels()
+        if (group == SettingsGroup.Webhooks) loadWebhooks()
         if (group in STUDIO_CONFIG_GROUPS) loadStudioSettings()
         if (group == SettingsGroup.Account) loadAccountSettings()
         if (group == SettingsGroup.Users) loadManagedUsers()
@@ -4442,7 +4493,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * that destination draws: `SettingsGroupScreen` hands Models to the
      * provider page instead of to a settings body.
      */
-    fun openModels() = openSettingsGroup(SettingsGroup.Models)
+    /** The Models page (ModelsView.vue): providers, catalogues, the fallback chain. Not the key form. */
+    fun openModels() {
+        _state.update { it.copy(screen = Screen.Models, error = null, notice = null, loadingModelProviders = true) }
+        loadModelProviders()
+        loadFallbackChain()
+    }
 
     /** The header action: drops the server's cached provider catalogues. */
     fun refreshModelCache() = modelsWork { api.refreshModelCache() }
@@ -4749,11 +4805,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update {
             it.copy(
                 screen = Screen.CronJobs,
-                toolReturnScreen = when (it.screen) {
-                    Screen.AgentHub -> Screen.AgentHub
-                    Screen.SettingsPage -> Screen.SettingsPage
-                    else -> Screen.Settings
-                },
                 error = null,
                 notice = null,
                 editingCronJob = null,
@@ -5010,11 +5061,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update {
             it.copy(
                 screen = Screen.Channels,
-                toolReturnScreen = when (it.screen) {
-                    Screen.AgentHub -> Screen.AgentHub
-                    Screen.SettingsPage -> Screen.SettingsPage
-                    else -> Screen.Settings
-                },
                 error = null,
                 notice = null,
             )
@@ -5022,27 +5068,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         refreshServerConfig()
     }
 
-    /** Settings itself only needs the channel counts and the default model. */
-    fun openSettings() {
-        _state.update { it.copy(screen = Screen.Settings, error = null, notice = null, openGroup = null) }
-        refreshServerConfig()
-    }
-
+    /** Settings › Tools › Profiles (super-admin); back returns wherever it was opened from. */
     fun openProfiles() {
-        _state.update { state ->
-            val parent = when (state.screen) {
-                Screen.Chats, Screen.Conversation, Screen.Groups, Screen.Workflows, Screen.History, Screen.AgentHub,
-                Screen.Settings, Screen.SettingsGroup, Screen.SettingsPage,
-                -> state.screen
-                else -> state.tab.rootScreen(state.openSession)
-            }
-            state.copy(
-                screen = Screen.Profiles,
-                profilesReturnScreen = parent,
-                error = null,
-                notice = null,
-            )
-        }
+        _state.update { it.copy(screen = Screen.Profiles, error = null, notice = null) }
     }
 
     fun openChannel(platform: String) {
@@ -5312,6 +5340,157 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** A short confirmation from the UI (copied, shared, …) through the same notice strip. */
     fun showNotice(id: Int) = _state.update { it.copy(notice = str(id)) }
 
+    // ── search sheet, agents, memory, Ekko settings ──────────────────────
+
+    private var searchSheetJob: Job? = null
+
+    /** The drawer's Search: a sheet over the sessions (SessionSearchModal.vue), never the History page. */
+    fun openSearch() {
+        _state.update { it.copy(searchSheet = SearchSheetState(open = true, loading = true)) }
+        val profile = sessionsProfile()
+        searchSheetJob?.cancel()
+        searchSheetJob = viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.sessions(profile, 8) } }
+                .onSuccess { recent -> _state.update { it.copy(searchSheet = it.searchSheet.copy(recent = recent, loading = false)) } }
+                .onFailure { failure ->
+                    if (failure is kotlinx.coroutines.CancellationException) return@onFailure
+                    _state.update { it.copy(searchSheet = it.searchSheet.copy(loading = false), error = failure.readableMessage(localized)) }
+                }
+        }
+    }
+
+    fun closeSearch() {
+        searchSheetJob?.cancel()
+        _state.update { it.copy(searchSheet = SearchSheetState()) }
+    }
+
+    /** Debounced like the web's 250 ms; ten hits, each with its matching snippet. */
+    fun setSearchQuery(query: String) {
+        _state.update { it.copy(searchSheet = it.searchSheet.copy(query = query)) }
+        searchSheetJob?.cancel()
+        if (query.isBlank()) {
+            _state.update { it.copy(searchSheet = it.searchSheet.copy(results = emptyList(), loading = false)) }
+            return
+        }
+        val profile = sessionsProfile()
+        _state.update { it.copy(searchSheet = it.searchSheet.copy(loading = true)) }
+        searchSheetJob = viewModelScope.launch {
+            delay(250)
+            runCatching { withContext(Dispatchers.IO) { api.searchSessions(query.trim(), profile, limit = 10) } }
+                .onSuccess { results -> _state.update { it.copy(searchSheet = it.searchSheet.copy(results = results, loading = false)) } }
+                .onFailure { failure ->
+                    if (failure is kotlinx.coroutines.CancellationException) return@onFailure
+                    _state.update { it.copy(searchSheet = it.searchSheet.copy(loading = false), error = failure.readableMessage(localized)) }
+                }
+        }
+    }
+
+    /**
+     * A hit opens its conversation. `openSession` reads the session's source,
+     * so a `global_agent` hit lands in the Global Agent's conversation.
+     */
+    fun openSearchResult(session: SessionSummary) {
+        closeSearch()
+        setDrawerOpen(false)
+        openSession(session)
+    }
+
+    /** The drawer's primary rail (`PageSidebarNav.vue:74-205`), one destination per row. */
+    fun openRailDestination(destination: NavDestination) {
+        when (destination) {
+            NavDestination.newChat -> startNewConversation()
+            NavDestination.search -> openSearch()
+            NavDestination.deviceConnections -> openConnections()
+            NavDestination.agentManager -> openAgentManager()
+            NavDestination.models -> openModels()
+            else -> Unit
+        }
+    }
+
+    /** Settings › Tools (`AppSidebar.vue:113-317`): each row is a different screen. */
+    fun openTool(destination: NavDestination) {
+        when (destination) {
+            NavDestination.logs -> openLogs()
+            NavDestination.usage -> openUsage()
+            NavDestination.performance -> openPerformance()
+            NavDestination.skillsUsage -> openSkillsUsage()
+            NavDestination.theme -> openTheme()
+            NavDestination.pets -> openPets()
+            NavDestination.profiles -> openProfiles()
+            else -> Unit
+        }
+    }
+
+    /** One agent's card in the Agent Manager: its sections (NAVIGATION.md §4). */
+    fun openAgent(definition: AgentDefinition) {
+        _state.update { it.copy(screen = Screen.Agent, openAgent = definition, error = null, notice = null) }
+        if (definition.kind == AgentKind.Hermes) refreshServerConfig()
+    }
+
+    /** A row under an agent card. The same destination is a different screen per agent. */
+    fun openAgentSection(definition: AgentDefinition, destination: NavDestination) {
+        when (destination) {
+            NavDestination.jobs -> openCronJobs()
+            NavDestination.kanban -> openKanban()
+            NavDestination.channels -> openChannels()
+            NavDestination.plugins -> openPlugins()
+            NavDestination.journey -> openJourney()
+            NavDestination.hermesSettings -> openHermesSettings()
+            NavDestination.ekkoSettings -> openEkkoSettings()
+            NavDestination.codingAgentSettings -> openAgentSettings(definition)
+            NavDestination.skills -> if (definition.kind == AgentKind.BuiltIn) openEkkoSkills() else openSkills(skillsTarget(definition))
+            NavDestination.mcp -> when (definition.kind) {
+                AgentKind.BuiltIn -> openEkkoMcp()
+                AgentKind.Coding -> openMcp(definition.id)
+                AgentKind.Hermes -> openMcp()
+            }
+            NavDestination.memory -> if (definition.kind == AgentKind.BuiltIn) openEkkoMemory() else openHermesMemory()
+            else -> Unit
+        }
+    }
+
+    /** The `target` SkillsView.vue filters by: `claude` for Claude Code, otherwise the agent id. */
+    private fun skillsTarget(definition: AgentDefinition): String = if (definition.id == "claude-code") "claude" else definition.id
+
+    /** Hermes › Memory (MemoryView.vue): MEMORY.md, USER.md and SOUL.md of the profile. */
+    fun openHermesMemory() {
+        _state.update { it.copy(screen = Screen.Memory, loadingHermesMemory = true, error = null, notice = null) }
+        launchWork(
+            work = { api.hermesMemory(currentProfile()) },
+            onSuccess = { memory -> _state.update { it.copy(hermesMemory = memory, loadingHermesMemory = false) } },
+            onFailure = { failure -> _state.update { it.copy(loadingHermesMemory = false, error = failure.readableMessage(localized)) } },
+        )
+    }
+
+    fun saveHermesMemory(section: String, content: String) = launchWork(
+        work = { api.saveHermesMemory(currentProfile(), section, content); api.hermesMemory(currentProfile()) },
+        onSuccess = { memory -> _state.update { it.copy(hermesMemory = memory, notice = str(R.string.memory_saved)) } },
+    )
+
+    /** Ekko › Settings (ekko/SettingsView.vue): the editable config, one JSON section per tab. */
+    fun openEkkoSettings() {
+        _state.update { it.copy(screen = Screen.EkkoSettings, loadingEkkoConfig = true, error = null, notice = null) }
+        launchWork(
+            work = { api.ekkoConfig(currentProfile()) },
+            onSuccess = { config -> _state.update { it.copy(ekkoConfig = config, loadingEkkoConfig = false) } },
+            onFailure = { failure -> _state.update { it.copy(loadingEkkoConfig = false, error = failure.readableMessage(localized)) } },
+        )
+    }
+
+    /** Saves one section as edited; the other sections go back to the server unchanged. */
+    fun saveEkkoConfigSection(section: String, json: String) {
+        val current = _state.value.ekkoConfig ?: return
+        val parsed = runCatching { org.json.JSONObject(json) }.getOrElse {
+            _state.update { it.copy(error = str(R.string.ekko_config_invalid_json)) }
+            return
+        }
+        val next = org.json.JSONObject(current.config.toString()).put(section, parsed)
+        launchWork(
+            work = { api.saveEkkoConfig(currentProfile(), next); api.ekkoConfig(currentProfile()) },
+            onSuccess = { config -> _state.update { it.copy(ekkoConfig = config, notice = str(R.string.ekko_config_saved)) } },
+        )
+    }
+
     // ── misc ──────────────────────────────────────────────────────────────
 
     fun back() {
@@ -5324,26 +5503,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else -> Unit
         }
         _state.update { state ->
+            // Where the person actually came from. A screen reached from two
+            // parents (Skills from Hermes or from a coding agent, Profiles from
+            // Settings, Files from a profile card) returns to the right one
+            // because the history recorded the visit, not a fixed table.
             val visitedTarget = generateSequence { navigationHistory.removeLastOrNull() }
                 .firstOrNull { it != state.screen && !it.isTransientDestination() }
-            val target = visitedTarget ?: when (state.screen) {
-                Screen.Channel -> Screen.Channels
-                Screen.CronJob, Screen.CronHistory -> Screen.CronJobs
-                Screen.KanbanTask -> Screen.Kanban
-                Screen.Skill -> Screen.Skills
-                Screen.Workflow -> Screen.Workflows
-                Screen.WorkflowRun -> Screen.Workflow
-                Screen.Kanban, Screen.Skills, Screen.Plugins, Screen.Mcp, Screen.AgentRuntimes, Screen.GlobalAgent, Screen.EkkoHub, Screen.Files, Screen.Connections, Screen.Webhooks, Screen.RuntimeVersions -> Screen.AgentHub
-                Screen.Pets, Screen.Insights, Screen.Logs, Screen.Journey, Screen.Appearance, Screen.SettingsPage -> Screen.Settings
-                Screen.AgentSettings -> Screen.AgentHub
-                Screen.Channels, Screen.SettingsGroup, Screen.CronJobs -> state.toolReturnScreen
-                Screen.Profiles -> state.profilesReturnScreen
-                else -> state.tab.rootScreen(state.openSession.takeUnless { state.screen == Screen.Conversation })
-            }
+            val target = visitedTarget ?: state.tab.rootScreen(state.openSession.takeUnless { state.screen == Screen.Conversation })
             consumingBackNavigation = true
             state.copy(
                 screen = target,
                 openAgentSettings = state.openAgentSettings.takeUnless { state.screen == Screen.AgentSettings },
+                filesProfile = state.filesProfile.takeUnless { state.screen == Screen.Files },
                 error = null,
                 openSession = state.openSession.takeUnless { state.screen == Screen.Conversation },
                 lines = if (state.screen == Screen.Conversation) emptyList() else state.lines,
