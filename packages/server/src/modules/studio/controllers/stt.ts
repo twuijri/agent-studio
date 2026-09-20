@@ -497,6 +497,9 @@ function settingsWithRequestLanguage<T extends { language?: string }>(
 ): T {
   const language = String(fields.language || '').trim()
   if (!language) return settings
+  // BCP-47-shaped only ("ar", "en-US", "zh-Hant"): a provider gets a language
+  // tag, never free text from the form.
+  if (!/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,2}$/.test(language)) return settings
   return { ...settings, language }
 }
 
