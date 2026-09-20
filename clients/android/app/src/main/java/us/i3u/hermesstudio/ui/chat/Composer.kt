@@ -7,9 +7,14 @@ import android.os.Build
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -94,6 +99,7 @@ import us.i3u.hermesstudio.DictationHint
 import us.i3u.hermesstudio.GroupMentions
 import us.i3u.hermesstudio.MentionEdit
 import us.i3u.hermesstudio.R
+import us.i3u.hermesstudio.RecordingStrip
 import us.i3u.hermesstudio.Store
 import us.i3u.hermesstudio.Upload
 import us.i3u.hermesstudio.UploadProgress
@@ -263,6 +269,10 @@ internal fun StudioComposer(
             takePhoto.launch(uri)
         }
     }
+    // The recording strip's rules live in RecordingStrip, which is pure; the
+    // composer only runs the effects each tap produces.
+    var strip by remember { mutableStateOf(RecordingStrip.State()) }
+    val reducedMotion = rememberReducedMotion()
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) viewModel.startVoiceInput() else viewModel.reportMicrophoneDenied()
     }
@@ -280,6 +290,29 @@ internal fun StudioComposer(
     }
     var voiceAnchor by remember { mutableStateOf<Int?>(null) }
     var voiceLength by remember { mutableStateOf(0) }
+    val dispatch: (RecordingStrip.Event) -> Unit = { event ->
+        val step = RecordingStrip.reduce(strip, event)
+        strip = step.state
+        step.effects.forEach { effect ->
+            when (effect) {
+                RecordingStrip.Effect.StartTake -> askMic.launch(Manifest.permission.RECORD_AUDIO)
+                RecordingStrip.Effect.StopTake -> viewModel.stopVoiceInput()
+                RecordingStrip.Effect.CancelTake -> {
+                    // The restore below is the whole answer. The Discard
+                    // segment the cancel emits must then find nothing to
+                    // remove, or it would cut into the restored draft.
+                    voiceAnchor = null
+                    voiceLength = 0
+                    viewModel.cancelVoiceInput()
+                }
+                is RecordingStrip.Effect.RestoreDraft -> {
+                    field = TextFieldValue(effect.draft, TextRange(effect.draft.length))
+                    onDraftChange(effect.draft)
+                }
+                RecordingStrip.Effect.SendDraft -> onSend()
+            }
+        }
+    }
     LaunchedEffect(state.voiceSegment) {
         val segment = state.voiceSegment ?: return@LaunchedEffect
         val anchor = voiceAnchor ?: field.selection.end.coerceIn(0, field.text.length)
@@ -294,12 +327,24 @@ internal fun StudioComposer(
             voiceLength = 0
         }
         viewModel.consumeVoiceSegment(segment.serial)
+        // The final text is in the draft now; if ↑ ended the take, this is
+        // the moment the draft can be sent.
+        if (segment.kind != VoiceSegmentKind.Partial) {
+            dispatch(RecordingStrip.Event.Finished(hasPayload = edit.text.isNotBlank() || config.attachments.isNotEmpty()))
+        }
     }
     LaunchedEffect(state.voice) {
         // A take that ended without a final segment leaves nothing to replace.
         if (state.voice != VoiceStatus.Listening) {
             voiceAnchor = null
             voiceLength = 0
+        }
+        // A take that never produced a segment at all — the microphone was
+        // refused, the recorder would not open — still has to hand the pills
+        // back. A segment in flight is handled above instead.
+        val ended = state.voice == VoiceStatus.Idle || state.voice == VoiceStatus.Error
+        if (ended && state.voiceSegment == null && strip.phase != RecordingStrip.Phase.Idle) {
+            dispatch(RecordingStrip.Event.Failed)
         }
     }
 
@@ -473,6 +518,26 @@ internal fun StudioComposer(
                 }
 
                 Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // While dictating, the pill row becomes the recording strip
+                // (✕ · waveform · ■ · ↑) with the drawer's 150 ms fade, or
+                // an immediate swap when the owner has animations off.
+                AnimatedContent(
+                    targetState = state.voice == VoiceStatus.Listening,
+                    transitionSpec = {
+                        val spec = if (reducedMotion) snap<Float>() else tween<Float>(CoreHubTokens.Metrics.transitionFastMs)
+                        (fadeIn(spec) togetherWith fadeOut(spec)).using(SizeTransform(clip = false))
+                    },
+                    label = "composer-toolbar",
+                ) { showStrip ->
+                if (showStrip) {
+                    RecordingStripRow(
+                        state = state,
+                        viewModel = viewModel,
+                        onCancel = { dispatch(RecordingStrip.Event.Cancel) },
+                        onStop = { dispatch(RecordingStrip.Event.Stop) },
+                        onSend = { dispatch(RecordingStrip.Event.Send) },
+                    )
+                } else {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -539,7 +604,14 @@ internal fun StudioComposer(
                     MicButton(
                         state = state,
                         viewModel = viewModel,
-                        onRecord = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
+                        onRecord = {
+                            // A stale error is cleared first so the take that
+                            // follows always moves the voice status, and a
+                            // failure is seen as one rather than as "still
+                            // the old error".
+                            viewModel.resetVoice()
+                            dispatch(RecordingStrip.Event.Start(field.text))
+                        },
                         onPickLanguage = {
                             // The gesture the hint exists to teach has now been
                             // used, so this profile never sees the hint again.
@@ -549,6 +621,8 @@ internal fun StudioComposer(
                         },
                     )
                     ComposerActionButton(config, draft, onSend)
+                }
+                }
                 }
                 config.allMention?.let { all ->
                     AllMentionRow(
@@ -747,7 +821,8 @@ private fun VoiceStatusRow(state: UiState, viewModel: AppViewModel) {
                     color = palette.accent,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { viewModel.cancelVoiceInput() }) { Text(stringResource(R.string.action_cancel)) }
+                // No cancel button here any more: the recording strip under
+                // the text carries ✕, ■ and ↑ while the take runs.
             }
             VoiceStatus.Transcribing -> {
                 CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)

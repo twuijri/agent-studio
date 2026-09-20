@@ -784,6 +784,13 @@
     <string name="composer_listening">جارٍ الاستماع…</string>
     <string name="composer_stop_listening">إيقاف الاستماع</string>
     <string name="composer_voice_failed">تعذّر الإدخال الصوتي</string>
+    <string name="composer_dictation_cancel">إلغاء الإملاء</string>
+    <string name="composer_dictation_cancel_hint">يتجاهل ما أُملي ويعيد المسودة</string>
+    <string name="composer_dictation_stop">إيقاف الإملاء</string>
+    <string name="composer_dictation_stop_hint">يحتفظ بالنص ويغلق شريط التسجيل</string>
+    <string name="composer_recording_label">جارٍ التسجيل</string>
+    <string name="composer_recording_in">جارٍ التسجيل بـ %1$s</string>
+    <string name="composer_recording_level">المستوى %1$d٪</string>
     <string name="notice_voice_fallback_server">التعرف على الكلام غير متاح على هذا الجهاز، لذا يُستخدم سيرفر Core Hub بدلًا منه.</string>
     <string name="error_stt_not_configured">لا يوجد مزوّد تحويل كلام إلى نص جاهز على سيرفر Core Hub: %1$s</string>
     <string name="error_speech_no_match">لم يُتعرَّف على أي كلام</string>

@@ -35,6 +35,13 @@ class SpeechInput(private val context: Context) {
          * and only for a guess the engine itself calls confident.
          */
         fun onLanguageDetected(tag: String) = Unit
+
+        /**
+         * The engine's own loudness reading, in dB as `onRmsChanged` reports
+         * it (roughly −2…10 on Google's engine). This is the only measurement
+         * the recording strip's waveform has; nothing else opens the mic.
+         */
+        fun onRms(rmsDb: Float) = Unit
     }
 
     private var recognizer: SpeechRecognizer? = null
@@ -85,7 +92,7 @@ class SpeechInput(private val context: Context) {
 
             override fun onReadyForSpeech(params: Bundle?) = Unit
             override fun onBeginningOfSpeech() = Unit
-            override fun onRmsChanged(rmsdB: Float) = Unit
+            override fun onRmsChanged(rmsdB: Float) = listener.onRms(rmsdB)
             override fun onBufferReceived(buffer: ByteArray?) = Unit
             override fun onEndOfSpeech() = Unit
             override fun onEvent(eventType: Int, params: Bundle?) = Unit

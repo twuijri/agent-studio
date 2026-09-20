@@ -509,6 +509,42 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val group = GroupSocket(store.baseUrl, store.token)
     private val recorder = Recorder()
     private val speech = SpeechInput(app)
+
+    /**
+     * The recording strip's waveform: the last [DictationLevels.BARS] levels,
+     * newest last, refreshed every [DictationLevels.TICK_MS] while a take runs.
+     * Published apart from [state] so the ~20 Hz frames redraw the strip alone
+     * rather than the whole composer.
+     */
+    private val levelMeter = AudioLevelMeter()
+    private var waveform = DictationLevels.Waveform()
+    private val _dictationLevels = MutableStateFlow(DictationLevels.idle())
+    val dictationLevels: StateFlow<List<Float>> = _dictationLevels.asStateFlow()
+    private var levelTicker: Job? = null
+
+    /** Starts the waveform clock for the take that just began. */
+    private fun startLevelTicker() {
+        levelTicker?.cancel()
+        levelMeter.reset()
+        waveform = DictationLevels.Waveform()
+        _dictationLevels.value = waveform.bars
+        levelTicker = viewModelScope.launch {
+            // delay() throws once the job is cancelled, which ends the loop.
+            while (true) {
+                kotlinx.coroutines.delay(DictationLevels.TICK_MS)
+                _dictationLevels.value = waveform.push(levelMeter.tick())
+            }
+        }
+    }
+
+    /** The take ended, however it ended: the strip goes flat. */
+    private fun stopLevelTicker() {
+        levelTicker?.cancel()
+        levelTicker = null
+        levelMeter.reset()
+        recorder.onLevel = null
+        _dictationLevels.value = DictationLevels.idle()
+    }
     private var voiceSerial = 0L
     private var lastPartial: String? = null
     private var speechPlayer: MediaPlayer? = null
@@ -2667,6 +2703,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Ends the take; the text arrives through the voice segment. */
     fun stopVoiceInput() {
         if (_state.value.voice != VoiceStatus.Listening) return
+        stopLevelTicker()
         if (_state.value.voiceViaServer) {
             stopRecordingAndTranscribe()
         } else {
@@ -2676,6 +2713,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancelVoiceInput() {
+        stopLevelTicker()
         if (_state.value.voiceViaServer) recorder.cancel() else speech.cancel()
         lastPartial = null
         emitVoiceSegment("", VoiceSegmentKind.Discard)
@@ -2712,12 +2750,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     _state.update { it.copy(detectedLanguage = tag) }
                 }
 
+                override fun onRms(rmsDb: Float) = levelMeter.feedDb(rmsDb)
+
                 override fun onPartial(text: String) {
                     lastPartial = text
                     emitVoiceSegment(text, VoiceSegmentKind.Partial)
                 }
 
                 override fun onFinal(text: String) {
+                    stopLevelTicker()
                     val spoken = text.ifBlank { lastPartial.orEmpty() }
                     lastPartial = null
                     if (spoken.isBlank()) {
@@ -2747,6 +2788,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 override fun onError(code: Int) {
+                    stopLevelTicker()
                     val partial = lastPartial
                     lastPartial = null
                     if (SpeechInput.isNoSpeech(code) && !partial.isNullOrBlank()) {
@@ -2785,6 +2827,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 dictationWarning = warning,
             )
         }
+        startLevelTicker()
     }
 
     /** The language hint the pending server take will carry; null for none. */
@@ -2815,6 +2858,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 takeFallbackFrom = "",
             )
         }
+        // The recorder measures the PCM it is already capturing; the strip
+        // never opens the microphone a second time.
+        startLevelTicker()
+        recorder.onLevel = { level -> levelMeter.feed(level) }
     }
 
     /** Stops the take and turns it into text with the profile's STT provider. */
