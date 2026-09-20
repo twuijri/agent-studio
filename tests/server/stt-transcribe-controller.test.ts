@@ -246,6 +246,27 @@ describe('stt transcribe controller', () => {
     expect(store.getSttProviderSetting('default', 'openai')?.settings.language).toBe('en')
   })
 
+  it('ignores a request language that is not a language tag', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ text: 'hello' }))
+    const { ctrl, store } = await initControllerAndStore()
+    store.saveSttProviderSetting('default', 'openai', {
+      settings: { model: 'gpt-4o-transcribe', language: 'en' },
+      secrets: { apiKey: 'server-secret' },
+    })
+    const ctx = makeMultipartCtx(
+      { id: 7, username: 'han', role: 'admin' },
+      [
+        { name: 'provider', value: 'openai' },
+        { name: 'language', value: 'please detect it' },
+        { name: 'audio', value: Buffer.from('audio-data'), filename: 'speech.webm', contentType: 'audio/webm' },
+      ],
+    )
+    await ctrl.transcribe(ctx)
+    expect(ctx.status).toBe(200)
+    const [, init] = mockFetch.mock.calls[0] as [string | URL, RequestInit]
+    expect((init.body as FormData).get('language')).toBe('en')
+  })
+
   it('keeps the stored language when the request sends a blank one', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ text: 'hello' }))
     const { ctrl, store } = await initControllerAndStore()
