@@ -52,19 +52,26 @@ object AppUpdater {
      * the owner marked as metered. An automatic check stays off it; a check he
      * asked for in Settings does not care.
      */
-    fun isMetered(context: Context): Boolean {
+    fun isMetered(context: Context): Boolean = try {
         val manager = context.getSystemService(ConnectivityManager::class.java) ?: return false
         val network = manager.activeNetwork ?: return false
         val capabilities = manager.getNetworkCapabilities(network) ?: return false
-        return !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+    } catch (_: SecurityException) {
+        // Never let a connectivity query take the whole app down on start;
+        // the manifest declares ACCESS_NETWORK_STATE, but an OEM build can
+        // still refuse. Treat an unknown connection as unmetered.
+        false
     }
 
     /** True when there is no usable connection at all. */
-    fun isOffline(context: Context): Boolean {
+    fun isOffline(context: Context): Boolean = try {
         val manager = context.getSystemService(ConnectivityManager::class.java) ?: return false
         val network = manager.activeNetwork ?: return true
         val capabilities = manager.getNetworkCapabilities(network) ?: return true
-        return !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    } catch (_: SecurityException) {
+        false
     }
 
     /**
