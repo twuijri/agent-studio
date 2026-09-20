@@ -786,44 +786,53 @@ struct KanbanBoard: Identifiable, Hashable {
     init(_ json: JSON) { id = json.string("id", "slug", "name"); name = json.string("name", "title", "displayName", "display_name").nilIfEmpty ?? id }
 }
 
-enum KanbanStatus: String, CaseIterable, Identifiable {
-    case triage, todo, scheduled, ready, running, blocked, review, done
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .triage: return String(localized: "Triage")
-        case .todo: return String(localized: "To do")
-        case .scheduled: return String(localized: "Scheduled")
-        case .ready: return String(localized: "Ready")
-        case .running: return String(localized: "Running")
-        case .blocked: return String(localized: "Blocked")
-        case .review: return String(localized: "Review")
-        case .done: return String(localized: "Done")
-        }
-    }
-    var colorName: String { rawValue }
-}
+// `KanbanStatus` lives in `Core/KanbanBoard.swift` with the rest of the board model.
 
 struct KanbanTask: Identifiable, Hashable {
     let id: String
     var title: String
     var description: String
     var status: String
-    var priority: String
+    /// Hermes priority 1…3 (the web shows 2 as medium and 3 as high).
+    var priorityLevel: Int
     var assignee: String?
     var tags: [String]
+    /// Unix seconds; the default card order is newest first.
+    var createdAt: Double
     var updatedAt: String?
 
+    /// The server's shape (`kanban-service.ts` `KanbanTask`): `body`, `assignee`,
+    /// `skills` and the timestamps arrive as JSON `null`, which `JSONSerialization`
+    /// decodes as `NSNull`, so every optional goes through the null-aware helpers.
     init(_ json: JSON) {
         id = json.string("id")
         title = json.string("title", "name").nilIfEmpty ?? String(localized: "Untitled task")
         description = json.string("description", "body")
         status = json.string("status", "column").nilIfEmpty ?? "todo"
-        priority = json.string("priority").nilIfEmpty ?? "medium"
+        priorityLevel = KanbanTask.priorityLevel(json.value("priority"))
         assignee = json.string("assignee", "assigned_to", "profile").nilIfEmpty
         tags = json.strings("tags").isEmpty ? json.strings("skills") : json.strings("tags")
+        createdAt = json.double("created_at", default: json.double("createdAt"))
         updatedAt = json.string("updatedAt", "updated_at").nilIfEmpty
     }
+
+    /// Numbers as Hermes stores them; the words older payloads used; medium otherwise.
+    static func priorityLevel(_ raw: Any?) -> Int {
+        if let number = raw as? NSNumber { return number.intValue }
+        if let text = raw as? String {
+            switch text.lowercased() {
+            case "high": return 3
+            case "medium": return 2
+            case "low": return 1
+            default: return Int(text) ?? 2
+            }
+        }
+        return 2
+    }
+
+    /// The board stage; a status Hermes does not know is shown in the queue as todo.
+    var stage: KanbanStatus { KanbanStatus(raw: status) ?? .todo }
+    var priority: String { priorityLevel >= 3 ? "high" : (priorityLevel == 2 ? "medium" : "low") }
 }
 
 struct JourneyNode: Identifiable, Hashable { let id: String; let label: String; let kind: String; let category: String; let useCount: Int; let pinned: Bool; init(_ json: JSON) { id = json.string("id"); label = json.string("label", "title").nilIfEmpty ?? id; kind = json.string("kind"); category = json.string("category"); useCount = json["useCount"] == nil ? json.int("use_count") : json.int("useCount"); pinned = json.bool("pinned") } }
