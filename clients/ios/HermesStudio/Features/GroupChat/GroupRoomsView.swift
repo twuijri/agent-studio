@@ -33,7 +33,7 @@ struct GroupsView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .navigationTitle("Group Chat")
+        .navigationTitle(NavDestination.groupChat.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {

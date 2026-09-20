@@ -25,7 +25,7 @@ struct CronJobsView: View {
                 }.listStyle(.insetGrouped).refreshable { await load() }
             }
         }
-        .navigationTitle("Scheduled Jobs")
+        .navigationTitle(NavDestination.jobs.title)
         .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }; Button { creating = true } label: { Image(systemName: "plus") } } }
         .sheet(isPresented: $creating) { CronEditorView(job: nil) { await load() } }
         .sheet(item: $editing) { job in CronEditorView(job: job) { await load() } }

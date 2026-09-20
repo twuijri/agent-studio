@@ -1,12 +1,17 @@
 import SwiftUI
 
-/// One agent's own screen — what the web reaches with the card's **Settings**
-/// button (`/studio/agents/{id}/settings`), plus the install state the card
-/// itself shows. Tapping an agent used to do nothing on the phone.
+/// One agent's own screen — "under the agent" (`NAVIGATION.md` §4), entered
+/// from an Agent Manager card only. Capabilities first, Settings last, and
+/// back to Agent Manager:
 ///
-/// Everything here acts on the **Core Hub host**, never on the iPhone: an
-/// install is `npm install -g` on the server, a config file is a file in the
-/// server's home directory.
+/// - Hermes (`HermesConfigSidebar.vue:67-241`): Jobs · Kanban · Channels ·
+///   Skills · Plugins · MCP · Memory · Journey · Settings, plus the card's
+///   CLI details and "Manage runtime".
+/// - Ekko (`EkkoConfigSidebar.vue:54-79`): Memory · Skills · MCP · Settings.
+/// - Coding agent (`CodingAgentConfigSidebar.vue:19-24`): [Plugins · Presets
+///   for dsh] · Skills · MCP · Settings, with install/update/remove on the card.
+///
+/// Everything here acts on the **Core Hub host**, never on the iPhone.
 struct AgentDetailView: View {
     @EnvironmentObject private var store: AppStore
 
@@ -20,22 +25,24 @@ struct AgentDetailView: View {
     @State private var confirmingRemoval = false
     @State private var autoUpdate = false
 
+    private var family: AgentFamily { AgentFamily(agentID: agent.id) }
+
     var body: some View {
         List {
             identitySection
             if agent.isCodingAgent {
                 if policy != nil { autoUpdateSection }
                 actionsSection
-                configurationSection
-                mcpSection
             }
-            if agent.kind == "built-in" { ekkoSection }
-            if agent.kind == "hermes" { hermesSection }
+            capabilitiesSection
+            settingsSection
         }
         .listStyle(.insetGrouped)
         .navigationTitle(agent.name)
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { autoUpdate = policy?.autoUpdate ?? false }
+        // The pushed `.skills` / `.mcp` / `.memory` / `.plugins` / `*Settings`
+        // screens resolve against the agent that was opened last.
+        .onAppear { autoUpdate = policy?.autoUpdate ?? false; store.focusedAgentID = agent.id }
         .confirmationDialog("Remove \(agent.name)?", isPresented: $confirmingRemoval, titleVisibility: .visible) {
             Button("Remove", role: .destructive) { Task { await remove() } }
             Button("Cancel", role: .cancel) {}
@@ -44,7 +51,7 @@ struct AgentDetailView: View {
         }
     }
 
-    // MARK: Identity and state
+    // MARK: Identity and state (the card)
 
     private var identitySection: some View {
         Section {
@@ -59,23 +66,28 @@ struct AgentDetailView: View {
             if agent.installed {
                 LabeledContent("Version") { Text(AgentSourceLabel.version(agent.version.nilIfEmpty ?? tool?.version ?? "")) }
             }
-            if let command = tool?.command.nilIfEmpty {
-                LabeledContent("Command") { TechnicalText(text: command) }
-            }
-            if let package = tool?.packageName.nilIfEmpty {
-                LabeledContent("Package") { TechnicalText(text: package) }
-            }
-            if !agent.path.isEmpty {
-                LabeledContent("Path") { TechnicalText(text: agent.path) }
-            }
+            if let command = tool?.command.nilIfEmpty { LabeledContent("Command") { TechnicalText(text: command) } }
+            if let package = tool?.packageName.nilIfEmpty { LabeledContent("Package") { TechnicalText(text: package) } }
+            if !agent.path.isEmpty { LabeledContent("Path") { TechnicalText(text: agent.path) } }
             if !agent.error.isEmpty {
                 Text(agent.error).font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.error)
             }
-            ForEach(agent.installations, id: \.path) { installation in
-                AgentInstallationRow(installation: installation)
+            ForEach(agent.installations, id: \.path) { installation in AgentInstallationRow(installation: installation) }
+            if family == .hermes {
+                // The Hermes card's "Manage runtime" (`AgentManagerView.vue:517-536`):
+                // the only way to the runtime versions.
+                NavigationLink { RuntimeVersionsView() } label: { Label("Manage runtime", systemImage: "shippingbox.and.arrow.backward.fill") }
             }
         } footer: {
-            Text("Everything on this screen runs on the Core Hub server, not on this iPhone.")
+            Text(footerNote)
+        }
+    }
+
+    private var footerNote: LocalizedStringKey {
+        switch family {
+        case .hermes: return "Core Hub installs complete runtime packages; it never installs the Hermes CLI on its own."
+        case .ekko: return "Ekko ships with Core Hub, so it is never installed or removed."
+        case .coding: return "Everything on this screen runs on the Core Hub server, not on this iPhone."
         }
     }
 
@@ -138,74 +150,63 @@ struct AgentDetailView: View {
         .disabled(!working.isEmpty)
     }
 
-    // MARK: The agent's own files
+    // MARK: Capabilities (desktop sidebar order) and Settings
 
-    private var configurationSection: some View {
+    private var capabilitiesSection: some View {
         Section {
-            ForEach(AgentConfigFiles.editors(for: agent.id), id: \.key) { editor in
-                NavigationLink {
-                    AgentConfigFileView(agentID: agent.id, agentName: agent.name, editor: editor)
-                } label: {
-                    Label(editor.title, systemImage: editor.key == "preference" ? "text.book.closed" : "gearshape")
+            ForEach(AgentDetailView.capabilities(for: family)) { destination in
+                NavigationLink(value: destination) {
+                    Label(destination.label, systemImage: AgentDetailView.symbol(for: destination))
                 }
             }
-        } header: { Text("Settings") } footer: {
-            Text("The agent's own files on the server, the same two the web's agent settings page edits.")
-        }
+            if case .coding(let id) = family, id == "dsh" {
+                NavigationLink { DshPresetsView() } label: { Label("Presets", systemImage: "square.on.square.dashed") }
+            }
+        } header: { Text(agent.name) }
     }
 
-    private var mcpSection: some View {
+    private var settingsSection: some View {
         Section {
-            NavigationLink {
-                AgentMcpServersView(agentID: agent.id, agentName: agent.name)
-            } label: {
-                Label("MCP servers", systemImage: "server.rack")
+            NavigationLink(value: AgentDetailView.settingsDestination(for: family)) {
+                Label(NavDestination.settings.label, systemImage: "gearshape")
+            }
+        } footer: {
+            switch family {
+            case .hermes: Text("Agent, memory and session settings of the profile \(store.selectedProfile).")
+            case .ekko: Text("Runtime, model, compression, tools, modules and advanced settings.")
+            case .coding: Text("The agent's own settings files on the server.")
             }
         }
     }
 
-    // MARK: Ekko and Hermes
-
-    private var ekkoSection: some View {
-        Section {
-            NavigationLink { EkkoConfigurationView() } label: { Label("Configuration", systemImage: "slider.horizontal.3") }
-            NavigationLink { EkkoMemoryView() } label: { Label("Ekko memory", systemImage: "brain") }
-            NavigationLink { EkkoSkillsView() } label: { Label("Ekko skills", systemImage: "square.stack.3d.up") }
-            NavigationLink { EkkoMCPView() } label: { Label("Ekko MCP", systemImage: "server.rack") }
-        } header: { Text("Ekko") } footer: {
-            Text("Ekko ships with Core Hub, so it is never installed or removed.")
+    /// The capability entries per family, in the desktop sidebar order.
+    static func capabilities(for family: AgentFamily) -> [NavDestination] {
+        switch family {
+        case .hermes: return [.jobs, .kanban, .channels, .skills, .plugins, .mcp, .memory, .journey]
+        case .ekko: return [.memory, .skills, .mcp]
+        case let .coding(id): return (id == "dsh" ? [.plugins] : []) + [.skills, .mcp]
         }
     }
 
-    /// Complaint: "the Hermes side is unreachable". These screens already
-    /// existed under Settings → Workspace tools; what was missing was a way
-    /// in from the agent itself, which is where the web puts them.
-    private var hermesSection: some View {
-        Group {
-            Section {
-                NavigationLink { RuntimeVersionsView() } label: { Label("Runtime versions", systemImage: "shippingbox.and.arrow.backward.fill") }
-                NavigationLink { StudioSectionSettings(section: .agent) } label: { Label("Agent settings", systemImage: "sparkles") }
-                NavigationLink { HermesMemoryView() } label: { Label("Memory", systemImage: "brain") }
-                NavigationLink { StudioSectionSettings(section: .memory) } label: { Label("Memory settings", systemImage: "lightbulb.max.fill") }
-            } header: { Text("Hermes runtime") } footer: {
-                Text("Core Hub installs complete runtime packages; it never installs the Hermes CLI on its own.")
-            }
-            Section {
-                NavigationLink { SkillsView() } label: { Label("Skills", systemImage: "square.stack.3d.up.fill") }
-                NavigationLink { SkillUsageView() } label: { Label("Skills usage", systemImage: "chart.bar") }
-                NavigationLink { MCPView() } label: { Label("MCP", systemImage: "server.rack") }
-                NavigationLink { PluginsView() } label: { Label("Plugins", systemImage: "puzzlepiece.extension.fill") }
-            } header: { Text("Skills and tools") }
-            Section {
-                NavigationLink { KanbanView() } label: { Label("Kanban", systemImage: "rectangle.3.group") }
-                NavigationLink { CronJobsView() } label: { Label("Scheduled Jobs", systemImage: "calendar.badge.clock") }
-                NavigationLink { JourneyView() } label: { Label("Journey", systemImage: "point.3.filled.connected.trianglepath.dotted") }
-                NavigationLink { ChannelsView() } label: { Label("Channels", systemImage: "antenna.radiowaves.left.and.right") }
-                NavigationLink { GlobalAgentView() } label: { Label("Global Agent", systemImage: "globe.desk.fill") }
-                NavigationLink { StudioFilesView() } label: { Label("Files", systemImage: "folder.fill") }
-            } header: { Text("Hermes workspace") } footer: {
-                Text("The same screens as Settings → Workspace tools, reachable from the agent they belong to.")
-            }
+    static func settingsDestination(for family: AgentFamily) -> NavDestination {
+        switch family {
+        case .hermes: return .hermesSettings
+        case .ekko: return .ekkoSettings
+        case .coding: return .codingAgentSettings
+        }
+    }
+
+    static func symbol(for destination: NavDestination) -> String {
+        switch destination {
+        case .jobs: return "calendar.badge.clock"
+        case .kanban: return "rectangle.3.group"
+        case .channels: return "antenna.radiowaves.left.and.right"
+        case .skills: return "square.stack.3d.up.fill"
+        case .plugins: return "puzzlepiece.extension.fill"
+        case .mcp: return "server.rack"
+        case .memory: return "brain"
+        case .journey: return "point.3.filled.connected.trianglepath.dotted"
+        default: return "circle"
         }
     }
 

@@ -984,12 +984,77 @@ struct UsageStats {
     let daily: [UsageBreakdown]
 }
 
-struct RuntimePerformance {
+/// `GET /api/studio/performance/runtime` (`api/studio/performance-monitor.ts`
+/// `PerformanceRuntimeSnapshot`): what the Performance screen shows.
+struct PerformanceSnapshot: Equatable {
+    struct Worker: Identifiable, Equatable {
+        let pid: Int
+        let profile: String
+        let running: Bool
+        let cpuPercent: Double
+        let memoryBytes: Int
+        let sessionCount: Int
+        let runningSessionCount: Int
+        let error: String
+        var id: String { "\(pid)-\(profile)" }
+
+        init(_ json: JSON) {
+            pid = json.int("pid")
+            profile = json.string("profile")
+            running = json.bool("running")
+            cpuPercent = json.double("cpuPercent")
+            memoryBytes = json.int("memoryRssBytes")
+            sessionCount = json.int("sessionCount")
+            runningSessionCount = json.int("runningSessionCount")
+            error = json.string("error")
+        }
+    }
+
+    struct ProfileSessions: Equatable {
+        let profile: String
+        let count: Int
+    }
+
+    let timestamp: Double
+    let platform: String
+    let arch: String
+    let cpuCount: Int
+    let uptimeSeconds: Double
+    /// `nil` when the server left the field out (an empty snapshot after a
+    /// read failure), so the screen shows a dash instead of 0 %.
     let cpuPercent: Double?
     let memoryPercent: Double?
-    let workerCount: Int
-    let runningWorkers: Int
-    let sessionCount: Int
+    let bridgeReachable: Bool
+    let bridgeError: String
+    let brokerRunning: Bool
+    let workers: [Worker]
+    let totalWorkerMemoryBytes: Int
+    let activeSessions: Int
+    let runningSessions: Int
+    let sessionsByProfile: [ProfileSessions]
+
+    var runningWorkers: Int { workers.filter(\.running).count }
+
+    init(_ json: JSON) {
+        let system = json.object("system"), bridge = json.object("bridge"), sessions = json.object("sessions")
+        timestamp = json.double("timestamp")
+        platform = system.string("platform")
+        arch = system.string("arch")
+        cpuCount = system.int("cpuCount")
+        uptimeSeconds = system.double("uptimeSeconds")
+        cpuPercent = system.value("cpuPercent") == nil ? nil : system.double("cpuPercent")
+        memoryPercent = system.value("memoryPercent") == nil ? nil : system.double("memoryPercent")
+        bridgeReachable = bridge.bool("reachable")
+        bridgeError = bridge.string("error")
+        brokerRunning = bridge.object("broker").bool("running")
+        workers = bridge.objects("workers").map(Worker.init)
+        totalWorkerMemoryBytes = bridge.int("totalWorkerMemoryRssBytes")
+        activeSessions = sessions.int("active")
+        runningSessions = sessions.int("running")
+        sessionsByProfile = sessions.object("byProfile")
+            .compactMap { key, value in (value as? NSNumber).map { ProfileSessions(profile: key, count: $0.intValue) } }
+            .sorted { $0.count == $1.count ? $0.profile < $1.profile : $0.count > $1.count }
+    }
 }
 
 struct DownloadLink: Identifiable, Hashable {

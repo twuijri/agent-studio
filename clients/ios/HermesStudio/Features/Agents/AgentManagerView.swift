@@ -29,7 +29,7 @@ struct AgentManagerView: View {
             otherGroup
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Agents")
+        .navigationTitle(NavDestination.agentManager.title)
         .navigationBarTitleDisplayMode(.inline)
         .overlay { if loading && agents.isEmpty { ProgressView() } }
         .refreshable { await reprobe() }

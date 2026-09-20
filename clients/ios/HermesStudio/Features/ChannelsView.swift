@@ -201,7 +201,7 @@ struct ChannelsView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Channels")
+        .navigationTitle(NavDestination.channels.title)
         .overlay { if loading { ProgressView() } }
         .refreshable { await load() }
         .task(id: store.selectedProfile) { await load() }

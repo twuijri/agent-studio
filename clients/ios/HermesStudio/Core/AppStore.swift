@@ -28,12 +28,24 @@ final class AppStore: ObservableObject {
     // MARK: Shell navigation (M2: drawer + conversation switch, like the web)
 
     @Published var drawerOpen = false
-    @Published var drawerPage: DrawerPage = .navigation
     @Published var conversationMode: ConversationMode = .chat
     @Published var selectedSession: SessionSummary?
     @Published var selectedRoom: Room?
     @Published var selectedWorkflow: WorkflowItem?
-    @Published var shellDestination: ShellDestination?
+    /// The run opened from a workflow screen (`.workflowRun`).
+    @Published var selectedWorkflowRunID: String?
+    /// Screens pushed over the root content (`RootShell`). One stack, one
+    /// `navigationDestination(for: NavDestination.self)`, so the desktop's
+    /// nesting (Agent Manager → Hermes → Kanban) is a plain `push`.
+    @Published var path = NavigationPath()
+    /// The destination `show(_:)` put at the bottom of the stack, for the
+    /// rail highlight. `NavigationPath` is opaque, so it is tracked here.
+    @Published private(set) var shownDestination: NavDestination?
+    /// The agent card opened last: `.skills`, `.mcp`, `.memory`, `.plugins`
+    /// and the three `*Settings` cases resolve against it.
+    @Published var focusedAgentID = "hermes"
+    /// The Search rail entry: a sheet over the sessions, field focused.
+    @Published var searchOpen = false
     /// Room sheets requested from the drawer (create / join by code).
     @Published var roomAction: RoomAction?
     /// Bumped whenever a session is created, renamed, archived or deleted so
@@ -55,7 +67,6 @@ final class AppStore: ObservableObject {
 
     enum Phase { case launching, signedOut, signedIn }
     enum RoomAction: String, Identifiable { case create, join; var id: String { rawValue } }
-    enum DrawerPage { case navigation, settings }
 
     var isSuperAdmin: Bool { currentUser?.isSuperAdmin == true }
 
@@ -341,8 +352,9 @@ final class AppStore: ObservableObject {
         SecureStore.remove("token"); AppSessionRecord.clear(); appSession = nil
         token = ""; currentUser = nil; profiles = []; phase = .signedOut
         api.update(baseURL: baseURL, token: "")
-        selectedSession = nil; selectedRoom = nil; selectedWorkflow = nil; shellDestination = nil
-        drawerOpen = false; drawerPage = .navigation; conversationMode = .chat
+        selectedSession = nil; selectedRoom = nil; selectedWorkflow = nil; selectedWorkflowRunID = nil
+        path = NavigationPath(); shownDestination = nil; searchOpen = false
+        drawerOpen = false; conversationMode = .chat
         connected = false
         if let message { errorMessage = message }
     }
@@ -368,15 +380,16 @@ final class AppStore: ObservableObject {
     }
 
     func open(_ session: SessionSummary) {
-        shellDestination = nil
+        popToRoot()
         conversationMode = .chat
         selectedSession = session
         browserPrefs.markRead(session.id)
         drawerOpen = false
+        searchOpen = false
     }
 
     func open(_ room: Room) {
-        shellDestination = nil
+        popToRoot()
         conversationMode = .group
         selectedRoom = room
         drawerOpen = false
@@ -386,30 +399,67 @@ final class AppStore: ObservableObject {
     func roomsChanged() { sessionListVersion &+= 1 }
 
     func open(_ workflow: WorkflowItem) {
-        shellDestination = nil
+        popToRoot()
         conversationMode = .workflow
         selectedWorkflow = workflow
         drawerOpen = false
     }
 
+    /// A run of the current workflow, pushed as `.workflowRun`.
+    func openRun(_ runID: String, of workflow: WorkflowItem) {
+        selectedWorkflow = workflow
+        selectedWorkflowRunID = runID
+        push(.workflowRun)
+    }
+
     /// Opens the drawer. The keyboard goes with it: a focused composer
     /// otherwise keeps the keyboard over the drawer's lower half. Focus is
     /// dropped as part of the same transition, without a delay.
-    func openDrawer(page: DrawerPage = .navigation) {
+    func openDrawer() {
         Keyboard.dismiss()
-        drawerPage = page
         drawerOpen = true
     }
 
-    func show(_ destination: ShellDestination) {
+    /// Replaces the pushed stack with one screen (a rail entry, the gear).
+    func show(_ destination: NavDestination) {
         drawerOpen = false
-        drawerPage = .navigation
-        shellDestination = destination
+        var next = NavigationPath()
+        next.append(destination)
+        path = next
+        shownDestination = destination
+    }
+
+    /// Pushes a screen over whatever is showing (Settings → Tools, the
+    /// agent's capabilities, a search result's Global Agent).
+    func push(_ destination: NavDestination) {
+        drawerOpen = false
+        if path.isEmpty { shownDestination = destination }
+        path.append(destination)
+    }
+
+    func popToRoot() {
+        if !path.isEmpty { path = NavigationPath() }
+        shownDestination = nil
+    }
+
+    /// The rail highlight: the screen at the bottom of the stack, if any.
+    var rootDestination: NavDestination? { path.isEmpty ? nil : shownDestination }
+
+    /// The Search rail entry (`SessionSearchModal.vue`): a sheet, not History.
+    func openSearch() {
+        drawerOpen = false
+        searchOpen = true
+    }
+
+    /// The desktop has no menu entry for the Global Agent; a search result
+    /// whose source is `global_agent` opens its conversation.
+    func openGlobalAgent(_ session: SessionSummary) {
+        open(session)
     }
 
     func switchMode(_ mode: ConversationMode) {
         conversationMode = mode
-        shellDestination = nil
+        popToRoot()
         if mode == .history { drawerOpen = false }
     }
 
