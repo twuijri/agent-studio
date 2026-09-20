@@ -545,7 +545,107 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _dictationLevels.value = DictationLevels.idle()
     }
     private var voiceSerial = 0L
-    private var lastPartial: String? = null
+    private val voiceOutbox = VoiceSegmentOutbox()
+
+    // ── continuous dictation ──────────────────────────────────────────────
+    //
+    // One take is a chain of recognizer sessions, because the platform ends
+    // a session by itself at the first pause; ContinuousDictation holds the
+    // rules and this runs its effects — the recognizer, the timers, the clock.
+
+    private var dictation = ContinuousDictation.State()
+    private var dictationRestartJob: Job? = null
+    private var dictationCeilingJob: Job? = null
+    private var dictationStopJob: Job? = null
+
+    private fun dictationClock(): Long = android.os.SystemClock.elapsedRealtime()
+
+    private fun dictate(event: ContinuousDictation.Event) {
+        val step = ContinuousDictation.reduce(dictation, event)
+        dictation = step.state
+        step.effects.forEach(::runDictationEffect)
+    }
+
+    private fun runDictationEffect(effect: ContinuousDictation.Effect) {
+        when (effect) {
+            is ContinuousDictation.Effect.Emit -> emitVoiceSegment(effect.text, effect.kind)
+
+            is ContinuousDictation.Effect.Restart -> {
+                dictationRestartJob?.cancel()
+                // Dispatched rather than run inside the engine's own callback,
+                // so the last session is entirely over before the next one asks
+                // for the microphone. The phase is checked again on arrival: a
+                // ■ or ✕ in the meantime has already closed the take.
+                dictationRestartJob = viewModelScope.launch(Dispatchers.Main) {
+                    if (effect.afterMillis > 0) kotlinx.coroutines.delay(effect.afterMillis)
+                    if (dictation.phase != ContinuousDictation.Phase.Restarting) return@launch
+                    if (speech.restart(fresh = effect.fresh)) {
+                        dictate(ContinuousDictation.Event.SessionStarted)
+                    } else {
+                        dictate(ContinuousDictation.Event.SessionFailed(android.speech.SpeechRecognizer.ERROR_CLIENT, dictationClock()))
+                    }
+                }
+            }
+
+            ContinuousDictation.Effect.StopSession -> {
+                stopLevelTicker()
+                _state.update { it.copy(voice = VoiceStatus.Transcribing) }
+                speech.stop()
+                dictationStopJob?.cancel()
+                dictationStopJob = viewModelScope.launch {
+                    kotlinx.coroutines.delay(ContinuousDictation.STOP_TIMEOUT_MILLIS)
+                    dictate(ContinuousDictation.Event.StopTimedOut)
+                }
+            }
+
+            is ContinuousDictation.Effect.Close -> closeTake(effect.outcome)
+        }
+    }
+
+    /** The take is over, one way or another: timers off, recognizer released, the mic button told how it ended. */
+    private fun closeTake(outcome: ContinuousDictation.Outcome) {
+        dictationRestartJob?.cancel()
+        dictationRestartJob = null
+        dictationCeilingJob?.cancel()
+        dictationCeilingJob = null
+        dictationStopJob?.cancel()
+        dictationStopJob = null
+        stopLevelTicker()
+        if (outcome == ContinuousDictation.Outcome.Cancelled) {
+            // cancelVoiceInput() owns the discard and the state that follows.
+            speech.cancel()
+            return
+        }
+        speech.end()
+        _state.update {
+            when (outcome) {
+                ContinuousDictation.Outcome.Done, ContinuousDictation.Outcome.Ceiling -> {
+                    // A detecting take that never reported a language did
+                    // not detect anything; the text is whatever the seed
+                    // language made of the audio, and it says so.
+                    val silentDetection = it.takeDetecting && it.detectedLanguage.isBlank()
+                    val warnings = listOfNotNull(
+                        str(R.string.notice_dictation_ceiling, ContinuousDictation.MAX_TAKE_MILLIS / 60_000)
+                            .takeIf { _ -> outcome == ContinuousDictation.Outcome.Ceiling },
+                        str(R.string.notice_speech_detect_silent, SpeechLanguages.isolatedEndonym(it.takeLanguage))
+                            .takeIf { _ -> silentDetection },
+                    )
+                    it.copy(
+                        voice = VoiceStatus.Idle,
+                        voiceReplyPending = true,
+                        error = null,
+                        dictationWarning = warnings.ifEmpty { listOfNotNull(it.dictationWarning) }.joinToString(" ").ifBlank { null },
+                    )
+                }
+                ContinuousDictation.Outcome.NoSpeech ->
+                    it.copy(voice = VoiceStatus.Error, error = str(R.string.error_speech_no_match))
+                is ContinuousDictation.Outcome.Failed ->
+                    it.copy(voice = VoiceStatus.Error, error = speechErrorMessage(outcome.code))
+                ContinuousDictation.Outcome.Cancelled -> it
+            }
+        }
+    }
+
     private var speechPlayer: MediaPlayer? = null
     private var runJob: kotlinx.coroutines.Job? = null
     private var historyJob: kotlinx.coroutines.Job? = null
@@ -2694,23 +2794,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(dictationHint = false) }
     }
 
-    /** Ends the take; the text arrives through the voice segment. */
+    /**
+     * ■ or ↑: ends the take, keeps the text. On the device this is the one
+     * thing that ends the session chain from the owner's side; the final
+     * text arrives through the voice segment, at once when the tap lands
+     * between two sessions.
+     */
     fun stopVoiceInput() {
         if (_state.value.voice != VoiceStatus.Listening) return
-        stopLevelTicker()
         if (_state.value.voiceViaServer) {
+            stopLevelTicker()
             stopRecordingAndTranscribe()
         } else {
-            _state.update { it.copy(voice = VoiceStatus.Transcribing) }
-            speech.stop()
+            dictate(ContinuousDictation.Event.Stop)
         }
     }
 
     fun cancelVoiceInput() {
-        stopLevelTicker()
-        if (_state.value.voiceViaServer) recorder.cancel() else speech.cancel()
-        lastPartial = null
-        emitVoiceSegment("", VoiceSegmentKind.Discard)
+        if (_state.value.voiceViaServer) {
+            stopLevelTicker()
+            recorder.cancel()
+        } else if (dictation.phase != ContinuousDictation.Phase.Closed) {
+            dictate(ContinuousDictation.Event.Cancel)
+        } else {
+            stopLevelTicker()
+            speech.cancel()
+        }
+        emitVoiceSegment("", VoiceSegmentKind.Discard, replaceAll = true)
         // Nothing was inserted, so there is nothing left to warn about.
         _state.update { it.copy(voice = VoiceStatus.Idle, dictationWarning = null, dictationHint = false) }
     }
@@ -2718,15 +2828,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Clears the error state of the mic button after the message was seen. */
     fun resetVoice() = _state.update { if (it.voice == VoiceStatus.Error) it.copy(voice = VoiceStatus.Idle, error = null) else it }
 
-    fun consumeVoiceSegment(serial: Long) = _state.update {
-        if (it.voiceSegment?.serial == serial) it.copy(voiceSegment = null) else it
+    /** The composer placed the segment with [serial]; the next held one, if any, is shown. */
+    fun consumeVoiceSegment(serial: Long) {
+        val next = voiceOutbox.placed(serial)
+        _state.update { if (it.voiceSegment != next) it.copy(voiceSegment = next) else it }
     }
 
     /**
-     * One on-device take. [detectAmong] non-empty turns on the platform's own
+     * One on-device take, as a chain of sessions the engine ends by itself
+     * and [ContinuousDictation] restarts; every callback here is an event for
+     * that machine. [detectAmong] non-empty turns on the platform's own
      * language detection and switching; the engine then reports what it
      * settled on through `onLanguageDetected`, and that is the only thing the
-     * recording sheet will claim was detected.
+     * recording sheet will claim was detected. The intent is kept and reused
+     * for every restart, so the detection list and the language carry over.
      */
     private fun startDeviceListening(
         languageTag: String,
@@ -2735,7 +2850,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         fallbackFrom: String = "",
         warning: String? = null,
     ) {
-        lastPartial = null
+        dictation = ContinuousDictation.State()
         val started = speech.start(
             languageTag,
             detectAmong,
@@ -2746,62 +2861,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
                 override fun onRms(rmsDb: Float) = levelMeter.feedDb(rmsDb)
 
-                override fun onPartial(text: String) {
-                    lastPartial = text
-                    emitVoiceSegment(text, VoiceSegmentKind.Partial)
-                }
+                override fun onPartial(text: String) = dictate(ContinuousDictation.Event.Partial(text))
 
-                override fun onFinal(text: String) {
-                    stopLevelTicker()
-                    val spoken = text.ifBlank { lastPartial.orEmpty() }
-                    lastPartial = null
-                    if (spoken.isBlank()) {
-                        emitVoiceSegment("", VoiceSegmentKind.Discard)
-                        _state.update { it.copy(voice = VoiceStatus.Error, error = str(R.string.error_speech_no_match)) }
-                        return
-                    }
-                    emitVoiceSegment(spoken, VoiceSegmentKind.Final)
-                    _state.update {
-                        // A detecting take that never reported a language did
-                        // not detect anything; the text is whatever the seed
-                        // language made of the audio, and it says so.
-                        val silentDetection = it.takeDetecting && it.detectedLanguage.isBlank()
-                        it.copy(
-                            voice = VoiceStatus.Idle,
-                            voiceReplyPending = true,
-                            error = null,
-                            dictationWarning = when {
-                                silentDetection -> str(
-                                    R.string.notice_speech_detect_silent,
-                                    SpeechLanguages.isolatedEndonym(it.takeLanguage),
-                                )
-                                else -> it.dictationWarning
-                            },
-                        )
-                    }
-                }
+                override fun onFinal(text: String) =
+                    dictate(ContinuousDictation.Event.SessionEnded(text, dictationClock()))
 
-                override fun onError(code: Int) {
-                    stopLevelTicker()
-                    val partial = lastPartial
-                    lastPartial = null
-                    if (SpeechInput.isNoSpeech(code) && !partial.isNullOrBlank()) {
-                        // The recognizer timed out after the user stopped talking; the
-                        // last hypothesis is what they said.
-                        emitVoiceSegment(partial, VoiceSegmentKind.Final)
-                        _state.update { it.copy(voice = VoiceStatus.Idle, voiceReplyPending = true, error = null) }
-                        return
-                    }
-                    if (!partial.isNullOrBlank()) emitVoiceSegment(partial, VoiceSegmentKind.Final)
-                    else emitVoiceSegment("", VoiceSegmentKind.Discard)
-                    _state.update { it.copy(voice = VoiceStatus.Error, error = speechErrorMessage(code)) }
-                }
+                override fun onError(code: Int) =
+                    dictate(ContinuousDictation.Event.SessionFailed(code, dictationClock()))
             },
         )
         if (!started) {
             _state.update { it.copy(notice = str(R.string.notice_voice_fallback_server)) }
             startServerRecording(SpeechLanguages.serverHint(languageTag))
             return
+        }
+        dictate(ContinuousDictation.Event.Opened(dictationClock()))
+        dictationCeilingJob?.cancel()
+        dictationCeilingJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(ContinuousDictation.MAX_TAKE_MILLIS)
+            dictate(ContinuousDictation.Event.CeilingReached)
         }
         _state.update {
             it.copy(
@@ -2881,10 +2959,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun emitVoiceSegment(text: String, kind: VoiceSegmentKind) {
+    /**
+     * Publishes one segment for the composer, through [VoiceSegmentOutbox]
+     * so a commit is never overwritten before the composer placed it.
+     * [replaceAll] is ✕: whatever was held no longer matters.
+     */
+    private fun emitVoiceSegment(text: String, kind: VoiceSegmentKind, replaceAll: Boolean = false) {
         voiceSerial += 1
         val segment = VoiceSegment(text, kind, voiceSerial)
-        _state.update { it.copy(voiceSegment = segment) }
+        val shown = if (replaceAll) voiceOutbox.replaceAll(segment) else voiceOutbox.offer(segment)
+        if (shown != null) _state.update { it.copy(voiceSegment = shown) }
     }
 
     private fun voiceErrorMessage(failure: Throwable): String = when {

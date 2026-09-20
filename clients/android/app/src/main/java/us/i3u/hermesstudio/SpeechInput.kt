@@ -16,17 +16,26 @@ import java.util.Locale
 /**
  * On-device dictation through Android's [SpeechRecognizer].
  *
- * Partial hypotheses stream to [Listener.onPartial] while the user speaks, so
- * the composer can show the text as it forms; the final text arrives once
- * through [Listener.onFinal] after [stop]. Every failure is reported through
- * [Listener.onError] with the platform code, never dropped. All calls must
- * happen on the main thread, which is what the platform requires.
+ * One [start] opens a take and binds one recognizer; the take then runs as
+ * a chain of *sessions*, because the platform ends a session by itself as
+ * soon as its endpointer hears a pause (see [ContinuousDictation]). Partial
+ * hypotheses stream to [Listener.onPartial] while the user speaks, so the
+ * composer can show the text as it forms; each session's final text arrives
+ * through [Listener.onFinal], after which the caller either [restart]s the
+ * next session with the same intent or [end]s the take. Every failure is
+ * reported through [Listener.onError] with the platform code, never dropped.
+ * All calls must happen on the main thread, which is what the platform
+ * requires.
  */
 class SpeechInput(private val context: Context) {
 
     interface Listener {
         fun onPartial(text: String)
+
+        /** One session's final text; the take is still open until [end] or [cancel]. */
         fun onFinal(text: String)
+
+        /** One session failed; the take is still open, and the caller decides whether to [restart]. */
         fun onError(code: Int)
 
         /**
@@ -46,6 +55,11 @@ class SpeechInput(private val context: Context) {
 
     private var recognizer: SpeechRecognizer? = null
 
+    /** The intent every session of the open take runs with, so a restart changes nothing about the language. */
+    private var intent: Intent? = null
+    private var platformListener: RecognitionListener? = null
+
+    /** Whether a take is open — between sessions included. */
     val isListening: Boolean get() = recognizer != null
 
     /**
@@ -63,7 +77,7 @@ class SpeechInput(private val context: Context) {
         if (recognizer != null) return true
         if (!isAvailable(context)) return false
         val instance = SpeechRecognizer.createSpeechRecognizer(context)
-        instance.setRecognitionListener(object : RecognitionListener {
+        val bridge = object : RecognitionListener {
             override fun onLanguageDetection(results: Bundle) {
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
                 val detected = SpeechLanguages.readDetected(
@@ -80,13 +94,13 @@ class SpeechInput(private val context: Context) {
                 firstResult(partialResults)?.let(listener::onPartial)
             }
 
+            // Neither callback releases the recognizer: the session is over,
+            // the take is not, and the caller may restart at once.
             override fun onResults(results: Bundle?) {
-                release()
                 listener.onFinal(firstResult(results).orEmpty())
             }
 
             override fun onError(error: Int) {
-                release()
                 listener.onError(error)
             }
 
@@ -96,14 +110,38 @@ class SpeechInput(private val context: Context) {
             override fun onBufferReceived(buffer: ByteArray?) = Unit
             override fun onEndOfSpeech() = Unit
             override fun onEvent(eventType: Int, params: Bundle?) = Unit
-        })
-        val intent = recognitionIntent(context, languageTag, detectAmong)
+        }
+        instance.setRecognitionListener(bridge)
+        val request = recognitionIntent(context, languageTag, detectAmong)
         recognizer = instance
-        instance.startListening(intent)
+        intent = request
+        platformListener = bridge
+        instance.startListening(request)
         return true
     }
 
-    /** Ends the take; the final text follows through the listener. */
+    /**
+     * Starts the next session of the open take with the very same intent, so
+     * the language, the detection list and the switch settings carry over.
+     * [fresh] rebinds a new recognizer first — the answer to an engine that
+     * reported itself busy after the last session. Returns false when no take
+     * is open.
+     */
+    fun restart(fresh: Boolean = false): Boolean {
+        val request = intent ?: return false
+        val bridge = platformListener ?: return false
+        var instance = recognizer ?: return false
+        if (fresh) {
+            runCatching { instance.destroy() }
+            instance = SpeechRecognizer.createSpeechRecognizer(context)
+            instance.setRecognitionListener(bridge)
+            recognizer = instance
+        }
+        instance.startListening(request)
+        return true
+    }
+
+    /** Asks the running session for its final text, which follows through the listener. */
     fun stop() {
         recognizer?.stopListening()
     }
@@ -114,9 +152,14 @@ class SpeechInput(private val context: Context) {
         release()
     }
 
+    /** The take is over and its last text has been delivered; lets the recognizer go. */
+    fun end() = release()
+
     private fun release() {
-        recognizer?.destroy()
+        runCatching { recognizer?.destroy() }
         recognizer = null
+        intent = null
+        platformListener = null
     }
 
     private fun firstResult(bundle: Bundle?): String? =
@@ -125,15 +168,25 @@ class SpeechInput(private val context: Context) {
     companion object {
         fun isAvailable(context: Context): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
-        /** The recognizer gave up before any text: the user simply said nothing it could use. */
-        fun isNoSpeech(code: Int): Boolean =
-            code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+        /**
+         * The silence hints, generous on purpose. The platform documents all
+         * three as values that "depending on the recognizer implementation
+         * ... may have no effect", and Google's engine does ignore them —
+         * which is why the take is restarted per session instead of relying
+         * on them — but an engine that honours them gets one long session
+         * rather than many short ones, and ■ ends a session explicitly in
+         * either case.
+         */
+        const val COMPLETE_SILENCE_MILLIS = 10_000L
+        const val POSSIBLY_COMPLETE_SILENCE_MILLIS = 8_000L
+        const val MINIMUM_SESSION_MILLIS = 30_000L
 
         /**
-         * The intent one take runs with. Detection and switching are only
-         * attached on Android 14 and later, where the extras exist at all;
-         * `EXTRA_LANGUAGE` is always set, because the platform requires the
-         * take to open in some language even when it may switch away from it.
+         * The intent every session of a take runs with. Detection and
+         * switching are only attached on Android 14 and later, where the
+         * extras exist at all; `EXTRA_LANGUAGE` is always set, because the
+         * platform requires the take to open in some language even when it
+         * may switch away from it.
          */
         fun recognitionIntent(
             context: Context,
@@ -145,6 +198,9 @@ class SpeechInput(private val context: Context) {
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, COMPLETE_SILENCE_MILLIS)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, POSSIBLY_COMPLETE_SILENCE_MILLIS)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, MINIMUM_SESSION_MILLIS)
             if (detectAmong.size < 2 || Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return@apply
             val allowed = ArrayList(detectAmong)
             putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION, true)
@@ -327,8 +383,17 @@ enum class VoiceStatus { Idle, Listening, Transcribing, Error }
 enum class VoiceSegmentKind {
     /** The current hypothesis; replaces the previous partial in the field. */
     Partial,
-    /** The finished text; stays in the field and closes the segment. */
+
+    /**
+     * One session of a still-running take is finished: its text stays in the
+     * field as ordinary draft text and the next session's partial anchors
+     * after it. The take itself is not over, so the strip stays up.
+     */
+    Commit,
+
+    /** The finished text; stays in the field and closes the take. */
     Final,
+
     /** The take was cancelled; whatever partial was inserted is removed. */
     Discard,
 }
@@ -336,14 +401,59 @@ enum class VoiceSegmentKind {
 /** One update to the text the composer inserts for the running dictation. */
 data class VoiceSegment(val text: String, val kind: VoiceSegmentKind, val serial: Long)
 
+/**
+ * The segments the composer has not placed yet, in order.
+ *
+ * The composer sees one segment at a time on the UI state and reports back
+ * with the serial it placed. A newer partial may overwrite an unplaced
+ * partial, because the newer hypothesis supersedes it; a commit, a final or
+ * a discard must never be overwritten before it was seen. That matters once
+ * a take is several sessions: the next session's first partial could
+ * otherwise land before the last session's commit was placed, and the
+ * committed words would vanish from the draft.
+ */
+class VoiceSegmentOutbox {
+    private var shown: VoiceSegment? = null
+    private val waiting = ArrayDeque<VoiceSegment>()
+
+    /** What the composer should be looking at right now. */
+    val current: VoiceSegment? get() = shown
+
+    /** Hands [segment] to the composer now, or holds it until the ones before it were placed. Returns what to show now. */
+    fun offer(segment: VoiceSegment): VoiceSegment? {
+        val visible = shown
+        if (visible == null || (visible.kind == VoiceSegmentKind.Partial && waiting.isEmpty())) {
+            shown = segment
+            return segment
+        }
+        if (segment.kind == VoiceSegmentKind.Partial && waiting.lastOrNull()?.kind == VoiceSegmentKind.Partial) waiting.removeLast()
+        waiting.addLast(segment)
+        return null
+    }
+
+    /** The composer placed [serial]. Returns what to show next: the next held segment, or null when there is none. */
+    fun placed(serial: Long): VoiceSegment? {
+        if (shown?.serial != serial) return shown
+        shown = waiting.removeFirstOrNull()
+        return shown
+    }
+
+    /** ✕: nothing held matters any more, only [segment]. */
+    fun replaceAll(segment: VoiceSegment): VoiceSegment {
+        waiting.clear()
+        shown = segment
+        return segment
+    }
+}
+
 data class VoiceEdit(val text: String, val caret: Int, val segmentLength: Int)
 
 /**
  * Replaces the interim dictation segment inside [text]. [anchor] is where the
  * segment starts (the caret when dictation began) and [previousLength] how
  * many characters the previous update inserted there. A space is added before
- * the segment when it follows a non-space character, and a final segment is
- * separated from any text that follows it.
+ * the segment when it follows a non-space character, and a committed or final
+ * segment is separated from any text that follows it.
  */
 fun applyVoiceSegment(
     text: String,
@@ -361,7 +471,8 @@ fun applyVoiceSegment(
     }
     val lead = if (start > 0 && !text[start - 1].isWhitespace()) " " else ""
     val after = text.substring(end)
-    val trail = if (kind == VoiceSegmentKind.Final && after.isNotEmpty() && !after[0].isWhitespace()) " " else ""
+    val closes = kind == VoiceSegmentKind.Final || kind == VoiceSegmentKind.Commit
+    val trail = if (closes && after.isNotEmpty() && !after[0].isWhitespace()) " " else ""
     val inserted = lead + body + trail
     val replaced = text.substring(0, start) + inserted + after
     return VoiceEdit(replaced, start + lead.length + body.length, inserted.length)

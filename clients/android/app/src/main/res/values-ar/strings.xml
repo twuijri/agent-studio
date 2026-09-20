@@ -1093,6 +1093,7 @@
     <string name="notice_speech_detect_off">لم يعمل الاكتشاف التلقائي، فكُتب هذا النص على أنه %1$s. %2$s. اضغط مطوّلًا على الميكروفون لاختيار لغة.</string>
     <string name="notice_speech_detect_silent">طُلب من المحرّك اكتشاف اللغة لكنه لم يُسمِّ أي لغة، فكُتب هذا النص على أنه %1$s. اضغط مطوّلًا على الميكروفون لاختيار لغة.</string>
     <string name="notice_speech_language_fallback">لا يملك محرّك النطق في هذا الهاتف نموذجًا لـ%1$s، فكُتب هذا النص على أنه %2$s.</string>
+    <string name="notice_dictation_ceiling">توقّف الإملاء بعد %1$d دقائق، وكل ما قلته محفوظ. اضغط على الميكروفون للمتابعة.</string>
     <string name="composer_take_detect_off">بلا اكتشاف — يستمع بـ%1$s (%2$s)</string>
     <string name="composer_take_detecting_among">يكتشف اللغة بين %1$s</string>
     <string name="composer_take_fallback">%1$s غير متاحة هنا — يستمع بـ%2$s</string>

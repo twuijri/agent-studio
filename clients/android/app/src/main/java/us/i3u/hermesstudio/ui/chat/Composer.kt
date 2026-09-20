@@ -327,24 +327,28 @@ internal fun StudioComposer(
             voiceLength = 0
         }
         viewModel.consumeVoiceSegment(segment.serial)
-        // The final text is in the draft now; if ↑ ended the take, this is
-        // the moment the draft can be sent.
-        if (segment.kind != VoiceSegmentKind.Partial) {
+        // A commit closes one session of a take that is still running: its
+        // words are ordinary draft text now, the next session's partial
+        // anchors after them, and the strip stays up. The take itself ends
+        // only with a final or a discard; if ↑ ended it, this is the moment
+        // the draft can be sent.
+        if (segment.kind == VoiceSegmentKind.Final || segment.kind == VoiceSegmentKind.Discard) {
             dispatch(RecordingStrip.Event.Finished(hasPayload = edit.text.isNotBlank() || config.attachments.isNotEmpty()))
         }
     }
     LaunchedEffect(state.voice) {
-        // A take that ended without a final segment leaves nothing to replace.
-        if (state.voice != VoiceStatus.Listening) {
+        // Only a take that ended without a final segment leaves nothing to
+        // replace. The anchor must survive "transcribing": ■ moves the status
+        // before the engine's final text arrives, and that text still has to
+        // replace the last partial rather than land after it.
+        val ended = state.voice == VoiceStatus.Idle || state.voice == VoiceStatus.Error
+        if (ended && state.voiceSegment == null) {
             voiceAnchor = null
             voiceLength = 0
-        }
-        // A take that never produced a segment at all — the microphone was
-        // refused, the recorder would not open — still has to hand the pills
-        // back. A segment in flight is handled above instead.
-        val ended = state.voice == VoiceStatus.Idle || state.voice == VoiceStatus.Error
-        if (ended && state.voiceSegment == null && strip.phase != RecordingStrip.Phase.Idle) {
-            dispatch(RecordingStrip.Event.Failed)
+            // A take that never produced a segment at all — the microphone
+            // was refused, the recorder would not open — still has to hand
+            // the pills back. A segment in flight is handled above instead.
+            if (strip.phase != RecordingStrip.Phase.Idle) dispatch(RecordingStrip.Event.Failed)
         }
     }
 

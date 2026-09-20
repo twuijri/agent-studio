@@ -87,8 +87,10 @@ object RecordingStrip {
             )
             Event.Stop -> Step(state.copy(phase = Phase.Finishing, sendWhenDone = false), listOf(Effect.StopTake))
             Event.Send -> Step(state.copy(phase = Phase.Finishing, sendWhenDone = true), listOf(Effect.StopTake))
-            // The engine ended the take by itself (silence, a timeout); the
-            // text it produced stays and nothing was asked to be sent.
+            // The take ended without a tap: the ten-minute ceiling, or a real
+            // error. A session the engine ends at a pause never reaches here —
+            // ContinuousDictation restarts it and commits its text without a
+            // Finished. The text stays and nothing was asked to be sent.
             is Event.Finished, Event.Failed -> Step(State())
             is Event.Start -> Step(state)
         }
