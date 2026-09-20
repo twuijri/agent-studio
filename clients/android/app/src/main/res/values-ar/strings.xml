@@ -819,7 +819,7 @@
     <string name="nav_workflow_detail">تفاصيل سير العمل</string>
     <string name="nav_workflow_run">تشغيل سير العمل</string>
     <string name="nav_agent_hermes">Hermes</string>
-    <string name="nav_agent_ekko">Ekko</string>
+    <string name="nav_agent_ekko">إيكو</string>
     <string name="nav_agent_coding">وكيل برمجة</string>
     <string name="nav_jobs">المهام المجدولة</string>
     <string name="nav_kanban">كانبان</string>
