@@ -342,6 +342,14 @@
 "Opens the dictation language picker" = "يفتح قائمة اختيار لغة الإملاء";
 "On-device speech is unavailable for %@; using the Core Hub server" = "التعرّف على الكلام داخل الجهاز غير متاح للغة %@؛ سيُستخدم خادم Core Hub";
 "The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead." = "تعذّر التفريغ في خادم Core Hub حاليًا (%1$@). سيجري الإملاء بلغة %2$@ على هذا الآيفون بدلًا من ذلك.";
+/* شريط التسجيل (يحلّ محل صف الرقائق ما دام الميكروفون مفتوحًا): ✕ إلغاء · موجة · ■ إيقاف · ↑ إرسال */
+"Cancel dictation" = "إلغاء الإملاء";
+"Discards what was dictated and restores the draft" = "يتجاهل ما أُملي ويعيد المسودة كما كانت";
+"Stop dictation" = "إيقاف الإملاء";
+"Keeps the text and closes the recording strip" = "يُبقي النص ويغلق شريط التسجيل";
+"Recording" = "تسجيل";
+"Recording in %@" = "تسجيل بلغة %@";
+"Level %lld%%" = "المستوى %lld٪";
 
 "Download" = "تنزيل";
 "Open with Quick Look" = "فتح بالمعاينة السريعة";

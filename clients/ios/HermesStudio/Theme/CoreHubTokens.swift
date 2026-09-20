@@ -115,6 +115,8 @@ enum CoreHubTokens {
         static let unreadHalo = 0.12
         static let deleteAffordance = 0.50
         static let thinkingText = 0.85
+        /// An idle bar of the recording strip's waveform (drawn as a dot).
+        static let waveformIdle = 0.40
     }
 
     // MARK: Typography (system sans / system mono)
@@ -248,6 +250,11 @@ enum CoreHubTokens {
         static let bubblePaddingHorizontal: CGFloat = 14
         static let composerMinHeight: CGFloat = 150
         static let composerButton: CGFloat = 30
+        /// The recording strip's waveform: bars across the free width, the
+        /// gap between them, and the dot an idle bar collapses to.
+        static let waveformBarCount = 36
+        static let waveformBarGap: CGFloat = 2
+        static let waveformDot: CGFloat = 3
         static let actionButton: CGFloat = 24
         static let contextBarWidth: CGFloat = 60
         static let contextBarWidthPhone: CGFloat = 42

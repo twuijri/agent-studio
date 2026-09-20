@@ -316,8 +316,9 @@ struct VoiceStatusRow: View {
                     Text("Listening…").font(CoreHubTokens.Typography.metaFont)
                 }
                 SpeechLanguageChip(label: state.speechLanguage)
+                // The mic is off screen while listening — the recording strip
+                // holds ✕ and ■ instead — so there is no "tap the mic" tip here.
                 Spacer(minLength: 6)
-                Text("Tap the microphone to finish").font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.textMuted).lineLimit(1)
             case .transcribing:
                 ProgressView().controlSize(.mini)
                 Text("Transcribing…").font(CoreHubTokens.Typography.metaFont)

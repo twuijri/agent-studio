@@ -182,7 +182,8 @@ struct GroupRoomView: View {
             totalTokens: state.totalTokens, showToolCalls: store.showToolCalls,
             mentionNames: GroupMentions.suggestions(agents: state.agents, canMentionAll: room.canMentionAll),
             voiceState: dictation.voice, isRecording: recorder.isRecording, recordingElapsed: recorder.elapsed,
-            speechLanguage: store.activeSpeechLanguageLabel(for: speechProfile)
+            speechLanguage: store.activeSpeechLanguageLabel(for: speechProfile),
+            waveform: recorder.isRecording ? recorder.waveform : speech.waveform
         )
     }
 
@@ -191,6 +192,8 @@ struct GroupRoomView: View {
         actions.send = { Task { await send() } }
         actions.mic = { Task { await dictationRunner.toggle() } }
         actions.micLanguage = { openSpeechLanguagePicker() }
+        actions.cancelDictation = { dictationRunner.cancel() }
+        actions.stopDictation = { dictationRunner.stop() }
         actions.attachCamera = { if CameraPicker.isAvailable { showingCamera = true } else { store.errorMessage = String(localized: "No camera is available on this device.") } }
         actions.attachPhotos = { showingPhotos = true }
         actions.attachFiles = { importing = true }

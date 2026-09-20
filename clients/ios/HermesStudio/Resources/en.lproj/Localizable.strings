@@ -287,6 +287,14 @@
 "Opens the dictation language picker" = "Opens the dictation language picker";
 "On-device speech is unavailable for %@; using the Core Hub server" = "On-device speech is unavailable for %@; using the Core Hub server";
 "The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead." = "The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead.";
+/* Recording strip (replaces the pill row while the microphone is open): ✕ cancel · waveform · ■ stop · ↑ send */
+"Cancel dictation" = "Cancel dictation";
+"Discards what was dictated and restores the draft" = "Discards what was dictated and restores the draft";
+"Stop dictation" = "Stop dictation";
+"Keeps the text and closes the recording strip" = "Keeps the text and closes the recording strip";
+"Recording" = "Recording";
+"Recording in %@" = "Recording in %@";
+"Level %lld%%" = "Level %lld%%";
 
 "Download" = "Download";
 "Open with Quick Look" = "Open with Quick Look";

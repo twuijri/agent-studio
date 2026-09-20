@@ -5,6 +5,8 @@ import SwiftUI
 /// a 16 pt input with per-string direction, the toolbar
 /// [+] [pills…] … [queue] [mic 30] [send/stop 30], and the counter in the top
 /// end corner. Labels collapse to icons under 380 pt. Never auto-focused.
+/// While the microphone is open the toolbar gives way to the recording strip
+/// [✕] [waveform] [■] [↑] (`RecordingStripView`).
 ///
 /// What differs between a chat and a room is the `ComposerConfiguration`, not
 /// this view.
@@ -18,6 +20,7 @@ struct ComposerCard: View {
     let actions: ComposerActions
     let availableWidth: CGFloat
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var compact: Bool { availableWidth < 380 }
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -34,8 +37,7 @@ struct ComposerCard: View {
             if state.voiceState != .idle { VoiceStatusRow(state: state) }
             ComposerInput(text: $text, placeholder: configuration.placeholder, focused: focused,
                           onSubmit: { if canSend { actions.send() } })
-            ComposerToolbar(configuration: configuration, state: state, actions: actions,
-                            compact: compact, canSend: canSend, hasDraft: !trimmed.isEmpty)
+            toolbarOrStrip
         }
         .padding(.top, configuration.topInset)
         .padding(.horizontal, 12)
@@ -47,6 +49,24 @@ struct ComposerCard: View {
         .coreHubShadow(focused.wrappedValue ? CoreHubTokens.Shadow.focused : CoreHubTokens.Shadow.composer(for: colorScheme))
         .padding(.horizontal, 8)
         .padding(.bottom, 6)
+    }
+
+    /// The pill row, or the recording strip while the microphone is open.
+    /// The swap runs on `Motion.drawer`; with Reduce Motion on it simply cuts.
+    @ViewBuilder private var toolbarOrStrip: some View {
+        let recording = RecordingStrip.isVisible(state.voiceState)
+        ZStack {
+            if recording {
+                RecordingStripView(state: state, actions: actions, canSend: canSend,
+                                   isRunning: configuration.stopsRun && state.isRunning)
+                    .transition(reduceMotion ? .identity : .move(edge: .bottom).combined(with: .opacity))
+            } else {
+                ComposerToolbar(configuration: configuration, state: state, actions: actions,
+                                compact: compact, canSend: canSend, hasDraft: !trimmed.isEmpty)
+                    .transition(reduceMotion ? .identity : .opacity)
+            }
+        }
+        .animation(reduceMotion ? nil : CoreHubTokens.Motion.drawer, value: recording)
     }
 
     @ViewBuilder private var counter: some View {

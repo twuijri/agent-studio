@@ -42,6 +42,46 @@ enum DictationText {
     }
 }
 
+/// The recording strip that replaces the pill row while the microphone is
+/// open (✕ cancel · waveform · ■ stop · ↑ send). Pure rules, unit-tested;
+/// `DictationRunner` carries them out and `RecordingStripView` draws them.
+enum RecordingStrip {
+    /// How a take ends.
+    enum Exit: Equatable {
+        /// ✕: discard what was dictated; the draft before the take comes back.
+        case cancel
+        /// ■: keep the text, wait for the final transcript; the pill row returns.
+        case stop
+        /// ↑: keep the text and send it now; no final transcript is awaited.
+        case send
+    }
+
+    struct Resolution: Equatable {
+        /// What is left in the field.
+        let text: String
+        /// The field goes out now.
+        let sends: Bool
+        /// The recogniser is still finishing (`.transcribing`), so the mic
+        /// stays disabled until the final result lands.
+        let awaitsFinal: Bool
+    }
+
+    /// The strip is on screen only while the microphone is open. While the
+    /// final transcript is awaited, and after an error, the pill row is back
+    /// with the mic showing that state.
+    static func isVisible(_ voice: ComposerVoiceState) -> Bool { voice == .listening }
+
+    /// `base` is the draft captured when the take began (`DictationState.base`)
+    /// and `current` the field with the partial transcript merged after it.
+    static func resolve(_ exit: Exit, base: String, current: String) -> Resolution {
+        switch exit {
+        case .cancel: return Resolution(text: base, sends: false, awaitsFinal: false)
+        case .stop: return Resolution(text: current, sends: false, awaitsFinal: true)
+        case .send: return Resolution(text: current, sends: true, awaitsFinal: false)
+        }
+    }
+}
+
 /// The whole microphone flow. Holds no state of its own: the screen passes
 /// the bindings it already owns, so both composers run this exact code.
 @MainActor
@@ -85,8 +125,23 @@ struct DictationRunner {
         state.wrappedValue.showingLanguagePicker = true
     }
 
-    /// Sending always ends dictation; the text already in the field is what
-    /// goes out, and nothing is ever sent automatically.
+    /// The strip's ✕. Stops recognition without waiting for a final result
+    /// and puts back the draft that existed before the take — exactly, with
+    /// whatever trailing space or newline it had, because
+    /// `DictationText.merged` only ever appended after it.
+    func cancel() {
+        withAnimation(CoreHubTokens.Motion.drawer) { state.wrappedValue.showingHint = false }
+        if speech.isActive { speech.cancel() }
+        if recorder.isRecording, let url = recorder.stop() { try? FileManager.default.removeItem(at: url) }
+        text.wrappedValue = RecordingStrip.resolve(.cancel, base: state.wrappedValue.base, current: text.wrappedValue).text
+        state.wrappedValue.voice = .idle
+        state.wrappedValue.replyPending = false
+        focus(true)
+    }
+
+    /// Sending always ends dictation (the strip's ↑ included); the text
+    /// already in the field is what goes out, and nothing is ever sent
+    /// automatically.
     func endForSend() {
         if speech.isActive { speech.cancel() }
         if recorder.isRecording { _ = recorder.stop() }
@@ -188,7 +243,10 @@ struct DictationRunner {
 
     // MARK: - Finishing
 
-    private func stop() {
+    /// The strip's ■ (and the mic tap while listening): end the take and
+    /// keep the text. On the device path the final transcript is still
+    /// awaited; on the server path the WAV goes up for transcription.
+    func stop() {
         withAnimation(CoreHubTokens.Motion.drawer) { state.wrappedValue.showingHint = false }
         if speech.isListening {
             speech.stop()

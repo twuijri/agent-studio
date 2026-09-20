@@ -128,6 +128,9 @@ struct ComposerState {
     var recordingElapsed: TimeInterval = 0
     /// Dictation language of the active profile, shown while the mic is open.
     var speechLanguage = ""
+    /// Live input levels for the recording strip (`RecordingStrip`), from
+    /// whichever path is recording.
+    var waveform = RecordingWaveform()
 
     func isOn(_ toggle: ComposerToggle) -> Bool {
         switch toggle {
@@ -145,6 +148,10 @@ struct ComposerActions {
     var mic: () -> Void = {}
     /// Long press on the mic: pick the dictation language without leaving the screen.
     var micLanguage: () -> Void = {}
+    /// The recording strip's ✕: discard the take and restore the draft.
+    var cancelDictation: () -> Void = {}
+    /// The recording strip's ■: end the take and keep the text.
+    var stopDictation: () -> Void = {}
     var attachCamera: () -> Void = {}
     var attachPhotos: () -> Void = {}
     var attachFiles: () -> Void = {}
