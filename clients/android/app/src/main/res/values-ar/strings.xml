@@ -1188,7 +1188,7 @@
     <string name="search_no_results">لا جلسات مطابقة</string>
     <string name="global_agent_banner">لدى الوكيل العام نشاط جديد</string>
     <string name="agent_cli_details">تفاصيل CLI</string>
-    <string name="agent_card_open">فتح الوكيل</string>
+    <string name="agent_card_open">إعدادات الوكيل</string>
     <string name="agent_sections_note">القدرات أولًا والإعدادات آخرًا. الرجوع يعيدك إلى مدير الوكلاء.</string>
     <string name="hermes_settings_tab_agent">الوكيل</string>
     <string name="hermes_settings_tab_memory">الذاكرة</string>

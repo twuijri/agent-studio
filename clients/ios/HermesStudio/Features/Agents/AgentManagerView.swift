@@ -222,6 +222,13 @@ struct AgentSummaryRow: View {
             if agent.installed, let offered = policy?.offeredVersion.nilIfEmpty {
                 AgentUpdateButton(offeredVersion: offered, working: updating, run: update)
             }
+            // The whole row is the button; this caption names what it opens,
+            // the same wording as the Android card's action.
+            Label("Agent settings", systemImage: "gearshape")
+                .font(CoreHubTokens.Typography.metaFont)
+                .foregroundStyle(CoreHubTokens.Palette.accent)
+                .lineLimit(1)
+                .fixedSize()
         }
     }
 }

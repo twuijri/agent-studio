@@ -1193,7 +1193,7 @@
     <string name="search_no_results">No matching sessions</string>
     <string name="global_agent_banner">The Global Agent has new activity</string>
     <string name="agent_cli_details">CLI details</string>
-    <string name="agent_card_open">Open agent</string>
+    <string name="agent_card_open">Agent settings</string>
     <string name="agent_sections_note">Capabilities first, settings last. Back returns to the Agent Manager.</string>
     <string name="hermes_settings_tab_agent">Agent</string>
     <string name="hermes_settings_tab_memory">Memory</string>
