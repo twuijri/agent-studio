@@ -302,8 +302,14 @@ enum AgentIdentity {
     /// here, which silently merged three real agents into one row.
     static let knownIDs = ["hermes", "ekko-agent", "claude-code", "codex", "pi", "grok", "opencode", "dsh"]
 
+    /// Known aliases fold onto the server's ids; an id the app has never
+    /// heard of stays itself, so a new server-side agent is never mistaken
+    /// for Hermes (that fold used to hide grok, opencode and dsh). Only an
+    /// empty id means the default Hermes agent.
     static func canonicalID(_ raw: String) -> String {
-        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalized {
+        case "", "hermes", "hermes-agent": return "hermes"
         case "ekko", "ekko-agent", "ekko_agent": return "ekko-agent"
         case "claude", "claude-code": return "claude-code"
         case "codex": return "codex"
@@ -311,7 +317,7 @@ enum AgentIdentity {
         case "grok": return "grok"
         case "opencode": return "opencode"
         case "dsh", "deepseek", "deepseek-harness": return "dsh"
-        default: return "hermes"
+        default: return normalized
         }
     }
 
@@ -324,7 +330,8 @@ enum AgentIdentity {
         case "grok": return "Grok"
         case "opencode": return "OpenCode"
         case "dsh": return "DeepSeek Harness"
-        default: return "Hermes"
+        case "hermes": return "Hermes"
+        case let other: return fallbackName(for: other)
         }
     }
 
