@@ -246,6 +246,8 @@ data class McpUiState(
     val loading: Boolean = false,
     val actionName: String? = null,
     val servers: List<McpServer> = emptyList(),
+    /** Null for Hermes; a coding agent id when the screen was opened under that agent's card. */
+    val agentId: String? = null,
 )
 
 data class PetsUiState(

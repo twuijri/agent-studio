@@ -105,7 +105,7 @@ fun WorkflowsScreen(state: UiState, viewModel: AppViewModel, onMenu: () -> Unit)
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.segment_workflow), style = MaterialTheme.typography.titleLarge) },
+                title = { Text(stringResource(R.string.nav_workflow), style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = { MenuButton(onMenu) },
                 actions = {
                     IconButton(onClick = { importer.launch("application/json") }) {

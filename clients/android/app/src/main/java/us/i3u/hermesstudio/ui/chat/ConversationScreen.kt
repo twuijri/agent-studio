@@ -384,7 +384,7 @@ internal fun ChatHeader(state: UiState, viewModel: AppViewModel, onMenu: () -> U
         title = {
             Column {
                 Text(
-                    session?.title ?: stringResource(R.string.action_new_chat),
+                    session?.title ?: stringResource(R.string.nav_new_chat),
                     style = MaterialTheme.typography.titleLarge.copy(textDirection = TextDirection.Content),
                     color = palette.textPrimary,
                     maxLines = 1,
@@ -402,7 +402,7 @@ internal fun ChatHeader(state: UiState, viewModel: AppViewModel, onMenu: () -> U
                 IconButton(onClick = { menuOpen = true }) { Icon(CoreHubIcons.More, stringResource(R.string.message_actions), tint = palette.textSecondary) }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(text = { Text(stringResource(R.string.action_refresh)) }, onClick = { menuOpen = false; viewModel.refreshConversation() })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.action_new_chat)) }, onClick = { menuOpen = false; viewModel.startNewConversation() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.nav_new_chat)) }, onClick = { menuOpen = false; viewModel.startNewConversation() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.message_fork)) }, enabled = !state.sending, onClick = { menuOpen = false; viewModel.send("/fork") })
                     if (session != null) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.action_rename)) }, onClick = { menuOpen = false; rename = true })

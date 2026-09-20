@@ -48,7 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 @Composable
 fun GlobalAgentScreen(state: UiState, viewModel: AppViewModel) {
     val sessions = state.sessions.filter { it.source == "global_agent" }
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.global_agent_title)) }, navigationIcon = { IconButton(viewModel::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } }, actions = { IconButton(viewModel::refreshSessions) { Icon(Icons.Filled.Refresh, stringResource(R.string.action_refresh)) } }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_global_agent)) }, navigationIcon = { IconButton(viewModel::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } }, actions = { IconButton(viewModel::refreshSessions) { Icon(Icons.Filled.Refresh, stringResource(R.string.action_refresh)) } }) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Text(stringResource(R.string.global_agent_description), style = MaterialTheme.typography.bodyLarge) }
             item { Text(stringResource(R.string.global_agent_profile, state.activeProfile.ifBlank { "default" }), color = MaterialTheme.colorScheme.onSurfaceVariant) }

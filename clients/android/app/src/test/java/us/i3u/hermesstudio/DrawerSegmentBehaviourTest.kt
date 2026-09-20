@@ -45,7 +45,7 @@ class DrawerSegmentBehaviourTest {
         // A row is still what navigates.
         assertTrue(drawer.contains("go { viewModel.openRoom(room) }"))
         assertTrue(drawer.contains("go { viewModel.openWorkflow(workflow) }"))
-        assertTrue(drawer.contains("go { viewModel.showTab(Tab.Chat); viewModel.openSession(session) }"))
+        assertTrue(drawer.contains("go { viewModel.openSession(session) }"))
     }
 
     /**
@@ -64,8 +64,8 @@ class DrawerSegmentBehaviourTest {
     /** The header over the list names the section the segment selected. */
     @Test
     fun theSectionHeaderFollowsTheSelectedSegment() {
-        assertTrue(drawer.contains("DrawerSectionHeader(stringResource(R.string.segment_group_chat), state.rooms.size)"))
-        assertTrue(drawer.contains("DrawerSectionHeader(stringResource(R.string.segment_workflow), state.workflows.size)"))
+        assertTrue(drawer.contains("DrawerSectionHeader(stringResource(R.string.nav_group_chat), state.rooms.size)"))
+        assertTrue(drawer.contains("DrawerSectionHeader(stringResource(R.string.nav_workflow), state.workflows.size)"))
         // Group Chat carries its own two actions, as it does on iOS.
         assertTrue(drawer.contains("DrawerSectionAction(CoreHubIcons.NewChat, stringResource(R.string.groups_new))"))
         assertTrue(drawer.contains("DrawerSectionAction(CoreHubIcons.Link, stringResource(R.string.room_join_title))"))

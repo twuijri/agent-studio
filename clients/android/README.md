@@ -34,19 +34,37 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   the desktop), its schedules with enable/disable, and its runs. A run opens a node
   timeline with each node's status, timing, output, an inline approve/reject for a
   node that waits on a person, and rerun-from-node
-- **Navigation is the web app's** (M2): the app bar hamburger opens an off-canvas
-  drawer with the primary rail (New Chat, Search, Device connections, Agent Manager
-  for super-admins, Models), the four-segment switch (Chat, Group Chat, Workflow,
-  History), the list that segment selects, and the footer (profile and model chips,
-  Sign Out with the username chip, the settings gear, connection status, the
-  language and theme toggles, `Core Hub v{server version}` and a GitHub link). The
-  segment switches the list in place — sessions, rooms or workflows — with the
-  drawer still open; only a row navigates, and only History (a page of its own)
-  closes the drawer. Every agent tool —
-  Jobs, Kanban, Channels, Skills, Plugins, MCP, Runtimes, Workflows, Ekko hub, Files,
-  Logs, Connections, Journey, Webhooks, Insights, Memory — lives under the
-  Agent Manager; every one opens a native Android screen, none sends you to the
-  website
+- **Navigation is the contract's** (`docs/mobile/NAVIGATION.md`, derived from the
+  desktop client and shared verbatim with iOS). One registry,
+  `navigation/NavDestination.kt`, names every place the app can go; the entry that
+  opens a destination and the title of the screen it opens read the same
+  `nav_*` string, so what you press is what opens. The map, top to bottom:
+  - **Drawer** (app-bar hamburger, or an edge swipe): the primary rail — `New chat`,
+    `Search` (a sheet over the sessions with its field focused, recent sessions when
+    empty, snippets when not; a `global_agent` hit opens the Global Agent's
+    conversation), `Device connections`, `Agent Manager` (super-admin), `Models` —
+    then the four-segment switch `Chat · Group Chat · Workflow · History`, the list
+    that segment selects, and the footer (profile chip that only switches, model
+    chip, Sign Out, the username, the settings gear, connection status, language and
+    theme toggles, version, GitHub). Opening a session leaves the selected segment
+    alone
+  - **Settings** (the gear): one screen. The web's tabs in the web's order —
+    Current Account, Account Management, Webhooks, Display, Proxy, Compression,
+    Privacy, Models (the key form, titled "Provider keys", with a link to the Models
+    page) — then `This device` and `About`, then a `Tools` section: `Logs`, `Usage`,
+    `Performance` (super-admin), `Skills Usage`, `Theme`, `Pets`, `Profiles`
+    (super-admin). Each row is a different screen with the row's own title
+  - **Agent Manager**: the agent cards, nothing else. A card opens its agent:
+    Hermes lists `Jobs · Kanban · Channels · Skills · Plugins · MCP · Memory ·
+    Journey · Settings` (Agent / Memory / Session tabs); Ekko lists `Memory ·
+    Skills · MCP · Settings`; a coding agent lists `Skills · MCP · Settings` and
+    keeps install, update and remove on its card. The Hermes card also carries
+    `CLI details` and `Manage runtime` (the runtime versions, as a sheet)
+  - **No menu entry, as on the web**: the Global Agent (reached from search hits
+    and from the banner that appears when a Global Agent session needs you) and
+    Files (a profile card's `Edit config`)
+  - **Back** follows the real visit history — a screen reached from two places
+    returns to the one you came from — and falls back to the selected segment
 - **Models is the web's Models page, not a key form**: the drawer's Models item opens
   a page of provider cards — each provider's id, base URL, API mode, credential
   state, catalogue status, default model and the models it offers as chips you can
@@ -68,9 +86,10 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
 - **Skills are native and editable** for Hermes, Claude, and Codex targets: search,
   enable, pin, import a ZIP, open `SKILL.md`, edit it, save it, or delete a local
   skill
-- **Plugins, MCP, and Petdex are native too**: inspect or toggle standalone plugins;
-  add, edit, test, reload, and delete MCP servers without losing advanced JSON;
-  and adopt, enable, or resize a companion from the phone
+- **Plugins, MCP, and Pets are native too**: inspect or toggle standalone plugins;
+  add, edit, test, reload, and delete MCP servers without losing advanced JSON
+  (Hermes' under the Hermes card, a coding agent's under its own card, Ekko's under
+  Ekko); and adopt, enable, or resize a companion from Settings › Tools › Pets
 - **Channels are set up from the app**, on their own screen: enter a bot token (or
   the app id, secret and the rest — each channel asks for exactly the fields the
   server maps), turn a channel on or off, or remove its credentials. Saving writes
@@ -80,22 +99,19 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   limit; pause or resume it, run it immediately, delete it, and read its run output.
   Every call uses the same profile-scoped endpoints and `X-Hermes-Profile` header
   as Studio.
-- **Settings mirror the web's settings sidebar and page** (M2): the settings
-  drawer lists Logs, Usage, Performance (super-admin), Skills Usage, Theme, Pets,
-  Profiles (super-admin) and Settings; the Settings page carries the web's tabs in
-  order — Current Account, Account Management, Webhooks, Display, Proxy, Compression,
-  Privacy, Models — plus *This device* (appearance, language, reasoning, voice input,
-  dictation language, voice, logo) and *About*. Agent, session and compression configuration sits in the Agent
-  Manager. Every native value is read from and saved to the active profile through
-  the same contracts as the web UI
-- **Agent settings**: max turns, gateway timeout, restart drain timeout, tool
-  enforcement, and **gateway auto-start where Studio keeps it** — including the
-  profile policy, so a server with several profiles can start only the ones that
-  actually answer on a channel
+- **Settings are the person's; the agent's are under the agent** (NAVIGATION.md
+  rule 2): the Settings screen holds account, display, proxy, compression, privacy
+  and provider keys, plus *This device* (voice input, dictation language, spoken
+  replies, the in-app update) and *About*. Hermes' own runtime settings — max
+  turns, gateway timeout, restart drain timeout, tool enforcement, **gateway
+  auto-start with its profile policy**, memory, approvals, skill approvals and the
+  session reset — are Hermes › Settings, three tabs, under the Hermes card. Every
+  native value is read from and saved to the active profile through the same
+  contracts as the web UI
 - **The system back button behaves**: it closes the drawer, walks back through the
-  app — a conversation, a room, an Agent Manager tool, a settings page — returns the
-  Group Chat, Workflow and History sections to Chat, and only closes the app from
-  the Chat section
+  visit history — a conversation, a room, an agent's section, a settings tool —
+  returns the Group Chat, Workflow and History sections to Chat, and only closes
+  the app from the Chat section
 - **Confirmation before anything you cannot undo**: signing out and restarting a
   profile's gateway both ask first, naming the profile that will stop answering
 - **Ready for other languages**: every string lives in one file, adding a language is
@@ -347,9 +363,13 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
 
 ```
 app/src/main/java/us/i3u/hermesstudio/
-  AppViewModel.kt         state, navigation model (Screen, Tab), API orchestration
-  MainActivity.kt         app entry, login, groups/rooms, profiles, Agent Manager,
-                          settings group bodies, channels, shared pieces
+  AppViewModel.kt         state, navigation model (Screen, Tab, the visit history
+                          `back()` walks), API orchestration
+  navigation/             NavDestination — the registry shared with iOS: every
+                          destination, its `nav_*` label, its screens, and the
+                          rail / segments / Tools / per-agent section lists
+  MainActivity.kt         app entry, AppContent (Screen → composable), login,
+                          profiles, Hermes agent settings body, channels, shared pieces
   HermesApi.kt            the HTTP contract (/api/studio/*, /api/hermes/*, /health)
   ChatSocket.kt, GroupSocket.kt, WorkflowSocket.kt
                           Socket.IO /chat-run, /group-chat and /workflow
@@ -364,7 +384,8 @@ app/src/main/java/us/i3u/hermesstudio/
                           install-source permission and the installer intent
   MobileLocation.kt       location consent → LocationManager → location.respond
   ui/theme/               CoreHubTokens, CoreHubTheme (Material mapping), CoreHubIcons
-  ui/navigation/          drawer host + content, HomeShell (hamburger), settings drawer
+  ui/navigation/          drawer host + content, HomeShell (hamburger, the Global
+                          Agent banner), the Search sheet
   ui/sessions/            session grouping, list rows and menus, History, time format,
                           agent avatars
   SpeechLanguage.kt       the dictation-language rules: the stored preference, the
@@ -384,15 +405,20 @@ app/src/main/java/us/i3u/hermesstudio/
   ui/groups/              the room list, a room, the settings sheet, seat/preset
                           dialogs
   ui/workflows/           the workflow list, one workflow, a run timeline, status
-  ui/settings/            the tabbed Settings page
+  ui/settings/            the one Settings screen: the web's tabs, This device,
+                          About, and the Tools section
   ui/models/              the Models page: provider cards, their catalogues, the
                           fallback chain — the web's ModelsView, not the key form
-  ui/agents/              the Agent Manager list and one agent's settings files
+  ui/agents/              the Agent Manager cards, one agent's section list, the
+                          runtime-manager sheet, Hermes › Settings / Memory, the
+                          four Ekko screens, a coding agent's settings files
   AgentCatalog.kt         the fixed agent catalogue and the merge of the two agent
                           endpoints, so a short answer never shortens the list
   BoringAvatar.kt         the boring-avatars `beam` generator, ported from the web
                           library so a seed draws the same avatar on both
-  AgentToolScreens.kt, CronJobs.kt, KanbanScreens.kt, Studio*Screens.kt   agent tools
+  AgentToolScreens.kt, CronJobs.kt, KanbanScreens.kt, Studio*Screens.kt
+                          agent sections and Settings tools (Usage, Performance,
+                          Skills Usage, Journey, Theme, Device connections, Files, Logs)
 app/src/main/res/         strings (values, values-ar), Core Hub drawables, launcher
 app/src/test/             JVM tests (contract, translations, RTL, navigation structure,
                           session grouping, chat formatters, chunked uploads, run
@@ -551,11 +577,13 @@ every tab or section the web has:
   advanced fields (the revision-checked provider editor: rate limits, timeouts,
   `extra_body`, per-model context lengths) is also web-only — adding a custom
   provider from the phone asks only for the name, base URL, key and API mode.
-- **Agent Manager**: an agent card opens the two settings files the web's
-  `CodingAgentConfigView` edits. Its other sections — per-agent MCP servers,
-  per-agent skills, and the DeepSeek Harness presets and plugins — are not on the
-  phone; the shared Skills and MCP screens under the Agent Manager cover the Hermes
-  side of those. Managing Hermes runtime versions stays on its own Runtimes screen.
+- **Agent Manager**: a coding agent's card lists Skills (the web's per-target
+  skill filter), its own MCP servers, and the two settings files the web's
+  `CodingAgentConfigView` edits. The DeepSeek Harness presets and plugins
+  (`CodingAgentConfigSidebar.vue:19`) are not on the phone: the shared navigation
+  registry has no destination for presets, and the dsh plugin inventory has no
+  native screen yet. Ekko › Settings edits the config sections as JSON rather than
+  the web's per-field forms.
 - **Copilot**: the web gives GitHub Copilot its own "disable" action, which keeps a
   token that came from `gh` or VS Code. The phone treats it like any other built-in
   provider, so its destructive action clears the credentials outright. Disable

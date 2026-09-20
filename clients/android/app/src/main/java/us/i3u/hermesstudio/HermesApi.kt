@@ -497,8 +497,8 @@ class HermesApi(
     fun sessionExportUrl(id: String, compressed: Boolean = false, ext: String = "json"): String = url("/api/studio/sessions/${enc(id)}/export?mode=${if (compressed) "compressed" else "full"}&ext=${enc(ext)}&token=${enc(token)}")
 
     /** GET /api/studio/sessions/search?q= — titles and message text; each hit carries a snippet. */
-    fun searchSessions(query: String, profile: String?): List<SessionSummary> {
-        val path = "/api/studio/sessions/search?q=${enc(query)}&limit=50" + if (profile.isNullOrBlank()) "" else "&profile=${enc(profile)}"
+    fun searchSessions(query: String, profile: String?, limit: Int = 50): List<SessionSummary> {
+        val path = "/api/studio/sessions/search?q=${enc(query)}&limit=$limit" + if (profile.isNullOrBlank()) "" else "&profile=${enc(profile)}"
         return parseSessions(call(path).optJSONArray("results") ?: JSONArray())
     }
 
@@ -1633,6 +1633,7 @@ class HermesApi(
         val web = root.optJSONObject("web") ?: JSONObject()
         val workers = bridge.optJSONArray("workers") ?: JSONArray()
         val sessions = root.optJSONObject("sessions") ?: JSONObject()
+        val byProfile = sessions.optJSONObject("byProfile") ?: JSONObject()
         return RuntimePerformance(
             cpuPercent = system.optDouble("cpuPercent", Double.NaN).takeIf(Double::isFinite),
             memoryPercent = system.optDouble("memoryPercent", Double.NaN).takeIf(Double::isFinite),
@@ -1641,7 +1642,28 @@ class HermesApi(
             studioMemoryBytes = web.optJSONObject("memory")?.optLong("rss")?.takeIf { it > 0 },
             workerCount = workers.length(),
             runningWorkers = (0 until workers.length()).count { workers.optJSONObject(it)?.optBoolean("running") == true },
-            sessionCount = sessions.optInt("total", sessions.optJSONObject("byProfile")?.length() ?: 0),
+            sessionCount = sessions.optInt("total", sessions.optInt("active", byProfile.length())),
+            runningSessions = sessions.optInt("running"),
+            platform = system.optString("platform"),
+            arch = system.optString("arch"),
+            cpuCount = system.optInt("cpuCount"),
+            uptimeSeconds = system.optLong("uptimeSeconds"),
+            totalWorkerMemoryBytes = bridge.optLong("totalWorkerMemoryRssBytes"),
+            timestamp = root.optLong("timestamp"),
+            sessionsByProfile = byProfile.keys().asSequence().associateWith { byProfile.optInt(it) },
+            workers = workers.objects().map { worker ->
+                RuntimeWorker(
+                    pid = worker.optInt("pid"),
+                    profile = worker.optString("profile"),
+                    running = worker.optBoolean("running"),
+                    cpuPercent = worker.optDouble("cpuPercent", Double.NaN).takeIf(Double::isFinite),
+                    memoryRssBytes = worker.optLong("memoryRssBytes"),
+                    sessionCount = worker.optInt("sessionCount"),
+                    runningSessionCount = worker.optInt("runningSessionCount"),
+                    lastUsedAt = worker.optLong("lastUsedAt").takeIf { it > 0 },
+                    error = worker.optString("error").takeIf(String::isNotBlank),
+                )
+            },
         )
     }
 
@@ -2035,8 +2057,14 @@ class HermesApi(
         )
     }
 
-    fun mcpServers(): List<McpServer> {
-        val array = call("/api/hermes/mcp/servers").optJSONArray("servers") ?: JSONArray()
+    fun mcpServers(): List<McpServer> = parseMcpServers("/api/hermes/mcp/servers")
+
+    /** GET /api/coding-agents/{id}/mcp/servers — the same rows, for one coding agent. */
+    fun codingAgentMcpServers(agentId: String): List<McpServer> =
+        parseMcpServers("/api/coding-agents/${enc(agentId)}/mcp/servers")
+
+    private fun parseMcpServers(path: String): List<McpServer> {
+        val array = call(path).optJSONArray("servers") ?: JSONArray()
         return (0 until array.length()).mapNotNull { index ->
             val item = array.optJSONObject(index) ?: return@mapNotNull null
             val details = item.optJSONArray("tool_details") ?: JSONArray()
@@ -2084,8 +2112,47 @@ class HermesApi(
         call("/api/hermes/mcp/reload${name?.let { "?server=${enc(it)}" }.orEmpty()}", "POST")
     }
 
+    /** POST/PATCH /api/coding-agents/{id}/mcp/servers[/{name}] {name, config}. */
+    fun saveCodingAgentMcpServer(agentId: String, originalName: String?, name: String, rawConfig: String) {
+        val config = runCatching { JSONObject(rawConfig) }
+            .getOrElse { throw HermesException("Server configuration is not valid JSON") }
+        val base = "/api/coding-agents/${enc(agentId)}/mcp/servers"
+        if (originalName == null) call(base, "POST", JSONObject().put("name", name).put("config", config))
+        else call("$base/${enc(originalName)}", "PATCH", JSONObject().put("config", config))
+    }
+
+    fun deleteCodingAgentMcpServer(agentId: String, name: String) {
+        call("/api/coding-agents/${enc(agentId)}/mcp/servers/${enc(name)}", "DELETE")
+    }
+
+    fun testCodingAgentMcpServer(agentId: String, name: String) {
+        call("/api/coding-agents/${enc(agentId)}/mcp/servers/${enc(name)}/test", "POST")
+    }
+
+    /** GET /api/hermes/memory — MEMORY.md, USER.md and SOUL.md of the profile (MemoryView.vue). */
+    fun hermesMemory(profile: String): HermesMemory {
+        val root = call("/api/hermes/memory", profile = profile)
+        return HermesMemory(root.optString("memory"), root.optString("user"), root.optString("soul"))
+    }
+
+    /** POST /api/hermes/memory {section, content}; section is memory, user or soul. */
+    fun saveHermesMemory(profile: String, section: String, content: String) {
+        call("/api/hermes/memory", "POST", JSONObject().put("section", section).put("content", content), profile)
+    }
+
+    /** GET /api/ekko/config — the editable runtime settings (ekko/services/config.ts:106-131). */
+    fun ekkoConfig(profile: String): EkkoConfig {
+        val root = call("/api/ekko/config", profile = profile)
+        return EkkoConfig(root.optString("configPath"), root.optJSONObject("config") ?: JSONObject())
+    }
+
+    /** PUT /api/ekko/config {config} — every section at once, as the web's SettingsView saves. */
+    fun saveEkkoConfig(profile: String, config: JSONObject) {
+        call("/api/ekko/config", "PUT", JSONObject().put("config", config), profile)
+    }
+
     fun petdex(): List<PetdexPet> {
-        val array = call("/api/hermes/petdex/manifest").optJSONArray("pets") ?: JSONArray()
+        val array = call("/api/studio/petdex/manifest").optJSONArray("pets") ?: JSONArray()
         return (0 until array.length()).mapNotNull { index ->
             val item = array.optJSONObject(index) ?: return@mapNotNull null
             PetdexPet(
@@ -2099,7 +2166,7 @@ class HermesApi(
     }
 
     fun activePet(): ActivePet? {
-        val item = call("/api/hermes/pets/active").optJSONObject("pet") ?: return null
+        val item = call("/api/studio/pets/active").optJSONObject("pet") ?: return null
         return ActivePet(
             enabled = item.optBoolean("enabled", true),
             slug = item.optString("slug"),
@@ -2111,7 +2178,7 @@ class HermesApi(
     }
 
     fun adoptPet(slug: String): ActivePet {
-        val item = call("/api/hermes/pets/adopt", "POST", JSONObject().put("slug", slug))
+        val item = call("/api/studio/pets/adopt", "POST", JSONObject().put("slug", slug))
             .optJSONObject("pet") ?: throw HermesException("Adoption returned no pet")
         return ActivePet(
             enabled = item.optBoolean("enabled", true),
@@ -2128,7 +2195,7 @@ class HermesApi(
             enabled?.let { put("enabled", it) }
             scale?.let { put("scale", it) }
         }
-        val item = call("/api/hermes/pets/active", "PATCH", payload).optJSONObject("pet") ?: return null
+        val item = call("/api/studio/pets/active", "PATCH", payload).optJSONObject("pet") ?: return null
         return ActivePet(
             enabled = item.optBoolean("enabled", true),
             slug = item.optString("slug"),
@@ -3003,7 +3070,35 @@ data class RuntimePerformance(
     val workerCount: Int,
     val runningWorkers: Int,
     val sessionCount: Int,
+    val runningSessions: Int = 0,
+    val platform: String = "",
+    val arch: String = "",
+    val cpuCount: Int = 0,
+    val uptimeSeconds: Long = 0,
+    val totalWorkerMemoryBytes: Long = 0,
+    val timestamp: Long = 0,
+    val sessionsByProfile: Map<String, Int> = emptyMap(),
+    val workers: List<RuntimeWorker> = emptyList(),
 )
+
+/** One bridge worker process of `GET /api/studio/performance/runtime` (ops-monitor.ts:52-57). */
+data class RuntimeWorker(
+    val pid: Int,
+    val profile: String,
+    val running: Boolean,
+    val cpuPercent: Double?,
+    val memoryRssBytes: Long,
+    val sessionCount: Int,
+    val runningSessionCount: Int,
+    val lastUsedAt: Long?,
+    val error: String?,
+)
+
+/** `GET /api/hermes/memory`: the three Markdown files the web's memory browser edits. */
+data class HermesMemory(val memory: String, val user: String, val soul: String)
+
+/** `GET /api/ekko/config`: where the file lives and its editable sections. */
+data class EkkoConfig(val configPath: String, val config: JSONObject)
 
 private fun JSONArray?.objects(): List<JSONObject> = if (this == null) emptyList() else
     (0 until length()).mapNotNull { index -> optJSONObject(index) }

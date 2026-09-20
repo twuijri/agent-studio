@@ -936,6 +936,63 @@ class HermesApiContractTest {
         assertEquals("/api/hermes/mcp/servers/filesystem/test", server.takeRequest().path)
     }
 
+
+    @Test
+    fun `the navigation contract's new screens use the routes their web views use`() {
+        // Search sheet: ten hits, like SessionSearchModal.vue.
+        enqueue("""{"results":[{"id":"g1","title":"Global","source":"global_agent"}]}""")
+        val hit = api.searchSessions("plan", null, limit = 10).single()
+        assertEquals("global_agent", hit.source)
+        assertEquals("/api/studio/sessions/search?q=plan&limit=10", server.takeRequest().path)
+
+        // Hermes › Memory (MemoryView.vue): the three files, then a section save.
+        enqueue("""{"memory":"# notes","user":"","soul":"be kind"}""")
+        val memory = api.hermesMemory("default")
+        assertEquals("be kind", memory.soul)
+        assertEquals("/api/hermes/memory", server.takeRequest().path)
+        enqueue("""{"success":true}""")
+        api.saveHermesMemory("default", "user", "likes tea")
+        val save = server.takeRequest()
+        assertEquals("POST", save.method)
+        assertEquals("/api/hermes/memory", save.path)
+        assertEquals("user", JSONObject(save.body.readUtf8()).getString("section"))
+
+        // Ekko › Settings (ekko/SettingsView.vue): the editable config in, the whole config back.
+        enqueue("""{"ok":true,"configPath":"/x/ekko.json","config":{"runtime":{"a":1},"model":{"defaultModel":"m"}}}""")
+        val config = api.ekkoConfig("default")
+        assertEquals("/x/ekko.json", config.configPath)
+        assertEquals("m", config.config.getJSONObject("model").getString("defaultModel"))
+        assertEquals("/api/ekko/config", server.takeRequest().path)
+        enqueue("""{"ok":true}""")
+        api.saveEkkoConfig("default", config.config)
+        val put = server.takeRequest()
+        assertEquals("PUT", put.method)
+        assertEquals("/api/ekko/config", put.path)
+        assertTrue(JSONObject(put.body.readUtf8()).getJSONObject("config").has("runtime"))
+
+        // A coding agent's MCP (CodingAgentConfigSidebar.vue): the same rows, under the agent's route.
+        enqueue("""{"ok":true,"servers":[{"name":"fs","transport":"stdio","connected":false,"tools":0,"tools_registered":0,"tool_details":[],"raw_config":{"command":"npx"}}]}""")
+        assertEquals("fs", api.codingAgentMcpServers("codex").single().name)
+        assertEquals("/api/coding-agents/codex/mcp/servers", server.takeRequest().path)
+        enqueue("""{"ok":true}""")
+        api.testCodingAgentMcpServer("codex", "fs")
+        assertEquals("/api/coding-agents/codex/mcp/servers/fs/test", server.takeRequest().path)
+        enqueue("""{"ok":true}""")
+        api.deleteCodingAgentMcpServer("codex", "fs")
+        val delete = server.takeRequest()
+        assertEquals("DELETE", delete.method)
+        assertEquals("/api/coding-agents/codex/mcp/servers/fs", delete.path)
+
+        // Performance (PerformanceView.vue) reads the worker processes, not only totals.
+        enqueue("""{"timestamp":5,"system":{"cpuPercent":12.5,"platform":"linux","arch":"x64","cpuCount":8,"uptimeSeconds":90},"bridge":{"workers":[{"pid":7,"profile":"default","running":true,"cpuPercent":1.5,"memoryRssBytes":2048,"sessionCount":3,"runningSessionCount":1}],"totalWorkerMemoryRssBytes":2048},"sessions":{"active":3,"running":1,"byProfile":{"default":3}}}""")
+        val runtime = api.runtimePerformance()
+        assertEquals("/api/studio/performance/runtime", server.takeRequest().path)
+        assertEquals("default", runtime.workers.single().profile)
+        assertEquals(1, runtime.runningSessions)
+        assertEquals(3, runtime.sessionsByProfile["default"])
+        assertEquals("linux", runtime.platform)
+    }
+
     @Test
     fun `Petdex adoption and active controls stay in the app`() {
         enqueue(
@@ -949,10 +1006,12 @@ class HermesApiContractTest {
         val active = api.adoptPet("luna")
         assertEquals(1.25, active.scale, 0.001)
         val adopt = server.takeRequest()
-        // Consume the manifest request before asserting adoption.
-        assertEquals("/api/hermes/petdex/manifest", adopt.path)
+        // Consume the manifest request before asserting adoption. The server
+        // mounts pets under /api/studio (routes/pets.ts, routes/petdex.ts);
+        // the phone asked /api/hermes and got 404s until this was pinned.
+        assertEquals("/api/studio/petdex/manifest", adopt.path)
         val adoptRequest = server.takeRequest()
-        assertEquals("/api/hermes/pets/adopt", adoptRequest.path)
+        assertEquals("/api/studio/pets/adopt", adoptRequest.path)
         assertEquals("luna", JSONObject(adoptRequest.body.readUtf8()).getString("slug"))
 
         enqueue(
@@ -961,7 +1020,7 @@ class HermesApiContractTest {
         api.updateActivePet(enabled = false, scale = .8)
         val patch = server.takeRequest()
         assertEquals("PATCH", patch.method)
-        assertEquals("/api/hermes/pets/active", patch.path)
+        assertEquals("/api/studio/pets/active", patch.path)
         assertFalse(JSONObject(patch.body.readUtf8()).getBoolean("enabled"))
     }
 
