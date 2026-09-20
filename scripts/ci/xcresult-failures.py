@@ -7,8 +7,9 @@ import sys
 
 def walk(node):
     if isinstance(node, dict):
-        if node.get("result") == "Failed" and node.get("nodeType") in ("Test Case", "Failure Message"):
-            print(f'{node.get("nodeType")}: {node.get("name")}')
+        node_type = node.get("nodeType")
+        if node_type == "Failure Message" or (node.get("result") == "Failed" and node_type == "Test Case"):
+            print(f'{node_type}: {node.get("name")}')
         for value in node.values():
             walk(value)
     elif isinstance(node, list):

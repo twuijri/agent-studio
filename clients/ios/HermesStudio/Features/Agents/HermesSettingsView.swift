@@ -200,6 +200,9 @@ struct HermesSettingEdit: Identifiable {
 
     /// `per_profile` → `Per profile`, the way the form's picker showed it.
     static func optionLabel(_ option: String) -> String {
-        option.capitalized.replacingOccurrences(of: "_", with: " ")
+        // "per_profile" → "Per profile": only the first letter is capitalised,
+        // as Android's label does; `capitalized` would also raise "Profile".
+        let words = option.replacingOccurrences(of: "_", with: " ")
+        return words.prefix(1).uppercased() + words.dropFirst()
     }
 }

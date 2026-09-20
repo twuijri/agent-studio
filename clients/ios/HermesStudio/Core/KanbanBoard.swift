@@ -18,9 +18,11 @@ enum KanbanStatus: String, CaseIterable, Identifiable, Hashable {
 
     /// Tolerant of case, dashes and spaces; anything else is not a Hermes status.
     init?(raw: String) {
+        // "TO-DO", "to_do" and " todo " all mean todo: the separators carry nothing.
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            .replacingOccurrences(of: "-", with: "_")
-            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
         self.init(rawValue: key)
     }
 
@@ -385,7 +387,12 @@ enum KanbanDragGeometry {
 
     /// The column nearest to `x` (by centre), for a finger in the gap between columns.
     static func nearest(x: CGFloat, frames: [KanbanColumnID: CGRect]) -> KanbanColumnID? {
-        frames.min { abs($0.value.midX - x) < abs($1.value.midX - x) }?.key
+        // Dictionaries have no stable order, so a tie between two columns
+        // (a finger exactly in the gap) goes to the leftmost one.
+        frames.min {
+            let a = abs($0.value.midX - x), b = abs($1.value.midX - x)
+            return a == b ? $0.value.minX < $1.value.minX : a < b
+        }?.key
     }
 
     /// Which board edge the finger is pressing against, if any.
