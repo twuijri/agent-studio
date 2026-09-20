@@ -95,11 +95,14 @@
 ```
 JAVA_HOME=/home/twuijri/.local/opt/jdk17 ANDROID_HOME=/home/twuijri/Android/Sdk \
   gradle --offline testDebugUnitTest assembleDebug   # في clients/android
-→ BUILD SUCCESSFUL؛ 426 اختبارًا، 0 فشل، 2 متخطّى
-  (NavigationParityTest.bothPhonesDeclareTheSameDestinations وeveryNavLabelReadsTheSameOnBothPhones:
-   ملف iOS `Core/NavDestination.swift` ومفاتيح `nav_*` لم تصل بعد؛ يعملان تلقائيًا عند وصولها)
+→ BUILD SUCCESSFUL؛ 426 اختبارًا، 0 فشل، 0 متخطّى
 → app/build/outputs/apk/debug/app-debug.apk
 ```
+بعد إعادة التأسيس على `origin/mobile-staging` (860448da، الذي يحوي عمل iOS على العقد نفسه)
+شغّل `NavigationParityTest` مقارناته الفعلية مع `clients/ios/HermesStudio/Core/NavDestination.swift`
+و`Resources/{en,ar}.lproj/Localizable.strings`: الحالات الـ36 متطابقة، والعناوين الإنجليزية
+والعربية متطابقة لكل مفتاح `nav_*` (الفرق الوحيد كان «إيكو» مقابل «Ekko» في `nav_agent_ekko`
+وقد عُدّل أندرويد ليطابق iOS). `DrawerParityTest` ما زال يقرأ ملفات iOS المحدّثة وينجح.
 لم يُنفَّذ: تشغيل على جهاز/محاكي حقيقي مع سيرفر (البحث، الذاكرة، إعدادات Ekko، MCP وكيل
 البرمجة، الأداء بقيم حقيقية)؛ الفحوص تُثبت العقد على mock فقط. لم تُشغَّل فحوص iOS.
 
@@ -111,7 +114,6 @@ JAVA_HOME=/home/twuijri/.local/opt/jdk17 ANDROID_HOME=/home/twuijri/Android/Sdk 
   (`Screen` ليس مخزّنًا).
 
 ## التسليم والخطوة التالية
-الحالة: محلي على الفرع `refactor/android-navigation` (لم يُدفَع بطلب المنسّق). الخطوة
-التالية: وصول `clients/ios/HermesStudio/Core/NavDestination.swift` ومفاتيح `nav_*` في
-`Localizable.strings` من وكيل iOS ثم تشغيل `NavigationParityTest` كاملًا؛ قرار المالك في
-Presets/Plugins لـ dsh؛ ثم فتح طلب الدمج إلى `mobile-staging` بإذن المالك.
+الحالة: محلي على الفرع `refactor/android-navigation` معاد تأسيسه على `origin/mobile-staging`
+(لم يُدفَع بطلب المنسّق). الخطوة التالية: قرار المالك في Presets/Plugins لـ dsh؛ تجربة يدوية على
+جهاز مع سيرفر حقيقي؛ ثم فتح طلب الدمج إلى `mobile-staging` بإذن المالك.
