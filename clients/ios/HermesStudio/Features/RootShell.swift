@@ -189,7 +189,6 @@ struct ShellDestinationView: View {
         case .performance: PerformanceView()
         case .skillsUsage: SkillUsageView()
         case .theme: ThemeView()
-        case .pets: PetsView()
         case .profiles: ProfilesView()
         case .agentHermes: AgentScreenLoader(agentID: "hermes")
         case .agentEkko: AgentScreenLoader(agentID: "ekko-agent")

@@ -1071,37 +1071,6 @@ class HermesApiContractTest {
     }
 
     @Test
-    fun `Petdex adoption and active controls stay in the app`() {
-        enqueue(
-            """{"generatedAt":"2026-07-31","total":1,"pets":[{"slug":"luna","displayName":"Luna","kind":"cat","submittedBy":"Hermes","previewUrl":"/pets/luna.png"}]}""",
-        )
-        assertEquals("Luna", api.petdex().single().displayName)
-
-        enqueue(
-            """{"pet":{"enabled":true,"slug":"luna","displayName":"Luna","kind":"cat","scale":1.25,"spritesheetDataUrl":"data:image/png;base64,AQID"}}""",
-        )
-        val active = api.adoptPet("luna")
-        assertEquals(1.25, active.scale, 0.001)
-        val adopt = server.takeRequest()
-        // Consume the manifest request before asserting adoption. The server
-        // mounts pets under /api/studio (routes/pets.ts, routes/petdex.ts);
-        // the phone asked /api/hermes and got 404s until this was pinned.
-        assertEquals("/api/studio/petdex/manifest", adopt.path)
-        val adoptRequest = server.takeRequest()
-        assertEquals("/api/studio/pets/adopt", adoptRequest.path)
-        assertEquals("luna", JSONObject(adoptRequest.body.readUtf8()).getString("slug"))
-
-        enqueue(
-            """{"pet":{"enabled":false,"slug":"luna","displayName":"Luna","kind":"cat","scale":0.8}}""",
-        )
-        api.updateActivePet(enabled = false, scale = .8)
-        val patch = server.takeRequest()
-        assertEquals("PATCH", patch.method)
-        assertEquals("/api/studio/pets/active", patch.path)
-        assertFalse(JSONObject(patch.body.readUtf8()).getBoolean("enabled"))
-    }
-
-    @Test
     fun `HTTP status remains available to session recovery`() {
         enqueue("""{"error":"Unauthorized"}""", code = 401)
 

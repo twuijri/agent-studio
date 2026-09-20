@@ -932,24 +932,6 @@ struct MCPServer: Identifiable, Hashable {
     }
 }
 
-struct Pet: Identifiable, Hashable {
-    let id: String
-    var name: String
-    var species: String
-    var description: String
-    var active: Bool
-    var emoji: String
-
-    init(_ json: JSON, active: Bool = false) {
-        id = json.string("id", "key", "slug", "name")
-        name = json.string("name", "title", "displayName", "display_name").nilIfEmpty ?? id
-        species = json.string("species", "type", "kind")
-        description = json.string("description", "summary")
-        self.active = active || json.bool("active")
-        emoji = json.string("emoji", "icon").nilIfEmpty ?? "🐾"
-    }
-}
-
 struct Channel: Identifiable, Hashable {
     let id: String
     var enabled: Bool

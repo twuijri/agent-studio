@@ -28,7 +28,6 @@
 "Message the group…" = "اكتب للقروب…";
 "Add agent" = "إضافة وكيل";
 "Skills" = "المهارات";
-"Pets" = "الحيوانات الأليفة";
 "Memory" = "الذاكرة";
 "Models" = "النماذج";
 "Low" = "منخفضة";
@@ -796,7 +795,6 @@
 "nav_performance" = "الأداء";
 "nav_skills_usage" = "استخدام المهارات";
 "nav_theme" = "السمة";
-"nav_pets" = "الحيوانات";
 "nav_profiles" = "الملفات الشخصية";
 "nav_conversation" = "المحادثة";
 "nav_room" = "الغرفة";
@@ -985,7 +983,6 @@
 "Remote URL" = "رابط بعيد";
 "Reload tools" = "إعادة تحميل الأدوات";
 "Connection successful" = "نجح الاتصال";
-"Adopt" = "اختيار";
 "Studio address" = "عنوان الاستديو";
 "Save and test connection" = "حفظ الاتصال واختباره";
 "Account" = "الحساب";

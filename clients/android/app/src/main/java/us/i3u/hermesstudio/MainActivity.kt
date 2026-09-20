@@ -102,7 +102,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewKanban
@@ -286,7 +285,6 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
         Screen.Performance -> PerformanceScreen(state, viewModel)
         Screen.SkillsUsage -> SkillsUsageScreen(state, viewModel)
         Screen.Theme -> ThemeScreen(state, viewModel)
-        Screen.Pets -> PetsScreen(state, viewModel)
         Screen.Profiles -> ProfilesScreen(state, viewModel)
         // Under an agent card (§4).
         Screen.Agent -> AgentScreen(state, viewModel)

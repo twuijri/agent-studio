@@ -2240,61 +2240,6 @@ class HermesApi(
         call("/api/ekko/config", "PUT", JSONObject().put("config", config), profile)
     }
 
-    fun petdex(): List<PetdexPet> {
-        val array = call("/api/studio/petdex/manifest").optJSONArray("pets") ?: JSONArray()
-        return (0 until array.length()).mapNotNull { index ->
-            val item = array.optJSONObject(index) ?: return@mapNotNull null
-            PetdexPet(
-                slug = item.optString("slug"),
-                displayName = item.optString("displayName").ifBlank { item.optString("slug") },
-                kind = item.optString("kind"),
-                submittedBy = item.optString("submittedBy").takeIf(String::isNotBlank),
-                previewUrl = item.optString("previewUrl").takeIf(String::isNotBlank),
-            ).takeIf { it.slug.isNotBlank() }
-        }
-    }
-
-    fun activePet(): ActivePet? {
-        val item = call("/api/studio/pets/active").optJSONObject("pet") ?: return null
-        return ActivePet(
-            enabled = item.optBoolean("enabled", true),
-            slug = item.optString("slug"),
-            displayName = item.optString("displayName").ifBlank { item.optString("slug") },
-            kind = item.optString("kind"),
-            scale = item.optDouble("scale", 1.0),
-            spritesheetDataUrl = item.optString("spritesheetDataUrl").takeIf(String::isNotBlank),
-        )
-    }
-
-    fun adoptPet(slug: String): ActivePet {
-        val item = call("/api/studio/pets/adopt", "POST", JSONObject().put("slug", slug))
-            .optJSONObject("pet") ?: throw HermesException("Adoption returned no pet")
-        return ActivePet(
-            enabled = item.optBoolean("enabled", true),
-            slug = item.optString("slug"),
-            displayName = item.optString("displayName").ifBlank { item.optString("slug") },
-            kind = item.optString("kind"),
-            scale = item.optDouble("scale", 1.0),
-            spritesheetDataUrl = item.optString("spritesheetDataUrl").takeIf(String::isNotBlank),
-        )
-    }
-
-    fun updateActivePet(enabled: Boolean? = null, scale: Double? = null): ActivePet? {
-        val payload = JSONObject().apply {
-            enabled?.let { put("enabled", it) }
-            scale?.let { put("scale", it) }
-        }
-        val item = call("/api/studio/pets/active", "PATCH", payload).optJSONObject("pet") ?: return null
-        return ActivePet(
-            enabled = item.optBoolean("enabled", true),
-            slug = item.optString("slug"),
-            displayName = item.optString("displayName").ifBlank { item.optString("slug") },
-            kind = item.optString("kind"),
-            scale = item.optDouble("scale", 1.0),
-            spritesheetDataUrl = item.optString("spritesheetDataUrl").takeIf(String::isNotBlank),
-        )
-    }
-
     private fun parseKanbanTasks(array: JSONArray): List<KanbanTask> =
         (0 until array.length()).mapNotNull { parseKanbanTask(array.optJSONObject(it)) }
 

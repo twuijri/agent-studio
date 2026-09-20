@@ -36,10 +36,10 @@ class NavigationParityTest {
     private val iosEnglish = File("../../ios/HermesStudio/Resources/en.lproj/Localizable.strings")
     private val iosArabic = File("../../ios/HermesStudio/Resources/ar.lproj/Localizable.strings")
 
-    /** The 38 cases the contract's registry has, in declaration order. */
+    /** The 37 cases the contract's registry has, in declaration order. */
     private val expectedCases = listOf(
         "newChat", "search", "deviceConnections", "agentManager", "models", "chat", "groupChat", "workflow", "history",
-        "settings", "logs", "usage", "performance", "skillsUsage", "theme", "pets", "profiles", "conversation", "room",
+        "settings", "logs", "usage", "performance", "skillsUsage", "theme", "profiles", "conversation", "room",
         "workflowDetail", "workflowRun", "agentHermes", "agentEkko", "agentCoding", "jobs", "kanban", "channels", "skills",
         "plugins", "presets", "mcp", "memory", "journey", "hermesSettings", "ekkoSettings", "codingAgentSettings", "globalAgent", "files",
     )
@@ -152,7 +152,7 @@ class NavigationParityTest {
         // Menu-level destinations come from the registry lists, in the contract's order …
         assertEquals(listOf("newChat", "search", "deviceConnections", "agentManager", "models"), registryList("rail"))
         assertEquals(listOf("chat", "groupChat", "workflow", "history"), registryList("segments"))
-        assertEquals(listOf("logs", "usage", "performance", "skillsUsage", "theme", "pets", "profiles"), registryList("settingsTools"))
+        assertEquals(listOf("logs", "usage", "performance", "skillsUsage", "theme", "profiles"), registryList("settingsTools"))
         assertEquals(listOf("jobs", "kanban", "channels", "skills", "plugins", "mcp", "memory", "journey", "hermesSettings"), agentSections("Hermes"))
         assertEquals(listOf("memory", "skills", "mcp", "ekkoSettings"), agentSections("BuiltIn"))
         assertEquals(listOf("skills", "mcp", "codingAgentSettings"), agentSections("Coding"))

@@ -70,7 +70,7 @@ accent@18% border, 12 glyph, 13/500) with the username chip beside it (11, 22 ta
 the settings gear (18 in 32) at the end; connection dot 7 + label 11, then the language and theme toggles
 (28 × 24, radius 4, accent@6%; language shows “A” / “EN” / “ع”); version 11 muted forced LTR + GitHub 14.
 Settings drawer (AppSidebar) order: Logs/السجلات, Usage/الاستخدام, Performance/الأداء (super-admin), Skills Usage/استخدام المهارات,
-Theme/المظهر, Pets/الحيوانات الأليفة, Profiles/البروفايلات (super-admin), Settings/الإعدادات; then ProfileSelector, ModelSelector;
+Theme/المظهر, Profiles/البروفايلات (super-admin), Settings/الإعدادات; then ProfileSelector, ModelSelector;
 footer: Sign Out/تسجيل الخروج (+username chip), status dot Connected/متصل · Disconnected/غير متصل + language switch,
 "Core Hub v{version}" + GitHub link + theme switch; "Back/رجوع" to chat.
 Settings page tabs: Current Account/الحساب الحالي, Account Management/إدارة الحسابات (sa), Webhooks/خطافات الويب (sa),

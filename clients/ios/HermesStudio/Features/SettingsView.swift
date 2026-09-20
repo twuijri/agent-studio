@@ -99,7 +99,6 @@ struct SettingsView: View {
         case .performance: return "gauge.with.dots.needle.33percent"
         case .skillsUsage: return "square.stack.3d.up"
         case .theme: return "paintpalette.fill"
-        case .pets: return "pawprint.fill"
         case .profiles: return "person.2.fill"
         default: return "circle"
         }

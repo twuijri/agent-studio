@@ -15,7 +15,6 @@ import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
@@ -91,7 +90,7 @@ private val SETTINGS_TABS = listOf(
  * The one Settings screen (NAVIGATION.md §2): the web's tabs in the web's
  * order, then `This device` and `About`, then the `Tools` section that mirrors
  * `AppSidebar.vue:113-317` — Logs, Usage, Performance, Skills Usage, Theme,
- * Pets, Profiles — each opening a different screen titled by the same key as
+ * Profiles — each opening a different screen titled by the same key as
  * the row. There is no settings list in front of this and none behind it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -284,6 +283,5 @@ private fun toolIcon(destination: NavDestination): ImageVector = when (destinati
     NavDestination.performance -> Icons.Filled.Speed
     NavDestination.skillsUsage -> Icons.Filled.School
     NavDestination.theme -> Icons.Filled.Palette
-    NavDestination.pets -> Icons.Filled.Pets
     else -> Icons.Filled.Person
 }

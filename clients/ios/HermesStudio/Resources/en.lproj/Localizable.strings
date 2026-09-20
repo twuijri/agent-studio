@@ -357,7 +357,6 @@
 "No groups" = "No groups";
 "Search" = "Search";
 "Models" = "Models";
-"Pets" = "Pets";
 "Profiles" = "Profiles";
 "Settings" = "Settings";
 "Connected" = "Connected";
@@ -797,7 +796,6 @@
 "nav_performance" = "Performance";
 "nav_skills_usage" = "Skills Usage";
 "nav_theme" = "Theme";
-"nav_pets" = "Pets";
 "nav_profiles" = "Profiles";
 "nav_conversation" = "Conversation";
 "nav_room" = "Room";
@@ -986,7 +984,6 @@
 "Remote URL" = "Remote URL";
 "Reload tools" = "Reload tools";
 "Connection successful" = "Connection successful";
-"Adopt" = "Adopt";
 "Studio address" = "Studio address";
 "Save and test connection" = "Save and test connection";
 "Account" = "Account";

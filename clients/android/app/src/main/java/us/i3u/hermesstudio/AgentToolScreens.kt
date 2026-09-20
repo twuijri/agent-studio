@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,9 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,8 +31,6 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.School
@@ -60,29 +54,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -608,123 +597,6 @@ private fun McpEditorDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun PetsScreen(state: UiState, viewModel: AppViewModel) {
-    val ui = state.petsUi
-    var query by rememberSaveable { mutableStateOf("") }
-    var scale by remember(ui.active?.slug, ui.active?.scale) { mutableFloatStateOf(ui.active?.scale?.toFloat() ?: 1f) }
-    val visible = remember(ui.pets, query) {
-        ui.pets.filter { query.isBlank() || it.displayName.contains(query, true) || it.kind.contains(query, true) }
-    }
-    Scaffold(
-        topBar = {
-            StudioTopBar(
-                stringResource(R.string.nav_pets),
-                stringResource(R.string.pets_count, ui.pets.size),
-                onBack = { viewModel.back() },
-                actions = {
-                    IconButton(onClick = viewModel::refreshPets, enabled = !ui.loading) {
-                        Icon(Icons.Filled.Refresh, stringResource(R.string.action_refresh))
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            if (ui.loading) LoadingRow()
-            state.error?.let { ErrorNote(it) { viewModel.dismissError() } }
-            state.notice?.let { NoticeNote(it) { viewModel.dismissNotice() } }
-            ui.active?.let { active ->
-                Card(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                ) {
-                    Column(Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            AsyncImage(
-                                model = active.spritesheetDataUrl,
-                                contentDescription = active.displayName,
-                                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(13.dp)),
-                                contentScale = ContentScale.Crop,
-                            )
-                            Column(Modifier.weight(1f).padding(horizontal = 11.dp)) {
-                                Text(stringResource(R.string.pets_active), style = MaterialTheme.typography.labelMedium)
-                                Text(active.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            }
-                            Switch(
-                                active.enabled,
-                                { viewModel.setActivePet(enabled = it) },
-                                enabled = ui.actionSlug == null,
-                            )
-                        }
-                        Text(stringResource(R.string.pets_scale, scale), style = MaterialTheme.typography.labelSmall)
-                        Slider(
-                            value = scale,
-                            onValueChange = { scale = it },
-                            onValueChangeFinished = { viewModel.setActivePet(scale = scale.toDouble()) },
-                            valueRange = .5f..2f,
-                            enabled = ui.actionSlug == null,
-                        )
-                    }
-                }
-            }
-            OutlinedTextField(
-                query, { query = it }, placeholder = { Text(stringResource(R.string.pets_search)) },
-                leadingIcon = { Icon(Icons.Filled.Search, null) }, singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
-            )
-            if (!ui.loading && visible.isEmpty()) {
-                EmptyToolState(Icons.Filled.Pets, stringResource(R.string.pets_empty), stringResource(R.string.pets_empty_note), Modifier.weight(1f))
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(150.dp),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(9.dp),
-                    verticalArrangement = Arrangement.spacedBy(9.dp),
-                ) {
-                    items(visible, key = { it.slug }) { pet ->
-                        val adopted = ui.active?.slug == pet.slug
-                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f))) {
-                            Column {
-                                Box(
-                                    Modifier.fillMaxWidth().aspectRatio(1.35f).background(MaterialTheme.colorScheme.surface),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    if (pet.previewUrl != null) {
-                                        AsyncImage(
-                                            model = absoluteStudioUrl(state.baseUrl, pet.previewUrl),
-                                            contentDescription = pet.displayName,
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Fit,
-                                        )
-                                    } else {
-                                        Icon(Icons.Filled.Pets, null, Modifier.size(42.dp), MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                                Column(Modifier.padding(11.dp)) {
-                                    Text(pet.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(pet.kind, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Button(
-                                        onClick = { viewModel.adoptPet(pet.slug) },
-                                        enabled = !adopted && ui.actionSlug == null,
-                                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                    ) {
-                                        Icon(if (adopted) Icons.Filled.Favorite else Icons.Filled.Pets, null, Modifier.size(17.dp))
-                                        Spacer(Modifier.width(5.dp))
-                                        Text(stringResource(if (adopted) R.string.pets_adopted_button else R.string.pets_adopt))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 @Composable
 private fun ConfirmDeleteDialog(
     title: String,
@@ -739,9 +611,4 @@ private fun ConfirmDeleteDialog(
         confirmButton = { Button(onClick = onDelete) { Text(stringResource(R.string.action_delete)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
-}
-
-private fun absoluteStudioUrl(baseUrl: String, path: String): String = when {
-    path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:") -> path
-    else -> "${baseUrl.trimEnd('/')}/${path.trimStart('/')}"
 }

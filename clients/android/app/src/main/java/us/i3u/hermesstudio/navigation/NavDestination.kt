@@ -36,7 +36,6 @@ enum class NavDestination(@StringRes val labelKey: Int, val screens: Set<Screen>
     performance(R.string.nav_performance, setOf(Screen.Performance)),
     skillsUsage(R.string.nav_skills_usage, setOf(Screen.SkillsUsage)),
     theme(R.string.nav_theme, setOf(Screen.Theme)),
-    pets(R.string.nav_pets, setOf(Screen.Pets)),
     profiles(R.string.nav_profiles, setOf(Screen.Profiles)),
     conversation(R.string.nav_conversation, setOf(Screen.Conversation)),
     room(R.string.nav_room, setOf(Screen.Room)),
@@ -69,7 +68,7 @@ enum class NavDestination(@StringRes val labelKey: Int, val screens: Set<Screen>
         val segments: List<NavDestination> = listOf(chat, groupChat, workflow, history)
 
         /** Settings › Tools, in `AppSidebar.vue:113-317` order. */
-        val settingsTools: List<NavDestination> = listOf(logs, usage, performance, skillsUsage, theme, pets, profiles)
+        val settingsTools: List<NavDestination> = listOf(logs, usage, performance, skillsUsage, theme, profiles)
 
         /**
          * The two rows only the DeepSeek Harness has, ahead of the common
