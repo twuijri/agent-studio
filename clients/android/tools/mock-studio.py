@@ -381,6 +381,9 @@ USERS = [
 LOCKS = [{"ip": "192.0.2.10", "type": "password", "failures": 5,
           "lockedUntil": int(time.time() * 1000) + 15 * 60 * 1000}]
 ACCOUNT_AVATAR = {"type": "default", "seed": "twuijri"}
+# One task per stage, so the board shows the inbox strip (k5), every queue
+# stage (k3 todo, k8 ready, k1 running), both waiting kinds (k6 scheduled,
+# k7 blocked), review (k2), done (k4) and the archive fold under done (k9).
 KANBAN_TASKS = [
     {"id": "k1", "title": "تصميم تجربة كانبان للجوال", "body": "بطاقات واضحة وسحب بين المراحل.",
      "assignee": "manager", "status": "running", "priority": 4, "created_at": 1785520000,
@@ -393,7 +396,28 @@ KANBAN_TASKS = [
     {"id": "k4", "title": "نشر نسخة أندرويد", "body": "إنشاء APK موقّع وإرفاقه في GitHub.",
      "assignee": "deep-engineer", "status": "done", "priority": 3, "created_at": 1785400000,
      "result": "تم النشر بنجاح", "skills": ["android"]},
+    {"id": "k5", "title": "Write the release notes", "body": "Needs a spec before it can be queued.",
+     "assignee": None, "status": "triage", "priority": 1, "created_at": 1785530000, "skills": []},
+    {"id": "k6", "title": "تحديث الاعتماديات", "body": "مؤجلة إلى بعد الإصدار.",
+     "assignee": "manager", "status": "scheduled", "priority": 0, "created_at": 1785490000, "skills": []},
+    {"id": "k7", "title": "Fix the login timeout", "body": "Blocked on the proxy team.",
+     "assignee": "barq", "status": "blocked", "priority": 3, "created_at": 1785480000, "skills": []},
+    {"id": "k8", "title": "لقطات شاشة المتجر", "body": "جاهزة للتنفيذ.",
+     "assignee": "deep-engineer", "status": "ready", "priority": 2, "created_at": 1785470000, "skills": ["android"]},
+    {"id": "k9", "title": "Old onboarding copy", "body": "Archived after the rewrite.",
+     "assignee": None, "status": "archived", "priority": 0, "created_at": 1785300000, "skills": []},
 ]
+
+# The server controller's source-status guards (modules/hermes/controllers/kanban.ts):
+# a transition is refused with 400 unless the task is in one of these statuses.
+KANBAN_TRANSITIONS = {
+    "promote": ({"todo", "blocked"}, "ready"),
+    "schedule": ({"todo", "ready", "running", "blocked"}, "scheduled"),
+    "request-review": ({"running", "ready"}, "review"),
+    "reopen-review": ({"review"}, "todo"),
+    "reclaim": ({"running", "blocked", "review"}, "todo"),
+}
+KANBAN_BULK_GUARDS = {"done": {"running", "ready", "blocked"}, "blocked": {"running", "ready"}, "ready": {"blocked", "scheduled"}}
 KANBAN_COMMENTS = {"k1": [{"id": "c1", "author": "twuijri", "body": "خل السحب واضح على الجوال.", "created_at": 1785520100}]}
 SKILL_CATEGORIES = [{"name": "Local", "description": "مهارات خاصة بالاستديو", "skills": [
     {"name": "android", "description": "بناء وفحص تطبيقات Android", "enabled": True, "source": "local", "pinned": True, "useCount": 12},
@@ -660,6 +684,19 @@ class Handler(BaseHTTPRequestHandler):
     def find_job(self, job_id):
         return next((job for job in JOBS if job['job_id'] == job_id), None)
 
+    def kanban_task(self, task_id):
+        return next((task for task in KANBAN_TASKS if task['id'] == task_id), None)
+
+    def kanban_authorized(self, ids, allowed, action):
+        """The controller's `authorizeTaskIds`: 404 for an unknown task, 400 for a source status the command refuses."""
+        for task_id in ids:
+            task = self.kanban_task(task_id)
+            if not task:
+                self.send({"error": f"Task {task_id} not found"}, 404); return False
+            if allowed is not None and task['status'] not in allowed:
+                self.send({"error": f"Cannot {action} task {task_id} from status \"{task['status']}\""}, 400); return False
+        return True
+
     def session_gone(self, session_id):
         """The server's 404 for a conversation that is not there any more."""
         if session_id not in DELETED_SESSION_IDS and session_id in CONVERSATIONS:
@@ -863,7 +900,16 @@ class Handler(BaseHTTPRequestHandler):
             for task in KANBAN_TASKS: counts[task['status']] = counts.get(task['status'], 0) + 1
             self.send({"boards": [{"slug": "default", "name": "تطوير التطبيق", "description": "مهام الجوال",
                                    "is_current": True, "counts": counts, "total": len(KANBAN_TASKS)}]})
-        elif path == '/api/hermes/kanban': self.send({"tasks": KANBAN_TASKS})
+        elif path == '/api/hermes/kanban':
+            include_archived = parse_qs(parsed.query).get('includeArchived', [''])[0] == 'true'
+            self.send({"tasks": [t for t in KANBAN_TASKS if include_archived or t['status'] != 'archived']})
+        elif path == '/api/hermes/kanban/stats':
+            counts = {}
+            for task in KANBAN_TASKS: counts[task['status']] = counts.get(task['status'], 0) + 1
+            by_assignee = {}
+            for task in KANBAN_TASKS:
+                if task.get('assignee'): by_assignee[task['assignee']] = by_assignee.get(task['assignee'], 0) + 1
+            self.send({"stats": {"by_status": counts, "by_assignee": by_assignee, "total": len(KANBAN_TASKS)}})
         elif path == '/api/hermes/kanban/assignees':
             self.send({"assignees": [{"name": p['name'], "on_disk": True} for p in PROFILES]})
         elif re.fullmatch(r'/api/hermes/kanban/[^/]+', path):
@@ -987,9 +1033,51 @@ class Handler(BaseHTTPRequestHandler):
             KANBAN_TASKS.append(task)
             self.send({"task": task})
         elif path == '/api/hermes/kanban/tasks/bulk':
-            for task in KANBAN_TASKS:
-                if task['id'] in body.get('ids', []): task['status'] = body.get('status', task['status'])
-            self.send({"results": [{"id": item, "ok": True} for item in body.get('ids', [])]})
+            ids = body.get('ids', [])
+            status = body.get('status')
+            if body.get('archive') and status:
+                self.send({"error": "archive cannot be combined with status"}, 400); return
+            guard = KANBAN_BULK_GUARDS.get(status)
+            if not self.kanban_authorized(ids, guard, f'set status to "{status}"'): return
+            results = []
+            for item in ids:
+                task = self.kanban_task(item)
+                if not task:
+                    results.append({"id": item, "ok": False, "error": "Task not found"}); continue
+                if body.get('archive'):
+                    if task['status'] != 'done':
+                        results.append({"id": item, "ok": False, "error": "only done tasks can be archived"}); continue
+                    task['status'] = 'archived'
+                elif status: task['status'] = status
+                if 'assignee' in body: task['assignee'] = body.get('assignee')
+                results.append({"id": item, "ok": True})
+            self.send({"results": results})
+        elif path == '/api/hermes/kanban/complete':
+            ids = body.get('task_ids', [])
+            if not self.kanban_authorized(ids, {"running", "ready", "blocked"}, 'complete'): return
+            for item in ids:
+                task = self.kanban_task(item)
+                task['status'] = 'done'
+                if body.get('summary'): task['result'] = body['summary']
+            self.send({"ok": True})
+        elif path == '/api/hermes/kanban/unblock':
+            ids = body.get('task_ids', [])
+            if not self.kanban_authorized(ids, {"blocked", "scheduled"}, 'unblock'): return
+            for item in ids: self.kanban_task(item)['status'] = 'ready'
+            self.send({"ok": True})
+        elif re.fullmatch(r'/api/hermes/kanban/[^/]+/block', path):
+            task_id = unquote(path.split('/')[-2])
+            if not str(body.get('reason', '')).strip():
+                self.send({"error": "reason is required"}, 400); return
+            if not self.kanban_authorized([task_id], {"running", "ready"}, 'block'): return
+            self.kanban_task(task_id)['status'] = 'blocked'
+            self.send({"ok": True})
+        elif re.fullmatch(r'/api/hermes/kanban/[^/]+/(promote|schedule|request-review|reopen-review|reclaim)', path):
+            task_id, action = unquote(path.split('/')[-2]), path.split('/')[-1]
+            allowed, target = KANBAN_TRANSITIONS[action]
+            if not self.kanban_authorized([task_id], allowed, action): return
+            self.kanban_task(task_id)['status'] = target
+            self.send({"ok": True})
         elif re.fullmatch(r'/api/hermes/kanban/[^/]+/assign', path):
             task_id = unquote(path.split('/')[-2])
             task = next((item for item in KANBAN_TASKS if item['id'] == task_id), None)

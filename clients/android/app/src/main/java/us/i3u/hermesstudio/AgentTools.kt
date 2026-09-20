@@ -121,7 +121,26 @@ data class KanbanUiState(
     val tasks: List<KanbanTask> = emptyList(),
     val assignees: List<String> = emptyList(),
     val openTask: KanbanTaskDetail? = null,
-)
+    /** A stats-header status that narrows the board to its one column; null shows the whole board. */
+    val filterStatus: String? = null,
+    /** Optimistic transitions: task id -> the status the card is shown in while Hermes applies the command. */
+    val pending: Map<String, String> = emptyMap(),
+    /** A drop that could mean more than one Hermes command (waiting = schedule or block); the user picks. */
+    val pendingChoice: KanbanPendingChoice? = null,
+    /** A drop whose command needs a reason (block) before it runs. */
+    val pendingReason: KanbanPendingDrop? = null,
+    /** A terminal drop (archive) waiting for confirmation. */
+    val pendingConfirm: KanbanPendingDrop? = null,
+    /** Manual card order inside a column, keyed by [kanbanCardOrderKey]. Stays on this device; never sent to Hermes. */
+    val cardOrder: Map<String, List<String>> = emptyMap(),
+) {
+    /** The ids of the tasks a Hermes command is still running for; shown saving and not draggable. */
+    val pendingIds: Set<String> get() = pending.keys
+}
+
+data class KanbanPendingChoice(val task: KanbanTask, val options: List<KanbanColumnDrop>)
+
+data class KanbanPendingDrop(val task: KanbanTask, val drop: KanbanColumnDrop)
 
 data class SkillsUiState(
     val loading: Boolean = false,
@@ -272,6 +291,3 @@ data class PetsUiState(
     val active: ActivePet? = null,
 )
 
-val KANBAN_STATUSES = listOf(
-    "triage", "todo", "scheduled", "ready", "running", "blocked", "review", "done",
-)

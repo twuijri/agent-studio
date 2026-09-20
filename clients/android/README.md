@@ -84,10 +84,23 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   settings: the instruction file and the configuration file the web edits. Agents the
   server never reported are shown as "not on this server" rather than dropped, and
   the page says plainly that installing runs on your server, not on the phone
-- **Mobile Kanban inspired by modern task apps**: switch boards, search, create a
-  task, inspect its result and runs, assign it, and comment. Hold a card and drag
-  left or right to move it between stages, or use its Move menu for precise and
-  accessible control
+- **The Kanban board is the desktop board**: an inbox strip for triage above four
+  columns in Hermes order — Queue (to do → ready → running, read off the card) ·
+  Waiting (scheduled or blocked) · Review · Done — with archived tasks folded under
+  Done behind "Show archived", and the rarely used Waiting column collapsed to a
+  narrow strip while it is empty (it opens when a card that may land there hovers,
+  and on tap). Columns page sideways at phone width; a stats chip per status
+  narrows the board to that status's column. Hold a card to drag it: the board
+  scrolls toward the next column while your finger sits at an edge, columns that
+  cannot take the card dim, and a drop is the very Hermes command the web sends
+  (promote, schedule, block, unblock, request or reopen review, complete, archive) —
+  a sheet asks when a drop could mean two things (waiting = schedule or block) or
+  needs a reason, and archiving is confirmed. Dropping a card inside its own column
+  only reorders it on this phone; Hermes has no order field, so nothing is sent.
+  The card's ⋯ menu offers the same transitions without dragging. Boards, search,
+  create, the task screen with its result, runs, assignee, comments and operations
+  stay. The board model is `KanbanBoard.kt`, ported from the web's
+  `kanban-board.ts` and unit-tested against the web's own cases
 - **Skills are native and editable** for Hermes, Claude, and Codex targets: search,
   enable, pin, import a ZIP, open `SKILL.md`, edit it, save it, or delete a local
   skill
@@ -461,6 +474,9 @@ app/src/main/java/us/i3u/hermesstudio/
                           endpoints, so a short answer never shortens the list
   BoringAvatar.kt         the boring-avatars `beam` generator, ported from the web
                           library so a seed draws the same avatar on both
+  KanbanBoard.kt          the Kanban board model — status → column, what a drop
+                          means, the archive fold, the collapse rule — ported from
+                          the web's kanban-board.ts; KanbanBoardTest runs the web's cases
   AgentToolScreens.kt, CronJobs.kt, KanbanScreens.kt, Studio*Screens.kt
                           agent sections and Settings tools (Usage, Performance,
                           Skills Usage, Journey, Theme, Device connections, Files, Logs)
@@ -575,7 +591,8 @@ failure.
 | Scheduled jobs | `GET` · `POST /api/hermes/jobs` · `PATCH` · `DELETE /api/hermes/jobs/{id}` |
 | Pause / resume / run a job | `POST /api/hermes/jobs/{id}/pause` · `resume` · `run` |
 | Scheduled job run history | `GET /api/cron-history` · `GET /api/cron-history/{jobId}/{fileName}` |
-| Kanban boards and tasks | `GET /api/hermes/kanban/boards` · `GET` / `POST /api/hermes/kanban` · `POST /api/hermes/kanban/tasks/bulk` |
+| Kanban boards and tasks | `GET /api/hermes/kanban/boards` · `GET /api/hermes/kanban?includeArchived=true` · `POST /api/hermes/kanban` |
+| Kanban board drops, one Hermes command each (the web store's routes) | `POST /api/hermes/kanban/{id}/promote` · `schedule` · `block` · `request-review` · `reopen-review` · `specify` · `POST /api/hermes/kanban/unblock` · `complete` · `POST /api/hermes/kanban/tasks/bulk` (`archive`) |
 | Kanban detail, comments, and assignees | `GET /api/hermes/kanban/{id}` · `POST /api/hermes/kanban/{id}/comments` · `GET /api/hermes/kanban/assignees` |
 | Skills | `GET /api/hermes/skills` · `GET` / `PUT` / `DELETE /api/hermes/skills/{category}/{name}` · `PUT /api/hermes/skills/toggle` · `pin` |
 | Plugins | `GET /api/hermes/plugins` · `POST /api/hermes/plugins/{key}/enable` · `disable` |
