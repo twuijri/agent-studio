@@ -92,6 +92,22 @@ Long-press 500ms → context menu (rename, category, archive, delete). Delete �
 Groups: RECENT (10 default, 1–100, gear opens count) → Pinned → categories (⋯ menu) → Uncategorized/غير مصنّف.
 Group header: chevron 10px (rotated 90° when expanded), label 10/600 uppercase, count 10 muted.
 
+## Agent Manager, the agent screen and settings rows (both phones; Android `AgentManagerScreen.kt` is the reference)
+List: 16 gutter, 8 top / 28 bottom, items 10 apart. Intro line 12 text.secondary; "runs on the server" note 12 on info@10% at radius 12 with 12 padding;
+section headers `Hermes runtime` · `Built in` · `Coding agents` 13/700 text.secondary, 8 above. Card: bg.card, radius 18, 1px border, 16 padding, lines 8 apart:
+34 avatar (1px white ring) + 12 gap → name 14/700 over vendor 12 text.secondary; at the trailing edge the state pill (11/600 on success/warning@16%, 10×5)
+and, 6 under it, the `Update` pill (11/600 info on info@16%, 12×5; 8% while it runs; the verb alone, never wraps); meta line `Local CLI · v0.154.0 · v0.155.1 available`
+12 text.muted; package and path 11 mono text.muted, one line; error 12 error; `Update automatically` 13 + switch; loading row = 22 spinner in 16;
+actions row 6 apart, wrapping from the start edge: `Agent settings` outlined pill 40 tall (1px border, 24 padding, 16 gear + 6 gap, 13/500),
+text buttons 40 tall / 12 padding (`CLI details`, `Reinstall`/`Install`, `Check for an update`, `Delete` in error). The 40/24/12 are Material's `ButtonDefaults`.
+Agent screen: items 12 apart; 40 avatar + 12 gap → name 14/700 over `v0.21.3 · Local CLI` 12 text.muted; note 12 text.secondary; CLI details card and the
+capability card = bg.card radius 14, 1px border.light, no padding; capability row = 38 tile (accent@16%, radius 10) holding a 20 glyph, 12 gap, title 14/500,
+chevron 24 text.secondary (mirrors in RTL), 12×9 padding; dividers border.light indented 66 (12 in the details card). Settings is the last row.
+Settings rows (Hermes › Settings, app Settings on Android): Material tab row 48 tall, tabs equal width, 13/500, text.primary selected / text.secondary,
+2px accent indicator, no divider; row = bg.card radius 18 inside a 16×4 margin, 16×14 padding, 24 glyph text.secondary + 14 gap → label 14 over value 11
+text.secondary (2 lines), trailing switch or chevron; section label 12/600 text.secondary inside 22/18/22/4; hint 11 inside 20×4. Every change is its own
+`PUT` (one key) with the loading row above while it saves and "Saved" after.
+
 ## Chat header
 Title 16/600 dir=auto (hidden on phones in web; on mobile show it in the app bar instead), workspace chip (folder icon 12, 11/16 muted,
 bg white@5%, padding 2×8, radius 4, last path segment), actions ⋯ menu; tool-panel toggle super-admin only.

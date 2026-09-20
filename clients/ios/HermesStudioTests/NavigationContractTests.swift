@@ -110,7 +110,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(AgentDetailView.capabilities(for: .hermes).contains(.presets))
         XCTAssertFalse(AgentDetailView.capabilities(for: .coding(id: "codex")).contains(.presets))
         XCTAssertEqual(NavDestination.presets.labelKey, "nav_presets")
-        XCTAssertEqual(AgentDetailView.symbol(for: .presets), "square.on.square.dashed")
+        XCTAssertEqual(AgentDetailView.symbol(for: .presets), "slider.horizontal.3")
         XCTAssertEqual(AgentDetailView.settingsDestination(for: .hermes), .hermesSettings)
         XCTAssertEqual(AgentDetailView.settingsDestination(for: .ekko), .ekkoSettings)
         XCTAssertEqual(AgentDetailView.settingsDestination(for: .coding(id: "pi")), .codingAgentSettings)

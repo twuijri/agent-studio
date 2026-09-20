@@ -1,13 +1,22 @@
 import SwiftUI
 
-/// The Agents screen, rebuilt around the web's `views/hermes/AgentManagerView.vue`.
+/// The Agents screen, rebuilt around the web's `views/hermes/AgentManagerView.vue`
+/// and drawn like the Android `AgentManagerScreen.kt`, the design the owner
+/// chose after comparing the two phones: an intro line, the "runs on the
+/// server" note, then `Hermes runtime` · `Built in` · `Coding agents`, each
+/// agent a card with its avatar, name and vendor, state pill, meta line,
+/// package and path, error, the `Update automatically` switch and the
+/// actions row (`Agent settings`, `CLI details`, `Reinstall` / `Install`,
+/// `Check for an update`, `Delete`).
 ///
 /// The list is **the server's**, not the app's: `GET /api/agents/status`
 /// returns all eight agents in its own order (`hermes`, `ekko-agent`,
 /// `claude-code`, `codex`, `pi`, `grok`, `opencode`, `dsh`) and the phone
-/// renders whatever it gets, including ids it has never seen. The previous
-/// screen hardcoded five of them, which is why Grok, OpenCode and DeepSeek
-/// Harness never appeared.
+/// renders whatever it gets, including ids it has never seen.
+///
+/// Installing, updating, checking and removing run npm on the Core Hub
+/// host, from the card — exactly as Android's card does — so the agent
+/// screen is left with the CLI details, the capabilities and the settings.
 struct AgentManagerView: View {
     @EnvironmentObject private var store: AppStore
 
@@ -17,23 +26,34 @@ struct AgentManagerView: View {
     @State private var loading = true
     /// Shown when the inventory had to be rebuilt from a narrower endpoint.
     @State private var inventoryNote = ""
-    /// Agents whose card `Update` is running on the server right now.
-    @State private var updating: Set<String> = []
+    /// Agents whose install, update, check or removal runs on the server now.
+    @State private var busy: Set<String> = []
+    @State private var removing: AgentRuntimeStatus?
+    @State private var cliDetails: AgentRuntimeStatus?
 
     var body: some View {
-        List {
-            if !inventoryNote.isEmpty {
-                Section { Text(inventoryNote).font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.warning) }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: CoreHubTokens.Layout.agentListGap) {
+                if loading { LoadingRowView() }
+                Text("Every agent Core Hub knows, with what this server reports about it.")
+                    .font(CoreHubTokens.Typography.authorFont)
+                    .foregroundStyle(CoreHubTokens.Palette.textSecondary)
+                AgentNoteBox(text: "Installing, updating and removing an agent runs on the Core Hub server, not on this phone.")
+                if !inventoryNote.isEmpty {
+                    Text(inventoryNote).font(CoreHubTokens.Typography.authorFont).foregroundStyle(CoreHubTokens.Palette.warning)
+                }
+                group("Hermes runtime", kind: "hermes")
+                group("Built in", kind: "built-in")
+                group("Coding agents", kind: "coding-agent")
+                otherGroup
             }
-            group("Built in", kind: "built-in")
-            group("Hermes runtime", kind: "hermes")
-            group("Coding agents", kind: "coding-agent")
-            otherGroup
+            .padding(.horizontal, CoreHubTokens.Layout.screenPaddingH)
+            .padding(.top, CoreHubTokens.Layout.agentListPaddingTop)
+            .padding(.bottom, CoreHubTokens.Layout.agentListPaddingBottom)
         }
-        .listStyle(.insetGrouped)
+        .hermesBackground()
         .navigationTitle(NavDestination.agentManager.title)
         .navigationBarTitleDisplayMode(.inline)
-        .overlay { if loading && agents.isEmpty { ProgressView() } }
         .refreshable { await reprobe() }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -47,6 +67,25 @@ struct AgentManagerView: View {
         // `onAppear`, not `task`: it fires again when an agent screen pops
         // back, so an install or update done there shows on the cards.
         .onAppear { Task { await load() } }
+        .confirmationDialog(Text("Remove \(removing?.name ?? "")?"), isPresented: removingShown, titleVisibility: .visible, presenting: removing) { agent in
+            Button("Delete", role: .destructive) { Task { await remove(agent) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { agent in
+            Text("The server will uninstall \(tools[agent.id]?.packageName.nilIfEmpty ?? agent.name) globally. Its settings files stay where they are.")
+        }
+        .alert(Text("CLI details"), isPresented: cliDetailsShown, presenting: cliDetails) { _ in
+            Button("Dismiss", role: .cancel) {}
+        } message: { agent in
+            Text(verbatim: AgentCardText.cliDetails(agent: agent, tool: tools[agent.id]))
+        }
+    }
+
+    private var removingShown: Binding<Bool> {
+        Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })
+    }
+
+    private var cliDetailsShown: Binding<Bool> {
+        Binding(get: { cliDetails != nil }, set: { if !$0 { cliDetails = nil } })
     }
 
     // MARK: Sections
@@ -55,7 +94,8 @@ struct AgentManagerView: View {
     private func group(_ title: LocalizedStringKey, kind: String) -> some View {
         let rows = agents.filter { $0.kind == kind }
         if !rows.isEmpty {
-            Section(title) { ForEach(rows) { row($0) } }
+            AgentSectionHeader(title: title)
+            ForEach(rows) { card($0) }
         }
     }
 
@@ -65,11 +105,11 @@ struct AgentManagerView: View {
         let known = ["built-in", "hermes", "coding-agent"]
         let rows = agents.filter { !known.contains($0.kind) }
         if !rows.isEmpty {
-            Section {
-                ForEach(rows) { row($0) }
-            } header: { Text("Other agents") } footer: {
-                Text("Core Hub reports these agents but this version of the app has no screen for them yet.")
-            }
+            AgentSectionHeader(title: "Other agents")
+            Text("Core Hub reports these agents but this version of the app has no screen for them yet.")
+                .font(CoreHubTokens.Typography.authorFont)
+                .foregroundStyle(CoreHubTokens.Palette.textSecondary)
+            ForEach(rows) { card($0) }
         }
     }
 
@@ -78,28 +118,71 @@ struct AgentManagerView: View {
     /// view-destination link here put the agent screen outside `store.path`,
     /// and its capability rows — value links — stopped working; see the rule
     /// in `RootShell.swift`.
-    private func row(_ agent: AgentRuntimeStatus) -> some View {
-        Button { store.openAgent(agent.id) } label: {
-            AgentSummaryRow(agent: agent, tool: tools[agent.id], policy: policies[agent.id], updating: updating.contains(agent.id)) {
-                await update(agent)
-            }
-        }
-        .tint(CoreHubTokens.Palette.textPrimary)
+    private func card(_ agent: AgentRuntimeStatus) -> some View {
+        AgentCardView(
+            agent: agent,
+            tool: tools[agent.id],
+            policy: policies[agent.id],
+            busy: busy.contains(agent.id),
+            actions: AgentCardActions(
+                install: { await install(agent) },
+                checkUpdate: { await checkUpdate(agent) },
+                remove: { removing = agent },
+                cliDetails: { cliDetails = agent },
+                setAutoUpdate: { value in Task { await setAutoUpdate(agent, value) } }
+            )
+        )
     }
 
-    /// The card's `Update`: the same `npm install -g` on the Core Hub host
-    /// that the detail screen's "Update to vX" runs.
-    private func update(_ agent: AgentRuntimeStatus) async {
-        updating.insert(agent.id)
+    // MARK: Server-side work (the card's actions)
+
+    /// Marks the agent busy, runs the call, shows its note or its error,
+    /// then re-reads the inventory so the card reflects the new state.
+    private func run(_ agent: AgentRuntimeStatus, _ work: () async throws -> String?) async {
+        busy.insert(agent.id)
         do {
-            let result = try await store.api.installCodingAgent(agent.id)
-            let note = AgentInstallOutcome.note(success: result.success, message: result.message)
-            if result.success { store.notify(note) } else { store.errorMessage = note }
+            if let note = try await work() { store.notify(note) }
         } catch {
             store.errorMessage = error.localizedDescription
         }
         await load()
-        updating.remove(agent.id)
+        busy.remove(agent.id)
+    }
+
+    /// Install, reinstall and the card's `Update`: the same `npm install -g`
+    /// on the Core Hub host. A failed run still answers HTTP 200, so the
+    /// flag decides (`AgentInstallOutcome`).
+    private func install(_ agent: AgentRuntimeStatus) async {
+        await run(agent) {
+            let result = try await store.api.installCodingAgent(agent.id)
+            let note = AgentInstallOutcome.note(success: result.success, message: result.message)
+            if result.success { return note }
+            store.errorMessage = note
+            return nil
+        }
+    }
+
+    private func checkUpdate(_ agent: AgentRuntimeStatus) async {
+        await run(agent) {
+            let result = try await store.api.checkCodingAgentUpdate(agent.id)
+            return result.available
+                ? String(localized: "Version \(AgentSourceLabel.version(result.latest)) is available.")
+                : String(localized: "Already up to date.")
+        }
+    }
+
+    private func remove(_ agent: AgentRuntimeStatus) async {
+        await run(agent) {
+            try await store.api.deleteCodingAgent(agent.id)
+            return String(localized: "Removed.")
+        }
+    }
+
+    private func setAutoUpdate(_ agent: AgentRuntimeStatus, _ value: Bool) async {
+        await run(agent) {
+            try await store.api.setAgentAutoUpdate(agent.id, enabled: value)
+            return nil
+        }
     }
 
     // MARK: Loading
@@ -161,82 +244,127 @@ struct AgentManagerView: View {
     }
 }
 
-/// One agent in the list: logo, name, provider, the one line of detail that
-/// matters (source and version, or the error), and at the trailing edge the
-/// state pill with the compact `Update` button under it. The row is the
-/// label of the card's button, so nothing here navigates on its own; the
-/// `Update` button is `.bordered`, which is what makes a tap on it stay on
-/// the button instead of opening the card.
-struct AgentSummaryRow: View {
+/// What a card can ask the Agent Manager to do on the server.
+struct AgentCardActions {
+    let install: () async -> Void
+    let checkUpdate: () async -> Void
+    let remove: () -> Void
+    let cliDetails: () -> Void
+    let setAutoUpdate: (Bool) -> Void
+}
+
+/// One agent's card (`AgentRow` in `AgentManagerScreen.kt`). Tapping the
+/// card opens the agent through `store.openAgent` (path-tracked); the
+/// buttons inside it are targets of their own, so a tap on `Update` stays
+/// on `Update`. Everything mirrors in Arabic: the avatar and the names at
+/// the start edge, the pill column at the end, the actions filling from
+/// the start.
+struct AgentCardView: View {
+    @EnvironmentObject private var store: AppStore
+
     let agent: AgentRuntimeStatus
     let tool: CodingAgentTool?
     let policy: AgentUpdatePolicy?
-    let updating: Bool
-    let update: () async -> Void
+    let busy: Bool
+    let actions: AgentCardActions
+
+    private var offered: String? { agent.installed ? policy?.offeredVersion.nilIfEmpty : nil }
+    private var showsCliDetails: Bool { agent.kind == "hermes" && agent.installed && agent.source == "user-cli" }
 
     var body: some View {
-        HStack(spacing: 12) {
-            AgentAvatarView(asset: AgentAvatarAsset.resolve(runtime: agent.id, source: agent.kind == "hermes" ? "cli" : "coding_agent"), size: 34)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(agent.name).font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.base, weight: .semibold))
-                Text(agent.provider.nilIfEmpty ?? agent.id)
+        AgentCardSurface {
+            header
+            metaLines
+            if agent.isCodingAgent, policy?.autoUpdateSupported == true { autoUpdateRow }
+            if busy { LoadingRowView() }
+            actionsRow
+            if agent.isCodingAgent && agent.installed {
+                // The one action the phone genuinely cannot offer: the web
+                // asks the server to open a native terminal.
+                Text("Opening a native terminal is a desktop action; it is not available from the phone.")
                     .font(CoreHubTokens.Typography.metaFont)
                     .foregroundStyle(CoreHubTokens.Palette.textMuted)
-                detail
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: CoreHubTokens.Radius.agentCard, style: .continuous))
+        .onTapGesture { store.openAgent(agent.id) }
+    }
+
+    /// Avatar · name over vendor · the state pill with `Update` under it.
+    private var header: some View {
+        HStack(spacing: CoreHubTokens.Layout.agentCardAvatarGap) {
+            AgentAvatarView(asset: AgentAvatarAsset.resolve(runtime: agent.id, source: agent.kind == "hermes" ? "cli" : "coding_agent"), size: CoreHubTokens.Layout.agentCardAvatar)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(agent.name)
+                    .font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.navItem, weight: .bold))
+                    .foregroundStyle(CoreHubTokens.Palette.textPrimary)
+                    .lineLimit(1)
+                Text(agent.provider.nilIfEmpty ?? agent.id)
+                    .font(CoreHubTokens.Typography.authorFont)
+                    .foregroundStyle(CoreHubTokens.Palette.textSecondary)
             }
             Spacer(minLength: 0)
-            trailing
-            CoreHubIconView(icon: .chevronForward, size: 14).foregroundStyle(CoreHubTokens.Palette.textMuted)
+            // `.trailing` follows the layout direction: the column hugs the
+            // left edge in Arabic, like Android's `Alignment.End`.
+            VStack(alignment: .trailing, spacing: CoreHubTokens.Layout.agentCardTrailingGap) {
+                AgentStatePill(text: AgentCardText.stateLabel(agent), color: AgentCardText.stateColor(agent))
+                if let offered {
+                    AgentUpdateButton(offeredVersion: offered, working: busy) { await actions.install() }
+                }
+            }
         }
-        .padding(.vertical, 3)
     }
 
-    /// The version line, unchanged: `Local CLI · v0.154.0`, or the error.
-    /// The offered version no longer sits here as a pill; that is the
-    /// `Update` button's job, and the version stays on one line.
+    /// `Local CLI · v0.154.0 · v0.155.1 available`, the package, the path,
+    /// the error — each only when there is one.
     @ViewBuilder
-    private var detail: some View {
+    private var metaLines: some View {
+        if let detail = AgentCardText.meta(agent: agent, tool: tool, offered: offered) {
+            Text(detail).font(CoreHubTokens.Typography.authorFont).foregroundStyle(CoreHubTokens.Palette.textMuted)
+        }
+        if let package = tool?.packageName.nilIfEmpty { TechnicalText(text: package) }
+        if !agent.path.isEmpty { TechnicalText(text: agent.path) }
         if !agent.error.isEmpty {
-            Text(agent.error).font(CoreHubTokens.Typography.metaFont).foregroundStyle(CoreHubTokens.Palette.error).lineLimit(2)
-        } else if agent.installed {
-            HStack(spacing: 5) {
-                Text(AgentSourceLabel.text(agent.source))
-                Text(verbatim: "·")
-                Text(AgentSourceLabel.version(agent.version.nilIfEmpty ?? tool?.version ?? ""))
-            }
-            .font(CoreHubTokens.Typography.metaFont)
-            .foregroundStyle(CoreHubTokens.Palette.textMuted)
+            Text(agent.error).font(CoreHubTokens.Typography.authorFont).foregroundStyle(CoreHubTokens.Palette.error)
         }
     }
 
-    /// A trailing-aligned column: the state pill, and under it `Update` when
-    /// the policy offers a newer version. `.trailing` follows the layout
-    /// direction, so in Arabic the column hugs the left edge with the chevron
-    /// beside it, mirroring the rest of the row.
-    private var trailing: some View {
-        VStack(alignment: .trailing, spacing: 6) {
-            StatusPill(
-                text: agent.installed ? String(localized: "Installed") : String(localized: "Not installed"),
-                color: agent.installed ? CoreHubTokens.Palette.success : CoreHubTokens.Palette.warning
-            )
-            if agent.installed, let offered = policy?.offeredVersion.nilIfEmpty {
-                AgentUpdateButton(offeredVersion: offered, working: updating, run: update)
+    private var autoUpdateRow: some View {
+        HStack(spacing: CoreHubTokens.Layout.agentCardGap) {
+            Text("Update automatically")
+                .font(CoreHubTokens.Typography.sidebarTabFont)
+                .foregroundStyle(CoreHubTokens.Palette.textPrimary)
+            Spacer(minLength: 0)
+            Toggle("Update automatically", isOn: Binding(get: { policy?.autoUpdate ?? false }, set: { actions.setAutoUpdate($0) }))
+                .labelsHidden()
+                .disabled(busy)
+        }
+    }
+
+    /// `Agent settings` (outlined, with the gear) first, then the text
+    /// buttons that apply to this agent.
+    private var actionsRow: some View {
+        AgentActionsFlow {
+            AgentOutlinedButton(title: "Agent settings", icon: .settings, enabled: !busy) { store.openAgent(agent.id) }
+            if showsCliDetails {
+                AgentTextButton(title: "CLI details", enabled: !busy, action: actions.cliDetails)
             }
-            // The whole row is the button; this caption names what it opens,
-            // the same wording as the Android card's action.
-            Label("Agent settings", systemImage: "gearshape")
-                .font(CoreHubTokens.Typography.metaFont)
-                .foregroundStyle(CoreHubTokens.Palette.accent)
-                .lineLimit(1)
-                .fixedSize()
+            if agent.isCodingAgent {
+                AgentTextButton(title: agent.installed ? LocalizedStringKey("Reinstall") : LocalizedStringKey("Install"), enabled: !busy) {
+                    Task { await actions.install() }
+                }
+                AgentTextButton(title: "Check for an update", enabled: !busy) { Task { await actions.checkUpdate() } }
+                if agent.installed {
+                    AgentTextButton(title: "Delete", color: CoreHubTokens.Palette.error, enabled: !busy, action: actions.remove)
+                }
+            }
         }
     }
 }
 
-/// The compact update control of a card. Label only — the offered version
-/// is spoken by accessibility, not drawn — so the control never wraps
-/// (`lineLimit(1)` + `fixedSize`); build 41 drew "Update v0.155.1" as a pill
-/// that broke over three lines inside a circle.
+/// The card's `Update` (`UpdateButton`): a pill on info @ 16 % (8 % while
+/// it runs), 12 × 5 of padding, 11 semibold, the verb alone — the offered
+/// version is spoken by accessibility, not drawn, so it never wraps.
 struct AgentUpdateButton: View {
     let offeredVersion: String
     let working: Bool
@@ -244,18 +372,63 @@ struct AgentUpdateButton: View {
 
     var body: some View {
         Button { Task { await run() } } label: {
-            if working {
-                ProgressView().controlSize(.mini)
-            } else {
-                Text("Update").lineLimit(1).fixedSize()
+            Group {
+                if working {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Text("Update").lineLimit(1).fixedSize()
+                }
             }
+            .font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.meta, weight: .semibold))
+            .foregroundStyle(CoreHubTokens.Palette.info)
+            .padding(.horizontal, CoreHubTokens.Layout.agentUpdatePaddingH)
+            .padding(.vertical, CoreHubTokens.Layout.agentPillPaddingV)
+            .background(CoreHubTokens.Palette.info.opacity(working ? CoreHubTokens.Alpha.agentPillDisabled : CoreHubTokens.Alpha.agentPill), in: Capsule())
         }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .tint(CoreHubTokens.Palette.info)
-        .font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.meta, weight: .semibold))
+        .buttonStyle(.plain)
         .disabled(working)
         .accessibilityLabel(Text("Update to \(AgentSourceLabel.version(offeredVersion))"))
+    }
+}
+
+/// The card's and the agent screen's text, pure so the tests can read it.
+enum AgentCardText {
+    static func stateLabel(_ agent: AgentRuntimeStatus) -> String {
+        agent.installed ? String(localized: "Installed") : String(localized: "Not installed")
+    }
+
+    static func stateColor(_ agent: AgentRuntimeStatus) -> Color {
+        agent.installed ? CoreHubTokens.Palette.success : CoreHubTokens.Palette.warning
+    }
+
+    /// The card's meta line (`AgentRow`'s `detail`): the source, the
+    /// version and the offered version, joined by ` · `; nil when the card
+    /// has none of them (a coding agent that is not installed).
+    static func meta(agent: AgentRuntimeStatus, tool: CodingAgentTool?, offered: String?) -> String? {
+        var parts: [String] = []
+        if agent.source != "not-installed", let source = agent.source.nilIfEmpty { parts.append(AgentSourceLabel.text(source)) }
+        if let version = agent.version.nilIfEmpty ?? tool?.version.nilIfEmpty { parts.append(AgentSourceLabel.version(version)) }
+        if let offered { parts.append(String(localized: "\(AgentSourceLabel.version(offered)) available")) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// The agent screen's header line (`AgentScreen.kt`): version, then source.
+    static func screenMeta(agent: AgentRuntimeStatus, tool: CodingAgentTool?) -> String? {
+        var parts: [String] = []
+        if let version = agent.version.nilIfEmpty ?? tool?.version.nilIfEmpty { parts.append(AgentSourceLabel.version(version)) }
+        if agent.source != "not-installed", let source = agent.source.nilIfEmpty { parts.append(AgentSourceLabel.text(source)) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// `HermesCliDetailsDialog`: what the server found on its own PATH —
+    /// the version, the path and the error, one per line, `—` when empty.
+    static func cliDetails(agent: AgentRuntimeStatus, tool: CodingAgentTool?) -> String {
+        var lines = [
+            (agent.version.nilIfEmpty ?? tool?.version.nilIfEmpty).map(AgentSourceLabel.version) ?? "—",
+            agent.path.nilIfEmpty ?? "—",
+        ]
+        if !agent.error.isEmpty { lines.append(agent.error) }
+        return lines.joined(separator: "\n")
     }
 }
 
