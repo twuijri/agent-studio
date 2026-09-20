@@ -854,16 +854,67 @@ class HermesApiContractTest {
         assertEquals(listOf("android"), task.skills)
         assertNull(tasks.last().assignee)
 
-        enqueue("""{"results":[{"id":"task-1","ok":true}]}""")
-        api.moveKanbanTask("product", task.id, "review")
-
         assertEquals("/api/hermes/kanban/boards", server.takeRequest().path)
-        assertEquals("/api/hermes/kanban?board=product", server.takeRequest().path)
-        val move = server.takeRequest()
-        assertEquals("/api/hermes/kanban/tasks/bulk?board=product", move.path)
-        val body = JSONObject(move.body.readUtf8())
-        assertEquals("review", body.getString("status"))
-        assertEquals("task-1", body.getJSONArray("ids").getString(0))
+        // Archived tasks come along: the board folds them under its done column.
+        assertEquals("/api/hermes/kanban?board=product&includeArchived=true", server.takeRequest().path)
+    }
+
+    /**
+     * A drop between columns is one Hermes command on the route the web store
+     * uses (`stores/hermes/kanban.ts`), never a raw status write through the
+     * bulk endpoint.
+     */
+    @Test
+    fun `board drops run the bridged Hermes transitions on the web store's routes`() {
+        fun run(action: KanbanTransitionAction, note: String? = null, response: String = """{"ok":true}"""): Pair<String, JSONObject> {
+            enqueue(response)
+            api.applyKanbanTransition("product", "task-1", action, note)
+            val request = server.takeRequest()
+            return request.path!! to JSONObject(request.body.readUtf8())
+        }
+
+        run(KanbanTransitionAction.Promote).let { (path, body) ->
+            assertEquals("/api/hermes/kanban/task-1/promote?board=product", path)
+            assertFalse("no reason was given, so none is sent", body.has("reason"))
+        }
+        run(KanbanTransitionAction.Schedule, "after lunch").let { (path, body) ->
+            assertEquals("/api/hermes/kanban/task-1/schedule?board=product", path)
+            assertEquals("after lunch", body.getString("reason"))
+        }
+        run(KanbanTransitionAction.Block, "waiting on design").let { (path, body) ->
+            assertEquals("/api/hermes/kanban/task-1/block?board=product", path)
+            assertEquals("waiting on design", body.getString("reason"))
+        }
+        run(KanbanTransitionAction.Unblock).let { (path, body) ->
+            assertEquals("/api/hermes/kanban/unblock?board=product", path)
+            assertEquals("task-1", body.getJSONArray("task_ids").getString(0))
+        }
+        run(KanbanTransitionAction.RequestReview, "ready for eyes").let { (path, body) ->
+            assertEquals("/api/hermes/kanban/task-1/request-review?board=product", path)
+            assertEquals("ready for eyes", body.getString("summary"))
+        }
+        run(KanbanTransitionAction.ReopenReview).let { (path, body) ->
+            assertEquals("/api/hermes/kanban/task-1/reopen-review?board=product", path)
+            assertFalse(body.has("reason"))
+        }
+        run(KanbanTransitionAction.Complete).let { (path, body) ->
+            assertEquals("/api/hermes/kanban/complete?board=product", path)
+            assertEquals("task-1", body.getJSONArray("task_ids").getString(0))
+            assertFalse(body.has("summary"))
+        }
+        run(KanbanTransitionAction.Archive, response = """{"results":[{"id":"task-1","ok":true}]}""").let { (path, body) ->
+            assertEquals("/api/hermes/kanban/tasks/bulk?board=product", path)
+            assertTrue(body.getBoolean("archive"))
+            assertEquals("task-1", body.getJSONArray("ids").getString(0))
+            assertFalse("archive never carries a status", body.has("status"))
+        }
+
+        // A per-task failure inside a 200 bulk answer is still a failure.
+        enqueue("""{"results":[{"id":"task-1","ok":false,"error":"task is not done"}]}""")
+        val failure = assertThrows(HermesException::class.java) {
+            api.applyKanbanTransition("product", "task-1", KanbanTransitionAction.Archive)
+        }
+        assertEquals("task is not done", failure.message)
     }
 
     @Test

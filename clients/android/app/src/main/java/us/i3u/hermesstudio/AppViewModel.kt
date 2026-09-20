@@ -3802,7 +3802,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectKanbanBoard(slug: String) {
-        _state.update { it.copy(kanban = it.kanban.copy(board = slug, openTask = null)) }
+        _state.update {
+            it.copy(
+                kanban = it.kanban.copy(
+                    board = slug, openTask = null, pending = emptyMap(),
+                    pendingChoice = null, pendingReason = null, pendingConfirm = null,
+                ),
+            )
+        }
         loadKanban(refreshBoards = false)
     }
 
@@ -3873,38 +3880,168 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ── board transitions (KanbanView.vue) ─────────────────────────────
+
+    fun setKanbanFilter(status: String?) {
+        _state.update {
+            it.copy(kanban = it.kanban.copy(filterStatus = status?.takeIf { value -> value in KANBAN_STATUSES }))
+        }
+    }
+
+    /**
+     * A same-column drop is a reorder that stays on this device. Hermes has
+     * no order field, so nothing is sent and nothing changes what runs first.
+     */
+    fun reorderKanbanCards(column: KanbanColumnId, ids: List<String>) {
+        _state.update {
+            val key = kanbanCardOrderKey(it.kanban.board, column)
+            it.copy(kanban = it.kanban.copy(cardOrder = it.kanban.cardOrder + (key to ids)))
+        }
+    }
+
+    /**
+     * A card dropped on another column. The board model says which Hermes
+     * command that means: none (the card snaps back), one (it runs, after a
+     * reason or a confirmation when the command needs one), or several
+     * (waiting = schedule or block; the user picks in a sheet).
+     */
+    fun dropKanbanTask(task: KanbanTask, column: KanbanColumnId) {
+        if (task.id in _state.value.kanban.pending) return
+        val options = kanbanColumnDropOptions(task.status, kanbanColumnById(column))
+        when (options.size) {
+            0 -> return
+            1 -> applyKanbanDrop(task, options.single())
+            else -> {
+                // The card already sits in its new column; keep it there while we ask.
+                beginKanbanTransition(task.id, options.first().to)
+                _state.update { it.copy(kanban = it.kanban.copy(pendingChoice = KanbanPendingChoice(task, options))) }
+            }
+        }
+    }
+
+    /** The task screen's status chips: the same transition model, one target status at a time. */
     fun moveKanbanTask(task: KanbanTask, status: String) {
-        if (task.status == status) return
-        val board = _state.value.kanban.board
+        if (task.id in _state.value.kanban.pending) return
+        val transition = resolveKanbanTransition(task.status, status)
+        if (transition == null) {
+            _state.update { it.copy(error = str(R.string.kanban_drop_not_allowed)) }
+            return
+        }
+        applyKanbanDrop(task, KanbanColumnDrop(status, transition))
+    }
+
+    /** A card's quick action (promote from the queue, archive from done), the web card's button. */
+    fun runKanbanQuickAction(task: KanbanTask, action: KanbanTransitionAction) {
+        if (task.id in _state.value.kanban.pending) return
+        val transition = resolveKanbanTransition(task.status, action.target) ?: return
+        applyKanbanDrop(task, KanbanColumnDrop(action.target, transition))
+    }
+
+    fun chooseKanbanDrop(drop: KanbanColumnDrop) {
+        val choice = _state.value.kanban.pendingChoice ?: return
+        _state.update { it.copy(kanban = it.kanban.copy(pendingChoice = null)) }
+        applyKanbanDrop(choice.task, drop)
+    }
+
+    fun confirmKanbanDropReason(reason: String) {
+        val pending = _state.value.kanban.pendingReason ?: return
+        val clean = reason.trim()
+        if (clean.isBlank()) return
+        _state.update { it.copy(kanban = it.kanban.copy(pendingReason = null)) }
+        runKanbanTransition(pending.task, pending.drop.transition.action, clean, pending.drop.to)
+    }
+
+    fun confirmKanbanArchive() {
+        val pending = _state.value.kanban.pendingConfirm ?: return
+        _state.update { it.copy(kanban = it.kanban.copy(pendingConfirm = null)) }
+        runKanbanTransition(pending.task, pending.drop.transition.action, null, pending.drop.to)
+    }
+
+    /** Closes whichever prompt is open and puts the card back where Hermes says it is. */
+    fun cancelKanbanDrop() {
+        val kanban = _state.value.kanban
+        val taskId = kanban.pendingChoice?.task?.id
+            ?: kanban.pendingReason?.task?.id
+            ?: kanban.pendingConfirm?.task?.id
+            ?: return
         _state.update {
             it.copy(
                 kanban = it.kanban.copy(
-                    actionId = task.id,
-                    tasks = it.kanban.tasks.map { current ->
-                        if (current.id == task.id) current.copy(status = status) else current
-                    },
+                    pendingChoice = null,
+                    pendingReason = null,
+                    pendingConfirm = null,
+                    pending = it.kanban.pending - taskId,
                 ),
-                error = null,
             )
         }
+    }
+
+    private fun applyKanbanDrop(task: KanbanTask, drop: KanbanColumnDrop) {
+        val transition = drop.transition
+        beginKanbanTransition(task.id, drop.to)
+        when {
+            transition.requiresReason ->
+                _state.update { it.copy(kanban = it.kanban.copy(pendingReason = KanbanPendingDrop(task, drop))) }
+            transition.confirm ->
+                _state.update { it.copy(kanban = it.kanban.copy(pendingConfirm = KanbanPendingDrop(task, drop))) }
+            else -> runKanbanTransition(task, transition.action, null, drop.to)
+        }
+    }
+
+    private fun beginKanbanTransition(taskId: String, expected: String) {
+        _state.update { it.copy(kanban = it.kanban.copy(pending = it.kanban.pending + (taskId to expected))) }
+    }
+
+    /**
+     * Runs one Hermes command and refreshes the board so the card settles
+     * where Hermes put it; on failure the card goes back to its old column.
+     * The task stays shown in [expected] until the refresh answers.
+     */
+    private fun runKanbanTransition(task: KanbanTask, action: KanbanTransitionAction, note: String?, expected: String) {
+        val board = _state.value.kanban.board
+        beginKanbanTransition(task.id, expected)
+        _state.update { it.copy(error = null) }
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.moveKanbanTask(board, task.id, status) } }
-                .onSuccess {
-                    _state.update { state -> state.copy(kanban = state.kanban.copy(actionId = null)) }
-                    if (_state.value.screen == Screen.KanbanTask) loadKanbanTask(task.id)
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    api.applyKanbanTransition(board, task.id, action, note)
+                    api.kanbanTasks(board) to api.kanbanBoards()
                 }
-                .onFailure { failure ->
-                    _state.update { state ->
-                        state.copy(
-                            kanban = state.kanban.copy(
-                                actionId = null,
-                                tasks = state.kanban.tasks.map { current ->
-                                    if (current.id == task.id) task else current
-                                },
-                            ),
-                            error = failure.readableMessage(localized),
-                        )
-                    }
+            }.onSuccess { (tasks, boards) ->
+                _state.update {
+                    val kanban = it.kanban.copy(pending = it.kanban.pending - task.id)
+                    if (it.kanban.board != board) it.copy(kanban = kanban)
+                    else it.copy(kanban = kanban.copy(tasks = tasks, boards = boards), notice = str(kanbanTransitionMessage(action)))
+                }
+                if (_state.value.screen == Screen.KanbanTask && _state.value.kanban.openTask?.task?.id == task.id) {
+                    loadKanbanTask(task.id)
+                }
+            }.onFailure { failure ->
+                _state.update {
+                    it.copy(kanban = it.kanban.copy(pending = it.kanban.pending - task.id), error = failure.readableMessage(localized))
+                }
+                refreshKanbanTasks(board)
+            }
+        }
+    }
+
+    private fun kanbanTransitionMessage(action: KanbanTransitionAction): Int = when (action) {
+        KanbanTransitionAction.Complete -> R.string.kanban_msg_task_completed
+        KanbanTransitionAction.Block -> R.string.kanban_msg_task_blocked
+        KanbanTransitionAction.Unblock -> R.string.kanban_msg_task_unblocked
+        KanbanTransitionAction.Promote -> R.string.kanban_msg_task_promoted
+        KanbanTransitionAction.Schedule -> R.string.kanban_msg_task_scheduled
+        KanbanTransitionAction.RequestReview -> R.string.kanban_msg_review_requested
+        KanbanTransitionAction.ReopenReview -> R.string.kanban_msg_review_reopened
+        KanbanTransitionAction.Archive -> R.string.kanban_msg_task_archived
+    }
+
+    /** Puts every column back to what the server reports, without the loading spinner. */
+    private fun refreshKanbanTasks(board: String) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.kanbanTasks(board) } }
+                .onSuccess { tasks ->
+                    _state.update { if (it.kanban.board == board) it.copy(kanban = it.kanban.copy(tasks = tasks)) else it }
                 }
         }
     }

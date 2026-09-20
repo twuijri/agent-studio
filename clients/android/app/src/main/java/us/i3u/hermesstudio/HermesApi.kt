@@ -1497,7 +1497,7 @@ class HermesApi(
     fun kanbanDiagnostics(board: String, task: String? = null): List<String> { val q = "?board=${enc(board)}" + (task?.let { "&task=${enc(it)}" } ?: ""); val a = call("/api/hermes/kanban/diagnostics$q").optJSONArray("diagnostics") ?: JSONArray(); return (0 until a.length()).map { a.opt(it).toString() } }
     fun kanbanLog(board: String, task: String): String = call("/api/hermes/kanban/${enc(task)}/log?board=${enc(board)}&tail=200").toString(2)
     fun kanbanAttachments(board: String, task: String): List<String> { val r = call("/api/hermes/kanban/${enc(task)}/attachments?board=${enc(board)}"); val a = r.optJSONArray("attachments") ?: JSONArray(); return (0 until a.length()).mapNotNull { i -> when(val v=a.opt(i)){ is JSONObject -> firstNonBlank(v,"name","filename","path"); is String -> v; else -> null } } }
-    fun kanbanCommand(board: String, task: String, action: String, value: String = "") { val body: JSONObject; val path = when(action) { "complete" -> { body = JSONObject().put("task_ids", JSONArray().put(task)).put("summary", value); "/api/hermes/kanban/complete" }; "unblock" -> { body = JSONObject().put("task_ids", JSONArray().put(task)); "/api/hermes/kanban/unblock" }; "dispatch" -> { body = JSONObject().put("max", 1); "/api/hermes/kanban/dispatch" }; "block" -> { body = JSONObject().put("reason", value); "/api/hermes/kanban/${enc(task)}/block" }; "reassign" -> { body = JSONObject().put("profile", value).put("reclaim", true); "/api/hermes/kanban/${enc(task)}/reassign" }; else -> return }; call("$path?board=${enc(board)}", "POST", body) }
+    fun kanbanCommand(board: String, task: String, action: String, value: String = "") { val body: JSONObject; val path = when(action) { "complete" -> { body = JSONObject().put("task_ids", JSONArray().put(task)).put("summary", value); "/api/hermes/kanban/complete" }; "unblock" -> { body = JSONObject().put("task_ids", JSONArray().put(task)); "/api/hermes/kanban/unblock" }; "dispatch" -> { body = JSONObject().put("max", 1); "/api/hermes/kanban/dispatch" }; "block" -> { body = JSONObject().put("reason", value); "/api/hermes/kanban/${enc(task)}/block" }; "reassign" -> { body = JSONObject().put("profile", value).put("reclaim", true); "/api/hermes/kanban/${enc(task)}/reassign" }; "specify" -> { body = JSONObject().apply { if (value.isNotBlank()) put("author", value) }; "/api/hermes/kanban/${enc(task)}/specify" }; else -> return }; call("$path?board=${enc(board)}", "POST", body) }
 
     /** POST /api/studio/sessions/{id}/model */
     fun setSessionModel(sessionId: String, model: String, provider: String?) {
@@ -1825,9 +1825,10 @@ class HermesApi(
         }
     }
 
+    /** Every task of the board, archived ones included: the board folds them under its done column. */
     fun kanbanTasks(board: String): List<KanbanTask> {
-        val suffix = if (board.isBlank()) "" else "?board=${enc(board)}"
-        val array = call("/api/hermes/kanban$suffix").optJSONArray("tasks") ?: JSONArray()
+        val query = (if (board.isBlank()) "" else "board=${enc(board)}&") + "includeArchived=true"
+        val array = call("/api/hermes/kanban?$query").optJSONArray("tasks") ?: JSONArray()
         return parseKanbanTasks(array)
     }
 
@@ -1901,13 +1902,48 @@ class HermesApi(
             ?: throw HermesException("Task creation returned no task")
     }
 
-    fun moveKanbanTask(board: String, id: String, status: String) {
+    /**
+     * Runs the Hermes command a board drop means, on the same route with the
+     * same body the web store sends (`stores/hermes/kanban.ts`), so a move
+     * from the phone is indistinguishable from one on the desktop. The
+     * optional [note] is the block reason, the review summary or the
+     * promote/schedule/reopen reason; it is left out of the body when blank,
+     * as `JSON.stringify` drops an undefined field.
+     */
+    fun applyKanbanTransition(board: String, id: String, action: KanbanTransitionAction, note: String? = null) {
         val suffix = if (board.isBlank()) "" else "?board=${enc(board)}"
-        call(
-            "/api/hermes/kanban/tasks/bulk$suffix",
-            "POST",
-            JSONObject().put("ids", JSONArray(listOf(id))).put("status", status),
-        )
+        val ids = JSONArray().put(id)
+        fun noted(key: String) = JSONObject().apply { if (!note.isNullOrBlank()) put(key, note) }
+        when (action) {
+            KanbanTransitionAction.Complete ->
+                call("/api/hermes/kanban/complete$suffix", "POST", noted("summary").put("task_ids", ids))
+            KanbanTransitionAction.Unblock ->
+                call("/api/hermes/kanban/unblock$suffix", "POST", JSONObject().put("task_ids", ids))
+            KanbanTransitionAction.Block ->
+                call("/api/hermes/kanban/${enc(id)}/block$suffix", "POST", JSONObject().put("reason", note.orEmpty()))
+            KanbanTransitionAction.Promote ->
+                call("/api/hermes/kanban/${enc(id)}/promote$suffix", "POST", noted("reason"))
+            KanbanTransitionAction.Schedule ->
+                call("/api/hermes/kanban/${enc(id)}/schedule$suffix", "POST", noted("reason"))
+            KanbanTransitionAction.RequestReview ->
+                call("/api/hermes/kanban/${enc(id)}/request-review$suffix", "POST", noted("summary"))
+            KanbanTransitionAction.ReopenReview ->
+                call("/api/hermes/kanban/${enc(id)}/reopen-review$suffix", "POST", noted("reason"))
+            KanbanTransitionAction.Archive -> {
+                val result = call(
+                    "/api/hermes/kanban/tasks/bulk$suffix",
+                    "POST",
+                    JSONObject().put("ids", ids).put("archive", true),
+                )
+                val results = result.optJSONArray("results") ?: JSONArray()
+                for (index in 0 until results.length()) {
+                    val item = results.optJSONObject(index) ?: continue
+                    if (!item.optBoolean("ok", true)) {
+                        throw HermesException(item.optString("error").ifBlank { "Failed to archive kanban task ${item.optString("id")}" })
+                    }
+                }
+            }
+        }
     }
 
     fun assignKanbanTask(board: String, id: String, assignee: String) {

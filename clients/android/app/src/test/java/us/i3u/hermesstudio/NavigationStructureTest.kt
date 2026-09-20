@@ -328,10 +328,18 @@ class NavigationStructureTest {
 
     @Test
     fun kanbanHasNativeAccessibleMovementInBothDirections() {
+        // Long-press lifts a card; the board scrolls itself toward the next column,
+        // and that direction is flipped for a right-to-left layout.
         assertTrue(kanban.contains("detectDragGesturesAfterLongPress"))
-        assertTrue(kanban.contains("LocalLayoutDirection.current"))
-        assertTrue(kanban.contains("graphicsLayer { translationX = dragX }"))
+        assertTrue(kanban.contains("LocalLayoutDirection.current == LayoutDirection.Rtl"))
+        assertTrue(kanban.contains("scroll.scrollBy(physical * step * if (isRtl) -1f else 1f)"))
+        // The lifted card is placed in physical coordinates, so it follows the finger either way.
+        assertTrue(kanban.contains("placeable.place(x, y)"))
+        // Every card also carries a menu with the same transitions the board resolves,
+        // for a finger or a screen reader that cannot long-press and drag.
+        assertTrue(kanban.contains("resolveKanbanTransition(task.status, status) ?: return@mapNotNull null"))
         assertTrue(kanban.contains("DropdownMenuItem"))
+        assertFalse("the board never sends a raw status write", kanban.contains("tasks/bulk"))
     }
 
     @Test
