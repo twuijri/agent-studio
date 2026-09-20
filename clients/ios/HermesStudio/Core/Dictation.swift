@@ -82,6 +82,118 @@ enum RecordingStrip {
     }
 }
 
+/// One dictation take across the recogniser's requests.
+///
+/// Apple ends a `SFSpeechAudioBufferRecognitionRequest` on its own: after
+/// about a minute of audio when the server does the recognition, and at
+/// times after a long pause ("no speech detected"), with a final result or
+/// an error. Neither is the user's gesture, so while the take is open an
+/// ended request is **restarted transparently**: its text is committed
+/// (`DictationText.merged`'s separator rules), the next request's partials
+/// are appended after it, and the strip never moves. The take ends only on
+/// ■ / ↑ / ✕ (`stop()` here, `cancel()` on the recogniser), on a real
+/// failure, or at `ceiling`. Pure, so the machine is unit-tested
+/// (`ContinuousDictationTests`); `OnDeviceSpeechRecognizer` drives it.
+struct DictationTake: Equatable {
+    enum Phase: Equatable {
+        /// The microphone is open; an ended request is restarted.
+        case listening
+        /// ■ (or the ceiling) ended the take; the open request's final text
+        /// is awaited and then the take is over.
+        case stopping
+        case ended
+    }
+
+    /// How a request ended, and the state of the world at that moment.
+    struct RequestEnd: Equatable {
+        /// The final transcript when the request closed with one; `nil` when
+        /// it closed with an error, in which case the partial heard so far
+        /// stands in for it.
+        var finalText: String?
+        var failed = false
+        /// Speech permission is still granted.
+        var authorized = true
+        /// The recogniser for the locale still reports itself available.
+        var recognizerAvailable = true
+        /// The audio engine is still running (an interruption stops it).
+        var engineRunning = true
+        /// Seconds the request lived.
+        var requestDuration: TimeInterval = 30
+    }
+
+    enum Outcome: Equatable {
+        /// Open the next request on the same engine and tap.
+        case restart
+        /// The take is over and `text` is what the field keeps.
+        case finish
+        /// A real failure ended the take; `text` is kept, the error is shown.
+        case fail
+    }
+
+    /// The longest take: after ten minutes the recogniser stops it as ■
+    /// would and the caller shows a notice.
+    static let ceiling: TimeInterval = 600
+    /// A request that dies with nothing heard in under this many seconds is
+    /// a failed restart, not a pause.
+    static let shortRequest: TimeInterval = 2
+    /// That many failed restarts in a row mean the recogniser is not coming
+    /// back (no network for the server, a dead session) and the take fails.
+    static let maxShortFailures = 3
+
+    /// Text of every request that has ended, merged in order.
+    private(set) var committed = ""
+    /// Partial text of the request now open.
+    private(set) var partial = ""
+    private(set) var phase: Phase = .listening
+    /// Requests opened so far, the first included.
+    private(set) var requests = 1
+    private(set) var shortFailures = 0
+
+    /// What the field shows after the caller's own base.
+    var text: String { DictationText.merged(base: committed, transcript: partial) }
+
+    static func reachedCeiling(elapsed: TimeInterval) -> Bool { elapsed >= ceiling }
+
+    /// A partial result of the open request. Still accepted after `stop()`
+    /// so the finish timeout can deliver the latest text.
+    mutating func partialResult(_ text: String) {
+        guard phase != .ended else { return }
+        partial = text
+    }
+
+    /// ■: the take ends with the open request's final result.
+    mutating func stop() {
+        if phase == .listening { phase = .stopping }
+    }
+
+    /// The open request closed. Commits what it heard and says what to do.
+    mutating func requestEnded(_ end: RequestEnd) -> Outcome {
+        guard phase != .ended else { return .finish }
+        let heard = end.finalText ?? partial
+        committed = DictationText.merged(base: committed, transcript: heard)
+        partial = ""
+        if phase == .stopping {
+            phase = .ended
+            return end.failed && committed.isEmpty ? .fail : .finish
+        }
+        guard end.authorized, end.recognizerAvailable, end.engineRunning else {
+            phase = .ended
+            return .fail
+        }
+        if end.failed, heard.isEmpty, end.requestDuration < Self.shortRequest {
+            shortFailures += 1
+            if shortFailures >= Self.maxShortFailures {
+                phase = .ended
+                return .fail
+            }
+        } else {
+            shortFailures = 0
+        }
+        requests += 1
+        return .restart
+    }
+}
+
 /// The whole microphone flow. Holds no state of its own: the screen passes
 /// the bindings it already owns, so both composers run this exact code.
 @MainActor
@@ -181,6 +293,11 @@ struct DictationRunner {
     private func startDevice(localeIdentifier: String, allowServerFallback: Bool = true) async {
         state.wrappedValue.base = text.wrappedValue
         do {
+            // `partial` is the whole take (text committed by requests Apple
+            // ended on its own, plus the open request's partial), so it is
+            // always written after `base`; a restart inside the recogniser
+            // changes nothing here and the strip stays. `isFinal` comes only
+            // from ■, ↑ handled elsewhere, the ceiling, or a real failure.
             try await speech.start(localeIdentifier: localeIdentifier) { partial, isFinal in
                 apply(partial)
                 guard isFinal else { return }
@@ -190,6 +307,14 @@ struct DictationRunner {
                 } else {
                     state.wrappedValue.voice = .idle
                     state.wrappedValue.replyPending = !partial.isEmpty
+                    if let failure = speech.lastError {
+                        // The take ended for a real reason but the text is
+                        // kept; say why the strip closed.
+                        store.notify(failure)
+                    } else if speech.endedAtCeiling {
+                        store.notify(String(format: String(localized: "Dictation stopped after %lld minutes. Tap the microphone to continue."),
+                                            Int(DictationTake.ceiling / 60)))
+                    }
                 }
                 focus(true)
             }
