@@ -33,7 +33,7 @@ struct HermesMemoryView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Memory")
+        .navigationTitle(NavDestination.memory.title)
         .navigationBarTitleDisplayMode(.inline)
         .overlay { if loading && memory == nil { ProgressView() } }
         .refreshable { await load() }

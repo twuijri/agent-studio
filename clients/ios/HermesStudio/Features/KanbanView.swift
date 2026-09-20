@@ -19,7 +19,7 @@ struct KanbanView: View {
             boardContent
         }
         .background(Color(uiColor: .systemGroupedBackground))
-        .navigationTitle("Kanban")
+        .navigationTitle(NavDestination.kanban.title)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button { Task { await loadTasks() } } label: { Image(systemName: "arrow.clockwise") }

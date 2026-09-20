@@ -1,13 +1,50 @@
 import SwiftUI
 
-/// The Models screen, shaped like the web's `views/hermes/ModelsView.vue` →
-/// `ProvidersPanel.vue` → `ProviderCard.vue`: the service providers this
-/// profile is configured for, and under each one the models it offers.
+/// The Models page (`views/hermes/ModelsView.vue:186-204`), the rail entry:
+/// `General Models` · `Auxiliary Models` · `Model Ensembles` · `STT providers`
+/// · `TTS providers`. The header actions (refresh the cache, add a provider)
+/// belong to General only. Settings → Models is a different, smaller thing
+/// (provider keys) and links here.
+struct ModelsHomeView: View {
+    @State private var tab = "general"
+
+    private static let tabs = [
+        TabStripItem(id: "general", title: String(localized: "General Models")),
+        TabStripItem(id: "auxiliary", title: String(localized: "Auxiliary Models")),
+        TabStripItem(id: "combination", title: String(localized: "Model Ensembles")),
+        TabStripItem(id: "stt", title: String(localized: "STT providers")),
+        TabStripItem(id: "tts", title: String(localized: "TTS providers")),
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TabStrip(items: Self.tabs, selection: $tab)
+            content
+        }
+        .background(CoreHubTokens.Palette.bgPrimary)
+        .navigationTitle(NavDestination.models.title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder private var content: some View {
+        switch tab {
+        case "auxiliary": AuxiliaryModelsView()
+        case "combination": ModelEnsemblesView()
+        case "stt": SttProvidersView()
+        case "tts": TtsProvidersView()
+        default: GeneralModelsPanel()
+        }
+    }
+}
+
+/// General Models — `ProvidersPanel.vue` → `ProviderCard.vue`: the service
+/// providers this profile is configured for, and under each one the models
+/// it offers.
 ///
 /// It is deliberately **not** a credential screen. Keys, base URLs, visibility
 /// and custom models live one level down in `ProviderCatalogView`, the same
 /// way the web hides them behind the card's Edit action.
-struct ModelsHomeView: View {
+struct GeneralModelsPanel: View {
     @EnvironmentObject private var store: AppStore
     @State private var catalog: ModelCatalog?
     @State private var loading = true
@@ -29,8 +66,6 @@ struct ModelsHomeView: View {
             actionsSection
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Models")
-        .navigationBarTitleDisplayMode(.inline)
         .overlay { if loading && catalog == nil { ProgressView() } }
         .refreshable { await load() }
         .task(id: store.selectedProfile) { await load() }

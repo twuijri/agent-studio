@@ -50,7 +50,7 @@ struct WorkflowsView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .navigationTitle("Workflow")
+        .navigationTitle(NavDestination.workflow.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {

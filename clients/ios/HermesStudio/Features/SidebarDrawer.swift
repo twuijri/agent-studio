@@ -13,18 +13,14 @@ struct SidebarDrawer: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            if store.drawerPage == .settings {
-                SettingsDrawerView()
-            } else {
-                PrimaryRail()
-                ConversationSwitch()
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                Divider().overlay(CoreHubTokens.Palette.borderLight)
-                modeList
-                Divider().overlay(CoreHubTokens.Palette.borderLight)
-                DrawerFooter()
-            }
+            PrimaryRail()
+            ConversationSwitch()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            Divider().overlay(CoreHubTokens.Palette.borderLight)
+            modeList
+            Divider().overlay(CoreHubTokens.Palette.borderLight)
+            DrawerFooter()
         }
         .padding(.bottom, keyboard.overlap)
         .background(CoreHubTokens.Palette.bgSidebar.ignoresSafeArea())
@@ -37,15 +33,8 @@ struct SidebarDrawer: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            if store.drawerPage == .settings {
-                Button { withAnimation(CoreHubTokens.Motion.quick) { store.drawerPage = .navigation } } label: {
-                    HStack(spacing: 6) { CoreHubIconView(icon: .back, size: 18); Text("Back").font(CoreHubTokens.Typography.navItemFont) }
-                        .foregroundStyle(CoreHubTokens.Palette.textPrimary)
-                }
-            } else {
-                AppMark(size: 26)
-                Text("Core Hub").font(CoreHubTokens.Typography.titleFont).foregroundStyle(CoreHubTokens.Palette.textPrimary)
-            }
+            AppMark(size: 26)
+            Text("Core Hub").font(CoreHubTokens.Typography.titleFont).foregroundStyle(CoreHubTokens.Palette.textPrimary)
             Spacer()
             Button(action: close) {
                 CoreHubIconView(icon: .close, size: 20).foregroundStyle(CoreHubTokens.Palette.textSecondary).frame(width: 34, height: 34).contentShape(Rectangle())
@@ -67,29 +56,40 @@ struct SidebarDrawer: View {
 
 // MARK: - Primary rail
 
+/// The five entries of `PageSidebarNav.vue:74-205`, read from the registry.
+/// `New chat` and `Search` are actions (a draft, a sheet); the other three
+/// replace the pushed stack.
 struct PrimaryRail: View {
     @EnvironmentObject private var store: AppStore
 
     var body: some View {
         VStack(spacing: 2) {
-            RailRow(icon: .newChat, title: "New Chat") { store.startNewChat() }
-            RailRow(icon: .search, title: "Search") { store.switchMode(.history) }
-            RailRow(icon: .deviceConnections, title: "Device connections", selected: store.shellDestination == .connections) { store.show(.connections) }
-            if store.isSuperAdmin {
-                RailRow(icon: .agentManager, title: "Agent Manager", selected: store.shellDestination == .agentManager) { store.show(.agentManager) }
+            ForEach(NavDestination.rail) { destination in
+                if !NavDestination.superAdminOnly.contains(destination) || store.isSuperAdmin {
+                    RailRow(destination: destination, selected: store.rootDestination == destination) { activate(destination) }
+                }
             }
-            RailRow(icon: .models, title: "Models", selected: store.shellDestination == .models) { store.show(.models) }
         }
         .padding(.horizontal, 8)
         .padding(.top, 4)
     }
+
+    private func activate(_ destination: NavDestination) {
+        switch destination {
+        case .newChat: store.startNewChat()
+        case .search: store.openSearch()
+        default: store.show(destination)
+        }
+    }
 }
 
 struct RailRow: View {
-    let icon: CoreHubIcon
-    let title: LocalizedStringKey
+    let destination: NavDestination
     var selected = false
     let action: () -> Void
+
+    private var icon: CoreHubIcon { destination.icon ?? .chat }
+    private var title: LocalizedStringKey { destination.label }
 
     var body: some View {
         Button(action: action) {
@@ -128,7 +128,7 @@ struct ConversationSwitch: View {
                 Button { withAnimation(CoreHubTokens.Motion.quick) { store.switchMode(mode) } } label: {
                     VStack(spacing: 2) {
                         CoreHubIconView(icon: mode.icon, size: 16)
-                        Text(mode.title)
+                        Text(mode.label)
                             .font(CoreHubTokens.Typography.font(CoreHubTokens.Typography.groupHeader, weight: active ? .semibold : .regular))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
@@ -172,7 +172,7 @@ struct DrawerRoomList: View {
                 }
             } header: {
                 HStack(spacing: 4) {
-                    GroupHeaderLabel(title: String(localized: "Group Chat"), count: rooms.count)
+                    GroupHeaderLabel(title: NavDestination.groupChat.title, count: rooms.count)
                     Button { store.roomAction = .create } label: { CoreHubIconView(icon: .plus, size: 14).foregroundStyle(CoreHubTokens.Palette.textMuted).frame(width: 24, height: 24).contentShape(Rectangle()) }
                         .buttonStyle(.plain)
                         .accessibilityLabel("New room")
@@ -217,7 +217,7 @@ struct DrawerWorkflowList: View {
                     .buttonStyle(.plain)
                     .listRowBackground(store.selectedWorkflow?.id == workflow.id ? CoreHubTokens.Palette.selected : Color.clear)
                 }
-            } header: { GroupHeaderLabel(title: String(localized: "Workflow"), count: workflows.count) }
+            } header: { GroupHeaderLabel(title: NavDestination.workflow.title, count: workflows.count) }
         }
         .drawerListStyle()
         .task(id: "\(store.selectedProfile)|\(store.sessionListVersion)") { await load() }
@@ -297,10 +297,15 @@ struct DrawerFooter: View {
                         .background(CoreHubTokens.Palette.hover, in: Capsule())
                 }
                 Spacer(minLength: 0)
-                Button { withAnimation(CoreHubTokens.Motion.quick) { store.drawerPage = .settings } } label: {
-                    CoreHubIconView(icon: .settings, size: 18).foregroundStyle(CoreHubTokens.Palette.textSecondary).frame(width: 32, height: 32).contentShape(Rectangle())
+                // The gear opens the one Settings screen (`AppSidebar.vue:216`);
+                // there is no settings page inside the drawer.
+                Button { store.show(.settings) } label: {
+                    CoreHubIconView(icon: .settings, size: 18)
+                        .foregroundStyle(store.rootDestination == .settings ? CoreHubTokens.Palette.textPrimary : CoreHubTokens.Palette.textSecondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
-                .accessibilityLabel("Settings")
+                .accessibilityLabel(NavDestination.settings.title)
             }
             HStack(spacing: 8) {
                 Circle().fill(store.connected ? CoreHubTokens.Palette.success : CoreHubTokens.Palette.error).frame(width: 7, height: 7)
@@ -328,6 +333,8 @@ struct DrawerFooter: View {
         }
     }
 
+    /// Switches the profile only (`ProfileSelector.vue` has no manage link);
+    /// Profiles is managed from Settings → Tools.
     private var profileSelector: some View {
         Menu {
             ForEach(store.profiles) { profile in
@@ -335,8 +342,6 @@ struct DrawerFooter: View {
                     if profile.name == store.selectedProfile { Label(profile.name, systemImage: "checkmark") } else { Text(profile.name) }
                 }
             }
-            Divider()
-            Button("Manage profiles") { store.show(.profiles) }
         } label: {
             HStack(spacing: 6) {
                 ProfileAvatar(name: store.selectedProfile, avatar: store.profile?.avatar, size: 18)
@@ -398,6 +403,8 @@ struct DrawerFooter: View {
         .accessibilityLabel("Language")
     }
 
+    /// The local light/dark preference (`ThemeSwitch`), never called "Theme":
+    /// Theme is the server-side screen under Settings → Tools.
     private var themeSwitch: some View {
         Menu {
             Button { store.setAppearance("system") } label: { checked("System", store.appearance == "system") }
@@ -410,6 +417,6 @@ struct DrawerFooter: View {
                 .frame(width: 28, height: 24)
                 .background(CoreHubTokens.Palette.hover, in: RoundedRectangle(cornerRadius: CoreHubTokens.Radius.tag))
         }
-        .accessibilityLabel("Theme")
+        .accessibilityLabel("Color scheme")
     }
 }

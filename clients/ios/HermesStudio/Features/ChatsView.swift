@@ -45,7 +45,7 @@ struct ChatsView: View {
             }
         }
         .background(CoreHubTokens.Palette.bgPrimary)
-        .navigationTitle("History")
+        .navigationTitle(NavDestination.history.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
         .task(id: "\(store.sessionListProfile ?? "*")|\(search)|\(showArchived)|\(store.sessionListVersion)|\(pageLimit)") {

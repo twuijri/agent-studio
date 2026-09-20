@@ -431,16 +431,9 @@ final class APIClient: @unchecked Sendable {
     func pollProviderAuth(_ provider: String, sessionID: String) async throws -> JSON { try await object("/api/hermes/auth/\(provider.urlEncoded)/poll/\(sessionID.urlEncoded)") }
     func submitProviderAuth(_ provider: String, sessionID: String, code: String) async throws -> JSON { try await object("/api/hermes/auth/\(provider.urlEncoded)/submit/\(sessionID.urlEncoded)", method: "POST", body: ["code": code]) }
 
-    func runtimePerformance() async throws -> RuntimePerformance {
-        let root = try await object("/api/studio/performance/runtime")
-        let system = root.object("system"), bridge = root.object("bridge"), sessions = root.object("sessions")
-        let workers = bridge.objects("workers")
-        return RuntimePerformance(
-            cpuPercent: system["cpuPercent"] == nil ? nil : system.double("cpuPercent"),
-            memoryPercent: system["memoryPercent"] == nil ? nil : system.double("memoryPercent"),
-            workerCount: workers.count, runningWorkers: workers.filter { $0.bool("running") }.count,
-            sessionCount: sessions.int("total")
-        )
+    /// `GET /api/studio/performance/runtime` (super-admin): the Performance screen.
+    func performanceSnapshot() async throws -> PerformanceSnapshot {
+        PerformanceSnapshot(try await object("/api/studio/performance/runtime"))
     }
 
     func renameSession(_ id: String, title: String) async throws { _ = try await object("/api/studio/sessions/\(id.urlEncoded)/rename", method: "POST", body: ["title": title]) }
@@ -552,8 +545,16 @@ final class APIClient: @unchecked Sendable {
         _ = try await object(path, method: id == nil ? "POST" : "PATCH", body: body, profile: profile)
     }
 
-    func skills(profile: String) async throws -> [SkillItem] {
-        let root = try await object("/api/hermes/skills?profile=\(profile.urlEncoded)&target=all", profile: profile)
+    /// `?target=` selects whose skills: `hermes` (default) or a coding agent
+    /// (`claude`, `codex`, `pi`, `grok`, `opencode`, `dsh`), as in
+    /// `api/hermes/skills.ts`. Anything else falls back to Hermes on the server.
+    static func skillsTargetQuery(_ target: String) -> String {
+        let value = target.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return value.isEmpty || value == "hermes" ? "" : "&target=\(value.urlEncoded)"
+    }
+
+    func skills(profile: String, target: String = "hermes") async throws -> [SkillItem] {
+        let root = try await object("/api/hermes/skills?profile=\(profile.urlEncoded)\(Self.skillsTargetQuery(target))", profile: profile)
         var result = root.objects("skills").map { SkillItem($0) }
         if result.isEmpty {
             for category in root.objects("categories") {
@@ -566,14 +567,18 @@ final class APIClient: @unchecked Sendable {
         }
         return result
     }
-    func skill(category: String, name: String, profile: String) async throws -> SkillItem {
-        let result = try await object("/api/hermes/skills/\(category.urlEncoded)/\(name.urlEncoded)", profile: profile)
+    private static func skillsTargetSuffix(_ target: String) -> String {
+        let query = skillsTargetQuery(target)
+        return query.isEmpty ? "" : "?" + query.dropFirst()
+    }
+    func skill(category: String, name: String, profile: String, target: String = "hermes") async throws -> SkillItem {
+        let result = try await object("/api/hermes/skills/\(category.urlEncoded)/\(name.urlEncoded)\(Self.skillsTargetSuffix(target))", profile: profile)
         return SkillItem(["name": name, "category": category, "content": result.string("content"), "enabled": true], category: category)
     }
-    func saveSkill(_ skill: SkillItem, profile: String) async throws { _ = try await object("/api/hermes/skills/\(skill.category.urlEncoded)/\(skill.name.urlEncoded)", method: "PUT", body: ["content": skill.content], profile: profile) }
-    func toggleSkill(_ skill: SkillItem, profile: String) async throws { _ = try await object("/api/hermes/skills/toggle", method: "PUT", body: ["name": skill.name, "enabled": !skill.enabled], profile: profile) }
-    func pinSkill(_ skill: SkillItem, profile: String) async throws { _ = try await object("/api/hermes/skills/pin", method: "PUT", body: ["name": skill.name, "pinned": !skill.pinned], profile: profile) }
-    func deleteSkill(_ skill: SkillItem, profile: String) async throws { _ = try await object("/api/hermes/skills/\(skill.category.urlEncoded)/\(skill.name.urlEncoded)", method: "DELETE", profile: profile) }
+    func saveSkill(_ skill: SkillItem, profile: String, target: String = "hermes") async throws { _ = try await object("/api/hermes/skills/\(skill.category.urlEncoded)/\(skill.name.urlEncoded)\(Self.skillsTargetSuffix(target))", method: "PUT", body: ["content": skill.content], profile: profile) }
+    func toggleSkill(_ skill: SkillItem, profile: String, target: String = "hermes") async throws { _ = try await object("/api/hermes/skills/toggle\(Self.skillsTargetSuffix(target))", method: "PUT", body: ["name": skill.name, "enabled": !skill.enabled], profile: profile) }
+    func pinSkill(_ skill: SkillItem, profile: String, target: String = "hermes") async throws { _ = try await object("/api/hermes/skills/pin\(Self.skillsTargetSuffix(target))", method: "PUT", body: ["name": skill.name, "pinned": !skill.pinned], profile: profile) }
+    func deleteSkill(_ skill: SkillItem, profile: String, target: String = "hermes") async throws { _ = try await object("/api/hermes/skills/\(skill.category.urlEncoded)/\(skill.name.urlEncoded)\(Self.skillsTargetSuffix(target))", method: "DELETE", profile: profile) }
 
     func plugins() async throws -> [PluginItem] { try await array("/api/hermes/plugins", keys: ["plugins"]).map(PluginItem.init) }
     func setPlugin(_ plugin: PluginItem, enabled: Bool) async throws { _ = try await object("/api/hermes/plugins/\(plugin.key.urlEncoded)/\(enabled ? "enable" : "disable")", method: "POST") }
@@ -590,14 +595,42 @@ final class APIClient: @unchecked Sendable {
     func reloadMCP(_ name: String) async throws { _ = try await object("/api/hermes/mcp/reload?server=\(name.urlEncoded)", method: "POST") }
     func deleteMCP(_ name: String) async throws { _ = try await object("/api/hermes/mcp/servers/\(name.urlEncoded)", method: "DELETE") }
 
-    func petManifest() async throws -> [Pet] { try await array("/api/hermes/petdex/manifest", keys: ["pets", "manifest"]).map { Pet($0) } }
+    // Pets live in the Studio module (`modules/studio/routes/{petdex,pets}.ts`),
+    // not under `/api/hermes/`; the old prefix answered 404 for every call.
+    static let petdexManifestPath = "/api/studio/petdex/manifest"
+    static let petsActivePath = "/api/studio/pets/active"
+    static let petsAdoptPath = "/api/studio/pets/adopt"
+
+    func petManifest() async throws -> [Pet] { try await array(Self.petdexManifestPath, keys: ["pets", "manifest"]).map { Pet($0) } }
     func activePets() async throws -> [Pet] {
-        let result = try await object("/api/hermes/pets/active")
+        let result = try await object(Self.petsActivePath)
         let pet = result.object("pet")
         return pet.isEmpty ? [] : [Pet(pet, active: pet.bool("enabled", default: true))]
     }
-    func adoptPet(_ id: String, profile: String) async throws { _ = try await object("/api/hermes/pets/adopt", method: "POST", body: ["slug": id]) }
-    func setPet(_ id: String, profile: String, active: Bool) async throws { _ = try await object("/api/hermes/pets/active", method: "PATCH", body: ["enabled": active]) }
+    func adoptPet(_ id: String, profile: String) async throws { _ = try await object(Self.petsAdoptPath, method: "POST", body: ["slug": id]) }
+    func setPet(_ id: String, profile: String, active: Bool) async throws { _ = try await object(Self.petsActivePath, method: "PATCH", body: ["enabled": active]) }
+
+    // MARK: Models page tabs (`ModelsView.vue:186-204`)
+
+    /// `GET /api/hermes/config/auxiliary-models` → `{ tasks, auxiliary }`.
+    func auxiliaryModels() async throws -> AuxiliaryModels { AuxiliaryModels(try await object("/api/hermes/config/auxiliary-models")) }
+    /// `PUT /api/hermes/config/auxiliary-models { auxiliary }`.
+    func saveAuxiliaryModels(_ auxiliary: JSON) async throws { _ = try await object("/api/hermes/config/auxiliary-models", method: "PUT", body: ["auxiliary": auxiliary]) }
+    /// `GET /api/hermes/config/moa` — the model ensembles (`MoaConfig`).
+    func moaConfig() async throws -> JSON { try await object("/api/hermes/config/moa") }
+    /// `PUT /api/hermes/config/moa { moa }`.
+    func saveMoaConfig(_ moa: JSON) async throws { _ = try await object("/api/hermes/config/moa", method: "PUT", body: ["moa": moa]) }
+    /// `GET /api/studio/stt/settings` → `{ providers | settings, activeProvider }`.
+    func sttSettings(profile: String) async throws -> SttSettings { SttSettings(try await object("/api/studio/stt/settings", profile: profile)) }
+    /// `PUT /api/studio/stt/settings/active { provider }`.
+    func setActiveSttProvider(_ provider: String, profile: String) async throws { _ = try await object("/api/studio/stt/settings/active", method: "PUT", body: ["provider": provider], profile: profile) }
+
+    // MARK: DSH panels (`api/coding-agents/dsh.ts`)
+
+    func dshPluginInventory() async throws -> JSON { try await object("/api/coding-agents/dsh/plugin-inventory") }
+    func dshAgentPresets() async throws -> [DshPreset] { try await array("/api/coding-agents/dsh/agent-presets", keys: ["presets"]).map(DshPreset.init) }
+    func setDefaultDshPreset(_ id: String) async throws { _ = try await object("/api/coding-agents/dsh/agent-presets/\(id.urlEncoded)/default", method: "PUT") }
+    func deleteDshPreset(_ id: String) async throws { _ = try await object("/api/coding-agents/dsh/agent-presets/\(id.urlEncoded)", method: "DELETE") }
 
     func pendingSkillWrites(profile: String) async throws -> [PendingSkillWrite] {
         try await object("/api/hermes/write-gate/pending", profile: profile).objects("records")

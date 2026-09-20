@@ -3,6 +3,11 @@ import SwiftUI
 /// Signed-in root: a navigation bar with a hamburger, the content of the
 /// current conversation mode, and the off-canvas drawer (250 ms slide, 40 %
 /// scrim, swipe to close, edge swipe to open) — the web's mobile layout.
+///
+/// One `NavigationStack` bound to `store.path`, one
+/// `navigationDestination(for: NavDestination.self)`: every registry case is
+/// pushable, and the desktop's nesting (Agent Manager → Hermes → Kanban) is a
+/// plain `store.push`.
 struct RootShell: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.layoutDirection) private var layoutDirection
@@ -16,7 +21,7 @@ struct RootShell: View {
             let width = min(CoreHubTokens.Layout.drawerMaxWidth, geometry.size.width * CoreHubTokens.Layout.drawerWidthFraction)
             let progress: CGFloat = store.drawerOpen ? max(0, 1 + drag / width) : 0
             ZStack(alignment: .leading) {
-                NavigationStack { content }
+                NavigationStack(path: $store.path) { content }
                     .id(store.languageRefresh)
                     .accessibilityHidden(store.drawerOpen)
 
@@ -43,6 +48,7 @@ struct RootShell: View {
             .animation(CoreHubTokens.Motion.drawer, value: store.drawerOpen)
         }
         .task { await store.checkHealth() }
+        .sheet(isPresented: $store.searchOpen) { SessionSearchSheet().environmentObject(store) }
     }
 
     private func close() {
@@ -69,66 +75,123 @@ struct RootShell: View {
             }
     }
 
-    @ViewBuilder private var content: some View {
-        Group {
-            switch store.conversationMode {
-            case .chat:
-                if let session = store.selectedSession {
-                    ConversationView(session: session, embeddedInShell: true).id(session.id)
-                } else {
-                    ChatHomeView().shellToolbar()
-                }
-            case .group:
-                if let room = store.selectedRoom {
-                    GroupRoomView(room: room).id(room.id)
-                } else {
-                    GroupsView().shellToolbar()
-                }
-            case .workflow:
-                if let workflow = store.selectedWorkflow {
-                    WorkflowDetailView(workflow: workflow).id(workflow.id).shellToolbar()
-                } else {
-                    WorkflowsView().shellToolbar()
-                }
-            case .history:
-                ChatsView().shellToolbar()
+    private var content: some View {
+        RootContentView(mode: store.conversationMode)
+            .hermesBackground()
+            .toolbarBackground(CoreHubTokens.Palette.bgPrimary, for: .navigationBar)
+            .navigationDestination(for: NavDestination.self) { destination in
+                ShellDestinationView(destination: destination)
             }
-        }
-        .hermesBackground()
-        .toolbarBackground(CoreHubTokens.Palette.bgPrimary, for: .navigationBar)
-        .navigationDestination(item: $store.shellDestination) { destination in
-            ShellDestinationView(destination: destination)
-        }
-        .sheet(item: $store.roomAction) { action in
-            switch action {
-            case .create: CreateRoomView().environmentObject(store)
-            case .join: JoinRoomView().environmentObject(store)
+            .sheet(item: $store.roomAction) { action in
+                switch action {
+                case .create: CreateRoomView().environmentObject(store)
+                case .join: JoinRoomView().environmentObject(store)
+                }
             }
+    }
+}
+
+/// The root content of one conversation mode: the selected conversation,
+/// room or workflow, or the mode's home screen.
+struct RootContentView: View {
+    @EnvironmentObject private var store: AppStore
+    let mode: ConversationMode
+
+    var body: some View {
+        switch mode {
+        case .chat: ConversationRootView()
+        case .group: RoomRootView()
+        case .workflow: WorkflowRootView()
+        case .history: ChatsView().shellToolbar()
         }
     }
 }
 
-/// Pushed screens for the drawer rail and the settings drawer. Screens that
-/// do not exist yet show a placeholder instead of disappearing.
+/// `.chat` / `.conversation`: the selected session or the empty chat surface.
+struct ConversationRootView: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        if let session = store.selectedSession {
+            ConversationView(session: session, embeddedInShell: true).id(session.id)
+        } else {
+            ChatHomeView().shellToolbar()
+        }
+    }
+}
+
+/// `.groupChat` / `.room`: the selected room or the rooms list.
+struct RoomRootView: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        if let room = store.selectedRoom {
+            GroupRoomView(room: room).id(room.id)
+        } else {
+            GroupsView().shellToolbar()
+        }
+    }
+}
+
+/// `.workflow` / `.workflowDetail`: the selected workflow or the list.
+struct WorkflowRootView: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        if let workflow = store.selectedWorkflow {
+            WorkflowDetailView(workflow: workflow).id(workflow.id).shellToolbar()
+        } else {
+            WorkflowsView().shellToolbar()
+        }
+    }
+}
+
+/// The screen of every `NavDestination`. Exhaustive on purpose: adding a case
+/// to the registry without a screen does not compile, and the unit tests
+/// construct this view for every case.
 struct ShellDestinationView: View {
     @EnvironmentObject private var store: AppStore
-    let destination: ShellDestination
+    let destination: NavDestination
 
     var body: some View {
         switch destination {
-        case .connections: StudioConnectionsView()
+        case .newChat, .chat, .conversation: ConversationRootView()
+        case .search: SessionSearchSheet()
+        case .deviceConnections: DeviceConnectionsView()
         case .agentManager: AgentManagerView()
         case .models: ModelsHomeView()
+        case .groupChat, .room: RoomRootView()
+        case .workflow, .workflowDetail: WorkflowRootView()
+        case .workflowRun: WorkflowRunScreen()
+        case .history: ChatsView()
+        case .settings: SettingsView()
         case .logs: StudioLogsView()
-        case .usage: InsightsView()
-        case .performance: InsightsView()
+        case .usage: UsageView()
+        case .performance: PerformanceView()
         case .skillsUsage: SkillUsageView()
-        case .theme: ThemeStudioView()
+        case .theme: ThemeView()
         case .pets: PetsView()
         case .profiles: ProfilesView()
-        case .settings: SettingsView()
+        case .agentHermes: AgentScreenLoader(agentID: "hermes")
+        case .agentEkko: AgentScreenLoader(agentID: "ekko-agent")
+        case .agentCoding: AgentScreenLoader(agentID: store.focusedAgentID)
+        case .jobs: CronJobsView()
+        case .kanban: KanbanView()
+        case .channels: ChannelsView()
+        case .skills: AgentSkillsScreen(family: family)
+        case .plugins: AgentPluginsScreen(family: family)
+        case .mcp: AgentMcpScreen(family: family)
+        case .memory: AgentMemoryScreen(family: family)
+        case .journey: JourneyView()
+        case .hermesSettings: HermesSettingsView()
+        case .ekkoSettings: EkkoSettingsView()
+        case .codingAgentSettings: CodingAgentSettingsView(agentID: store.focusedAgentID)
+        case .globalAgent: GlobalAgentView()
+        case .files: StudioFilesView()
         }
     }
+
+    private var family: AgentFamily { AgentFamily(agentID: store.focusedAgentID) }
 }
 
 /// Empty chat surface shown before a session is chosen.
@@ -144,7 +207,7 @@ struct ChatHomeView: View {
                 .foregroundStyle(CoreHubTokens.Palette.textSecondary)
                 .multilineTextAlignment(.center)
             Button { store.startNewChat() } label: {
-                HStack(spacing: 8) { CoreHubIconView(icon: .newChat, size: 16); Text("New Chat") }
+                HStack(spacing: 8) { CoreHubIconView(icon: .newChat, size: 16); Text(NavDestination.newChat.label) }
             }
             .buttonStyle(CoreHubPillButtonStyle(prominent: true))
         }

@@ -16,6 +16,13 @@ struct SessionSearchResult: Identifiable, Hashable {
         snippet = json.string("snippet")
         matchedMessageID = json.string("matched_message_id")
     }
+
+    /// A recent session shown in the search sheet before any query.
+    init(session: SessionSummary, snippet: String = "", matchedMessageID: String = "") {
+        self.session = session
+        self.snippet = snippet
+        self.matchedMessageID = matchedMessageID
+    }
 }
 
 /// One page of `GET /sessions/conversations/{id}/messages/paginated`.

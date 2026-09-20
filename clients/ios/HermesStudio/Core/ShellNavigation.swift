@@ -1,33 +1,55 @@
 import Foundation
+import SwiftUI
 
 /// The 4-segment conversation switch of the drawer (web `PageSidebarNav`).
+/// A thin projection of the registry: each mode *is* a `NavDestination`.
 enum ConversationMode: String, CaseIterable, Identifiable {
     case chat, group, workflow, history
     var id: String { rawValue }
 
-    var title: String {
-        switch self {
-        case .chat: return String(localized: "Chat")
-        case .group: return String(localized: "Group Chat")
-        case .workflow: return String(localized: "Workflow")
-        case .history: return String(localized: "History")
-        }
-    }
-
-    var icon: CoreHubIcon {
+    var destination: NavDestination {
         switch self {
         case .chat: return .chat
-        case .group: return .group
+        case .group: return .groupChat
         case .workflow: return .workflow
         case .history: return .history
         }
     }
+
+    var label: LocalizedStringKey { destination.label }
+    var title: String { destination.title }
+    var icon: CoreHubIcon { destination.icon ?? .chat }
 }
 
-/// Screens reachable from the drawer rail and the settings drawer. They are
-/// pushed onto the shell's navigation stack.
-enum ShellDestination: String, Hashable, Identifiable {
-    case connections, agentManager, models
-    case logs, usage, performance, skillsUsage, theme, pets, profiles, settings
-    var id: String { rawValue }
+/// Which agent a pushed "under the agent" destination (Skills, MCP, Memory,
+/// Plugins, Settings) belongs to. Derived from the id of the agent card that
+/// was opened last, because `.skills` is one registry case for every agent.
+enum AgentFamily: Equatable {
+    case hermes
+    case ekko
+    case coding(id: String)
+
+    init(agentID: String) {
+        switch AgentIdentity.canonicalID(agentID) {
+        case "hermes": self = .hermes
+        case "ekko-agent": self = .ekko
+        default: self = .coding(id: AgentIdentity.canonicalID(agentID))
+        }
+    }
+
+    var agentID: String {
+        switch self {
+        case .hermes: return "hermes"
+        case .ekko: return "ekko-agent"
+        case let .coding(id): return id
+        }
+    }
+
+    /// The `target` query of `/api/hermes/skills` (`CodingAgentConfigView.vue`).
+    var skillTarget: String {
+        switch self {
+        case .hermes, .ekko: return "hermes"
+        case let .coding(id): return id == "claude-code" ? "claude" : id
+        }
+    }
 }
