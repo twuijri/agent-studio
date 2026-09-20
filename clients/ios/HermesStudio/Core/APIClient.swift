@@ -606,21 +606,6 @@ final class APIClient: @unchecked Sendable {
     func reloadMCP(_ name: String) async throws { _ = try await object("/api/hermes/mcp/reload?server=\(name.urlEncoded)", method: "POST") }
     func deleteMCP(_ name: String) async throws { _ = try await object("/api/hermes/mcp/servers/\(name.urlEncoded)", method: "DELETE") }
 
-    // Pets live in the Studio module (`modules/studio/routes/{petdex,pets}.ts`),
-    // not under `/api/hermes/`; the old prefix answered 404 for every call.
-    static let petdexManifestPath = "/api/studio/petdex/manifest"
-    static let petsActivePath = "/api/studio/pets/active"
-    static let petsAdoptPath = "/api/studio/pets/adopt"
-
-    func petManifest() async throws -> [Pet] { try await array(Self.petdexManifestPath, keys: ["pets", "manifest"]).map { Pet($0) } }
-    func activePets() async throws -> [Pet] {
-        let result = try await object(Self.petsActivePath)
-        let pet = result.object("pet")
-        return pet.isEmpty ? [] : [Pet(pet, active: pet.bool("enabled", default: true))]
-    }
-    func adoptPet(_ id: String, profile: String) async throws { _ = try await object(Self.petsAdoptPath, method: "POST", body: ["slug": id]) }
-    func setPet(_ id: String, profile: String, active: Bool) async throws { _ = try await object(Self.petsActivePath, method: "PATCH", body: ["enabled": active]) }
-
     // MARK: Models page tabs (`ModelsView.vue:186-204`)
 
     /// `GET /api/hermes/config/auxiliary-models` → `{ tasks, auxiliary }`.

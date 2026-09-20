@@ -13,7 +13,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(NavDestination.allCases.map(\.rawValue), [
             "newChat", "search", "deviceConnections", "agentManager", "models",
             "chat", "groupChat", "workflow", "history",
-            "settings", "logs", "usage", "performance", "skillsUsage", "theme", "pets", "profiles",
+            "settings", "logs", "usage", "performance", "skillsUsage", "theme", "profiles",
             "conversation", "room", "workflowDetail", "workflowRun",
             "agentHermes", "agentEkko", "agentCoding",
             "jobs", "kanban", "channels", "skills", "plugins", "presets", "mcp", "memory", "journey",
@@ -34,7 +34,7 @@ final class NavigationContractTests: XCTestCase {
     func testRailSegmentsAndToolsFollowTheDesktopOrder() {
         XCTAssertEqual(NavDestination.rail, [.newChat, .search, .deviceConnections, .agentManager, .models])
         XCTAssertEqual(NavDestination.segments, [.chat, .groupChat, .workflow, .history])
-        XCTAssertEqual(NavDestination.tools, [.logs, .usage, .performance, .skillsUsage, .theme, .pets, .profiles])
+        XCTAssertEqual(NavDestination.tools, [.logs, .usage, .performance, .skillsUsage, .theme, .profiles])
         XCTAssertEqual(NavDestination.superAdminOnly, [.agentManager, .performance, .profiles])
         XCTAssertEqual(ConversationMode.allCases.map(\.destination), NavDestination.segments)
     }
@@ -88,7 +88,7 @@ final class NavigationContractTests: XCTestCase {
     func testShellDestinationViewCoversEveryDestination() {
         let covered = NavDestination.allCases.map { ShellDestinationView(destination: $0).destination }
         XCTAssertEqual(covered, NavDestination.allCases)
-        XCTAssertEqual(NavDestination.allCases.count, 38)
+        XCTAssertEqual(NavDestination.allCases.count, 37)
     }
 
     func testAgentFamilyResolvesTheAgentThatWasOpenedLast() {

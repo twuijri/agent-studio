@@ -180,7 +180,6 @@ class NavigationStructureTest {
             "NavDestination.performance -> openPerformance()",
             "NavDestination.skillsUsage -> openSkillsUsage()",
             "NavDestination.theme -> openTheme()",
-            "NavDestination.pets -> openPets()",
             "NavDestination.profiles -> openProfiles()",
         ).forEach { branch -> assertTrue("openTool lost $branch", viewModel.contains(branch)) }
         // Usage and Performance load different things and show different screens.
@@ -193,10 +192,11 @@ class NavigationStructureTest {
         assertTrue(insights.contains("InsightsScaffold(NavDestination.skillsUsage") && viewModel.contains("api.skillUsage(days)"))
         assertTrue(parity.contains("fun JourneyScreen") && parity.contains("NavDestination.journey.labelKey"))
         assertTrue(viewModel.contains("fun refreshJourney() = launchWork(work = { api.journey() }"))
-        // Theme and Pets are titled by the same key as their rows.
+        // Theme is titled by the same key as its row.
         assertTrue(parity.contains("fun ThemeScreen") && parity.contains("NavDestination.theme.labelKey"))
-        assertTrue(tools.contains("stringResource(R.string.nav_pets)"))
-        assertFalse(tools.contains("pets_title") || parity.contains("appearance_title"))
+        assertFalse(parity.contains("appearance_title"))
+        // Pets/Petdex left Core Hub (2026-09-20); nothing on the phone may bring it back.
+        assertFalse(tools.contains("PetsScreen") || viewModel.contains("openPets") || viewModel.contains("Screen.Pets"))
         // Device connections: its own title, App (Direct / Message push) and Devices for a super-admin.
         assertTrue(workspace.contains("NavDestination.deviceConnections.labelKey"))
         assertTrue(workspace.contains("listOf(R.string.connections_tab_app) + if (state.isSuperAdmin) listOf(R.string.connections_tab_devices)"))

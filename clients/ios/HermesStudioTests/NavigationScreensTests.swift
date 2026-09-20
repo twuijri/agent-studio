@@ -2,7 +2,7 @@ import XCTest
 @testable import HermesStudio
 
 /// The pure logic behind the screens the navigation refactor added or
-/// split: the search sheet, the Performance snapshot, the pets routes, the
+/// split: the search sheet, the Performance snapshot, the
 /// skills target, and the STT/auxiliary payloads of the Models page.
 final class NavigationScreensTests: XCTestCase {
 
@@ -82,18 +82,6 @@ final class NavigationScreensTests: XCTestCase {
         XCTAssertEqual(UsageFormat.compact(999), "999")
         XCTAssertEqual(UsageFormat.compact(1_500), "1.5K")
         XCTAssertEqual(UsageFormat.compact(2_300_000), "2.3M")
-    }
-
-    // MARK: - Pets (`modules/studio/routes/{petdex,pets}.ts`)
-
-    /// The old `/api/hermes/...` prefix answered 404 for every pets call.
-    func testPetsRoutesLiveUnderTheStudioModule() {
-        XCTAssertEqual(APIClient.petdexManifestPath, "/api/studio/petdex/manifest")
-        XCTAssertEqual(APIClient.petsActivePath, "/api/studio/pets/active")
-        XCTAssertEqual(APIClient.petsAdoptPath, "/api/studio/pets/adopt")
-        for path in [APIClient.petdexManifestPath, APIClient.petsActivePath, APIClient.petsAdoptPath] {
-            XCTAssertFalse(path.hasPrefix("/api/hermes/"), path)
-        }
     }
 
     // MARK: - Skills per agent (`api/hermes/skills.ts` `target`)

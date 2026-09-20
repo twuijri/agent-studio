@@ -442,12 +442,6 @@ MCP_SERVERS = [
      "tool_details": [{"name": "read_file", "description": "Read a file"}, {"name": "list_directory", "description": "List files"}],
      "raw_config": {"transport": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]}},
 ]
-PETS = [
-    {"slug": "luna", "displayName": "Luna", "kind": "cat", "submittedBy": "Hermes", "previewUrl": "/mock/pet.png"},
-    {"slug": "barq", "displayName": "Barq", "kind": "fox", "submittedBy": "Studio", "previewUrl": "/mock/pet.png"},
-]
-ACTIVE_PET = {"enabled": True, "slug": "luna", "displayName": "Luna", "kind": "cat", "scale": 1.0,
-              "spritesheetDataUrl": "data:image/png;base64," + base64.b64encode(LOGO).decode()}
 
 # GET /api/studio/tts/settings — the envelope the TTS controller returns:
 # `settings` rows with non-secret options, `secrets.apiKey` as the marker
@@ -813,7 +807,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
-        if path in ('/logo.png', '/mock/pet.png'):
+        if path == '/logo.png':
             self.send_response(200)
             self.send_header('Content-Type', 'image/png')
             self.send_header('Content-Length', str(len(LOGO)))
@@ -925,9 +919,6 @@ class Handler(BaseHTTPRequestHandler):
             self.send({"content": SKILL_CONTENT.get(name, f"# {name}\n")})
         elif path == '/api/hermes/plugins': self.send({"plugins": PLUGINS, "warnings": []})
         elif path == '/api/hermes/mcp/servers': self.send({"servers": MCP_SERVERS})
-        elif path == '/api/hermes/petdex/manifest':
-            self.send({"generatedAt": "2026-07-31", "total": len(PETS), "pets": PETS})
-        elif path == '/api/hermes/pets/active': self.send({"pet": ACTIVE_PET})
         elif path == '/api/studio/tts/settings':
             self.send({"settings": TTS_SETTINGS, "activeProvider": TTS_ACTIVE_PROVIDER})
         elif path == '/api/studio/stt/settings':
@@ -1102,11 +1093,6 @@ class Handler(BaseHTTPRequestHandler):
             self.send({"success": True})
         elif path == '/api/hermes/mcp/reload' or re.fullmatch(r'/api/hermes/mcp/servers/[^/]+/test', path):
             self.send({"success": True})
-        elif path == '/api/hermes/pets/adopt':
-            pet = next((item for item in PETS if item['slug'] == body.get('slug')), PETS[0])
-            ACTIVE_PET.update({"enabled": True, "slug": pet['slug'], "displayName": pet['displayName'],
-                               "kind": pet['kind'], "scale": 1.0})
-            self.send({"pet": ACTIVE_PET})
         elif re.fullmatch(r'/api/hermes/jobs/[^/]+/(pause|resume|run)', path):
             job_id, action = path.rsplit('/', 2)[1:]
             job = self.find_job(unquote(job_id))
@@ -1220,10 +1206,6 @@ class Handler(BaseHTTPRequestHandler):
                 server['raw_config'] = body.get('config', server['raw_config'])
                 server['transport'] = server['raw_config'].get('transport', server['transport'])
             self.send({"success": True})
-            return
-        if path == '/api/hermes/pets/active':
-            ACTIVE_PET.update(body)
-            self.send({"pet": ACTIVE_PET})
             return
         match = re.fullmatch(r'/api/hermes/jobs/([^/]+)', path)
         job = self.find_job(unquote(match.group(1))) if match else None

@@ -101,36 +101,6 @@ private struct MCPEditor: View {
     private func test() async { do { let result = try await store.api.testMCP(name); testResult = result.string("message", "status").nilIfEmpty ?? String(localized: "Connection successful") } catch { testResult = error.localizedDescription } }
 }
 
-struct PetsView: View {
-    @EnvironmentObject private var store: AppStore
-    @State private var pets: [Pet] = []; @State private var active: Set<String> = []; @State private var loading = true
-    var body: some View {
-        ScrollView { LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), spacing: 12)], spacing: 12) { ForEach(pets) { pet in Button { Task { await toggle(pet) } } label: { VStack(spacing: 11) { Text(pet.emoji).font(.system(size: 44)); Text(pet.name).font(.headline).foregroundStyle(.primary); Text(pet.species).font(.caption).foregroundStyle(.secondary); Text(pet.description).font(.caption2).foregroundStyle(.secondary).lineLimit(3); StatusPill(text: active.contains(pet.id) ? String(localized: "Active") : String(localized: "Adopt"), color: active.contains(pet.id) ? .green : CoreHubTokens.Palette.accent) }.frame(maxWidth: .infinity).padding(14).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 19)).overlay(RoundedRectangle(cornerRadius: 19).stroke(active.contains(pet.id) ? Color.green.opacity(0.4) : .clear)) }.buttonStyle(.plain) } }.padding() }.background(Color(uiColor: .systemGroupedBackground)).navigationTitle(NavDestination.pets.title).navigationBarTitleDisplayMode(.inline).overlay { if loading { ProgressView() } }.refreshable { await load() }.task { await load() }
-    }
-    private func load() async {
-        loading = true
-        async let manifestRequest = store.api.petManifest()
-        async let activeRequest = store.api.activePets()
-        do {
-            pets = try await manifestRequest
-            let activePets = try await activeRequest
-            active = Set(activePets.map(\.id))
-        } catch { store.errorMessage = error.localizedDescription }
-        loading = false
-    }
-    private func toggle(_ pet: Pet) async {
-        do {
-            if active.contains(pet.id) {
-                try await store.api.setPet(pet.id, profile: store.selectedProfile, active: false)
-                active.removeAll()
-            } else {
-                try await store.api.adoptPet(pet.id, profile: store.selectedProfile)
-                active = [pet.id]
-            }
-        } catch { store.errorMessage = error.localizedDescription }
-    }
-}
-
 /// Provider sign-in — the phone's stand-in for the web's Anthropic / Codex /
 /// xAI / Nous login modals on the Models screen. Credentials, connection
 /// tests and model refresh live on the provider itself, in

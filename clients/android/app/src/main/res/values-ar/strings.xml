@@ -705,15 +705,6 @@
     <string name="mcp_url">رابط السيرفر</string>
     <string name="mcp_args">المعاملات، واحد في كل سطر</string>
     <string name="mcp_advanced_json">إعداد JSON المتقدم</string>
-    <string name="pets_count">%1$d حيوان مرافق</string>
-    <string name="pets_active">الحيوان النشط</string>
-    <string name="pets_scale">الحجم: %1$.1f×</string>
-    <string name="pets_search">البحث في الحيوانات</string>
-    <string name="pets_empty">لم نجد حيوانات مرافقة</string>
-    <string name="pets_empty_note">امسح البحث أو حدّث قائمة Petdex.</string>
-    <string name="pets_adopt">اختيار</string>
-    <string name="pets_adopted_button">تم اختياره</string>
-    <string name="pets_adopted">تم تفعيل الحيوان المرافق الجديد</string>
     <string name="insights_days">%1$d يوم</string>
     <string name="insights_tokens">التوكن</string>
     <string name="insights_sessions">الجلسات</string>
@@ -861,7 +852,6 @@
     <string name="nav_performance">الأداء</string>
     <string name="nav_skills_usage">استخدام المهارات</string>
     <string name="nav_theme">السمة</string>
-    <string name="nav_pets">الحيوانات</string>
     <string name="nav_profiles">الملفات الشخصية</string>
     <string name="nav_conversation">المحادثة</string>
     <string name="nav_room">الغرفة</string>

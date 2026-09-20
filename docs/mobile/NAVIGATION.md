@@ -29,7 +29,7 @@
   «محادثة» · `Group Chat`/«الغرف» · `Workflow`/«سير العمل» · `History`/«السجل»
   · `Settings`/«الإعدادات» · `Logs`/«السجلات» · `Usage`/«الاستخدام» ·
   `Performance`/«الأداء» · `Skills Usage`/«استخدام المهارات» · `Theme`/«السمة»
-  · `Pets`/«الحيوانات» · `Profiles`/«الملفات الشخصية» · `Presets`/«الإعدادات
+  · `Profiles`/«الملفات الشخصية» · `Presets`/«الإعدادات
   المسبقة» (تحت وكيل dsh وحده، §٤).
 
 ## ١) القائمة الجانبية (متطابقة على المنصتين)
@@ -79,12 +79,11 @@
   الإدخال الصوتي، لغة الإملاء، الردود المنطوقة، التحديث الذاتي على أندرويد)
   و`About`.
 - قسم `Tools` في أسفل الشاشة يقابل `AppSidebar.vue:113-317` بالترتيب والأسماء:
-  `Logs` · `Usage` · `Performance` (مشرف) · `Skills Usage` · `Theme` · `Pets` ·
+  `Logs` · `Usage` · `Performance` (مشرف) · `Skills Usage` · `Theme` ·
   `Profiles` (مشرف). كل واحد شاشة **مختلفة** بعنوانها نفسه:
   `Usage` = `UsageView.vue` (رموز الاستخدام)، `Performance` =
   `PerformanceView.vue` (عمليات وقت التشغيل)، `Skills Usage` =
-  `SkillsUsageView.vue`، `Theme` = `ThemeView.vue` (السمة والخلفية)، `Pets` =
-  `PetdexView.vue`. لا يجوز أن يفتح مدخلان الشاشة نفسها.
+  `SkillsUsageView.vue`، `Theme` = `ThemeView.vue` (السمة والخلفية). لا يجوز أن يفتح مدخلان الشاشة نفسها.
 
 **يُحذف**: شاشة/صفحة «قائمة الإعدادات» الوسيطة على المنصتين، وقسما «متقدّم»
 و«أدوات مساحة العمل» في iOS، وقسم «أدوات هرمس» تحت مدير الوكلاء في أندرويد.
@@ -121,7 +120,8 @@
 الملف الشخصي «تحرير الإعدادات» (`ProfileCard.vue:100-107`). `Runtime
 versions` — سطح المكتب فقط، لا مدخل لها على الهاتف. `Webhooks` — تبويب في الإعدادات فقط.
 `Connections` — الشريط الأساسي فقط. `Insights` — تُفكَّك إلى `Usage` و
-`Performance`. `Appearance` — تُسمّى `Theme`. `Petdex` — يُسمّى `Pets`.
+`Performance`. `Appearance` — تُسمّى `Theme`. `Petdex` — أُزيلت من Core Hub كلّه
+(2026-09-20)، فلا مدخل ولا شاشة لها على الهاتف.
 
 ## ٥) التحقق
 

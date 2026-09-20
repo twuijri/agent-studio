@@ -68,7 +68,6 @@ class ChannelSchemaTest {
             "SkillScreen" to "AgentToolScreens.kt",
             "PluginsScreen" to "AgentToolScreens.kt",
             "McpScreen" to "AgentToolScreens.kt",
-            "PetsScreen" to "AgentToolScreens.kt",
             "CronJobsScreen" to "CronJobs.kt",
             "CronJobEditorScreen" to "CronJobs.kt",
             "CronHistoryScreen" to "CronJobs.kt",

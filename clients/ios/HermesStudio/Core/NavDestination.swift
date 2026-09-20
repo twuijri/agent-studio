@@ -16,7 +16,7 @@ enum NavDestination: String, CaseIterable, Hashable, Identifiable {
     // Segmented switch (`PageSidebarNav.vue:207-288`).
     case chat, groupChat, workflow, history
     // The gear and the Tools section of Settings (`AppSidebar.vue:113-317`).
-    case settings, logs, usage, performance, skillsUsage, theme, pets, profiles
+    case settings, logs, usage, performance, skillsUsage, theme, profiles
     // Root content with a payload.
     case conversation, room, workflowDetail, workflowRun
     // Under the agent (§4): entered from an Agent Manager card only.
@@ -63,7 +63,7 @@ enum NavDestination: String, CaseIterable, Hashable, Identifiable {
     static let segments: [NavDestination] = [.chat, .groupChat, .workflow, .history]
 
     /// Settings → Tools, in the desktop order (`AppSidebar.vue:113-317`).
-    static let tools: [NavDestination] = [.logs, .usage, .performance, .skillsUsage, .theme, .pets, .profiles]
+    static let tools: [NavDestination] = [.logs, .usage, .performance, .skillsUsage, .theme, .profiles]
 
     /// Entries the desktop gates behind super-admin (`router/index.ts:196-201`,
     /// `AppSidebar.vue:56,194`).
@@ -93,7 +93,7 @@ enum NavNamingTable {
         .agentManager: "Agent Manager", .models: "Models", .chat: "Chat", .groupChat: "Group Chat",
         .workflow: "Workflow", .history: "History", .settings: "Settings", .logs: "Logs",
         .usage: "Usage", .performance: "Performance", .skillsUsage: "Skills Usage", .theme: "Theme",
-        .pets: "Pets", .profiles: "Profiles", .presets: "Presets",
+        .profiles: "Profiles", .presets: "Presets",
     ]
 
     static let arabic: [NavDestination: String] = [
@@ -101,6 +101,6 @@ enum NavNamingTable {
         .agentManager: "مدير الوكلاء", .models: "النماذج", .chat: "محادثة", .groupChat: "الغرف",
         .workflow: "سير العمل", .history: "السجل", .settings: "الإعدادات", .logs: "السجلات",
         .usage: "الاستخدام", .performance: "الأداء", .skillsUsage: "استخدام المهارات", .theme: "السمة",
-        .pets: "الحيوانات", .profiles: "الملفات الشخصية", .presets: "الإعدادات المسبقة",
+        .profiles: "الملفات الشخصية", .presets: "الإعدادات المسبقة",
     ]
 }

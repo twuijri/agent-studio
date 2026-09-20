@@ -31,7 +31,7 @@ enum class Screen {
     Loading, Onboarding, Login,
     Chats, Conversation, Groups, Room, Workflows, Workflow, WorkflowRun, History,
     Connections, AgentManager, Models, Settings,
-    Logs, Usage, Performance, SkillsUsage, Theme, Pets, Profiles,
+    Logs, Usage, Performance, SkillsUsage, Theme, Profiles,
     Agent, CronJobs, CronJob, CronHistory, Kanban, KanbanTask, Channels, Channel,
     Skills, Skill, Plugins, Mcp, Memory, Journey, HermesSettings,
     EkkoMemory, EkkoSkills, EkkoMcp, EkkoSettings, AgentSettings, DshPlugins, DshPresets,
@@ -390,7 +390,6 @@ data class UiState(
     val pluginsUi: PluginsUiState = PluginsUiState(),
     val dshUi: DshUiState = DshUiState(),
     val mcpUi: McpUiState = McpUiState(),
-    val petsUi: PetsUiState = PetsUiState(),
     val usageStats: UsageStats? = null,
     val usageDays: Int = 30,
     val runtimePerformance: RuntimePerformance? = null,
@@ -4446,11 +4445,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun openPets() {
-        _state.update { it.copy(screen = Screen.Pets, error = null, notice = null) }
-        loadPets()
-    }
-
     fun openUsage(days: Int = _state.value.usageDays) {
         _state.update { it.copy(screen = Screen.Usage, error = null, notice = null) }
         refreshUsage(days)
@@ -4476,56 +4470,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { withContext(Dispatchers.IO) { api.runtimePerformance() } }
                 .onSuccess { performance -> _state.update { it.copy(runtimePerformance = performance, loadingPerformance = false) } }
                 .onFailure { failure -> _state.update { it.copy(loadingPerformance = false, error = failure.readableMessage(localized)) } }
-        }
-    }
-
-    fun refreshPets() = loadPets()
-
-    private fun loadPets() {
-        _state.update { it.copy(petsUi = it.petsUi.copy(loading = true)) }
-        viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.petdex() to api.activePet() } }
-                .onSuccess { (pets, active) ->
-                    _state.update { it.copy(petsUi = it.petsUi.copy(loading = false, actionSlug = null, pets = pets, active = active)) }
-                }
-                .onFailure { failure ->
-                    _state.update {
-                        it.copy(petsUi = it.petsUi.copy(loading = false, actionSlug = null), error = failure.readableMessage(localized))
-                    }
-                }
-        }
-    }
-
-    fun adoptPet(slug: String) {
-        _state.update { it.copy(petsUi = it.petsUi.copy(actionSlug = slug), error = null) }
-        viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.adoptPet(slug) } }
-                .onSuccess { active ->
-                    _state.update {
-                        it.copy(petsUi = it.petsUi.copy(actionSlug = null, active = active), notice = str(R.string.pets_adopted))
-                    }
-                }
-                .onFailure { failure ->
-                    _state.update {
-                        it.copy(petsUi = it.petsUi.copy(actionSlug = null), error = failure.readableMessage(localized))
-                    }
-                }
-        }
-    }
-
-    fun setActivePet(enabled: Boolean? = null, scale: Double? = null) {
-        val slug = _state.value.petsUi.active?.slug ?: return
-        _state.update { it.copy(petsUi = it.petsUi.copy(actionSlug = slug), error = null) }
-        viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.updateActivePet(enabled, scale) } }
-                .onSuccess { active ->
-                    _state.update { it.copy(petsUi = it.petsUi.copy(actionSlug = null, active = active)) }
-                }
-                .onFailure { failure ->
-                    _state.update {
-                        it.copy(petsUi = it.petsUi.copy(actionSlug = null), error = failure.readableMessage(localized))
-                    }
-                }
         }
     }
 
@@ -5759,7 +5703,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             NavDestination.performance -> openPerformance()
             NavDestination.skillsUsage -> openSkillsUsage()
             NavDestination.theme -> openTheme()
-            NavDestination.pets -> openPets()
             NavDestination.profiles -> openProfiles()
             else -> Unit
         }

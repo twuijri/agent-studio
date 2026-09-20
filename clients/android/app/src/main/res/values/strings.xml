@@ -706,15 +706,6 @@
     <string name="mcp_url">Server URL</string>
     <string name="mcp_args">Arguments, one per line</string>
     <string name="mcp_advanced_json">Advanced JSON</string>
-    <string name="pets_count">%1$d companions</string>
-    <string name="pets_active">Active companion</string>
-    <string name="pets_scale">Size: %1$.1f×</string>
-    <string name="pets_search">Search companions</string>
-    <string name="pets_empty">No companions found</string>
-    <string name="pets_empty_note">Clear the search or refresh the Petdex manifest.</string>
-    <string name="pets_adopt">Adopt</string>
-    <string name="pets_adopted_button">Adopted</string>
-    <string name="pets_adopted">Your new companion is active</string>
     <string name="insights_days">%1$d days</string>
     <string name="insights_tokens">Tokens</string>
     <string name="insights_sessions">Sessions</string>
@@ -862,7 +853,6 @@
     <string name="nav_performance">Performance</string>
     <string name="nav_skills_usage">Skills Usage</string>
     <string name="nav_theme">Theme</string>
-    <string name="nav_pets">Pets</string>
     <string name="nav_profiles">Profiles</string>
     <string name="nav_conversation">Conversation</string>
     <string name="nav_room">Room</string>

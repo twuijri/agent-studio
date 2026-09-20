@@ -96,23 +96,6 @@ data class McpServer(
     val rawConfig: String,
 )
 
-data class PetdexPet(
-    val slug: String,
-    val displayName: String,
-    val kind: String,
-    val submittedBy: String?,
-    val previewUrl: String?,
-)
-
-data class ActivePet(
-    val enabled: Boolean,
-    val slug: String,
-    val displayName: String,
-    val kind: String,
-    val scale: Double,
-    val spritesheetDataUrl: String?,
-)
-
 data class KanbanUiState(
     val loading: Boolean = false,
     val actionId: String? = null,
@@ -282,12 +265,5 @@ data class McpUiState(
     val servers: List<McpServer> = emptyList(),
     /** Null for Hermes; a coding agent id when the screen was opened under that agent's card. */
     val agentId: String? = null,
-)
-
-data class PetsUiState(
-    val loading: Boolean = false,
-    val actionSlug: String? = null,
-    val pets: List<PetdexPet> = emptyList(),
-    val active: ActivePet? = null,
 )
 

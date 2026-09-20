@@ -52,7 +52,7 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
     Current Account, Account Management, Webhooks, Display, Proxy, Compression,
     Privacy, Models (the key form, titled "Provider keys", with a link to the Models
     page) — then `This device` and `About`, then a `Tools` section: `Logs`, `Usage`,
-    `Performance` (super-admin), `Skills Usage`, `Theme`, `Pets`, `Profiles`
+    `Performance` (super-admin), `Skills Usage`, `Theme`, `Profiles`
     (super-admin). Each row is a different screen with the row's own title
   - **Agent Manager**: the agent cards, nothing else. A card opens its agent:
     Hermes lists `Jobs · Kanban · Channels · Skills · Plugins · MCP · Memory ·
@@ -104,10 +104,10 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
 - **Skills are native and editable** for Hermes, Claude, and Codex targets: search,
   enable, pin, import a ZIP, open `SKILL.md`, edit it, save it, or delete a local
   skill
-- **Plugins, MCP, and Pets are native too**: inspect or toggle standalone plugins;
+- **Plugins and MCP are native too**: inspect or toggle standalone plugins;
   add, edit, test, reload, and delete MCP servers without losing advanced JSON
   (Hermes' under the Hermes card, a coding agent's under its own card, Ekko's under
-  Ekko); and adopt, enable, or resize a companion from Settings › Tools › Pets
+  Ekko)
 - **Channels are set up from the app**, on their own screen: enter a bot token (or
   the app id, secret and the rest — each channel asks for exactly the fields the
   server maps), turn a channel on or off, or remove its credentials. Saving writes
@@ -617,7 +617,6 @@ failure.
 | Skills | `GET /api/hermes/skills` · `GET` / `PUT` / `DELETE /api/hermes/skills/{category}/{name}` · `PUT /api/hermes/skills/toggle` · `pin` |
 | Plugins | `GET /api/hermes/plugins` · `POST /api/hermes/plugins/{key}/enable` · `disable` |
 | MCP servers | `GET` · `POST /api/hermes/mcp/servers` · `PATCH` / `DELETE /api/hermes/mcp/servers/{name}` · `POST /api/hermes/mcp/reload` |
-| Petdex and active pet | `GET /api/hermes/petdex/manifest` · `GET` / `PATCH /api/hermes/pets/active` · `POST /api/hermes/pets/adopt` |
 | Check for a new mobile build | `GET /api/studio/app-updates/mobile?platform=android&channel=<channel>` |
 | Download that build (supports `Range`, 206) | the `downloadPath` the check returned |
 | App mark | `GET /logo.png` (static, cached on the device) |
@@ -706,7 +705,7 @@ push, so a local SDK is optional.
 
 `tools/mock-studio.py` answers the REST endpoints the app calls, with sample profiles,
 conversations, accounts, settings, model providers, a room, scheduled jobs, Kanban,
-skills, plugins, MCP servers, TTS and STT providers, and Petdex — enough
+skills, plugins, MCP servers, and TTS and STT providers — enough
 to open and edit every screen. Its TTS routes reproduce the fallback bug on purpose:
 a synthesize call that names no provider is resolved to `edge` and answered with a
 502, `groq` answers a JSON error as HTTP 200, and `elevenlabs` (the profile's active

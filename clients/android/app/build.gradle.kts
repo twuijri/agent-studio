@@ -119,8 +119,6 @@ dependencies {
     }
     // Draws the generated avatar SVG (and a stored SVG data URL) into a bitmap.
     implementation("com.caverock:androidsvg-aar:1.4")
-    // Remote Petdex previews and active data-URI spritesheets.
-    implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("com.google.zxing:core:3.5.3")
     // Reads the Core Hub App-connection QR code on the login screen. Ships its
     // own capture activity, so no CameraX or ML Kit payload is added to the APK.
