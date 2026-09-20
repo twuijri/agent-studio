@@ -6,18 +6,18 @@ import Foundation
 /// `GET /api/hermes/config/auxiliary-models`: the tasks the server knows and
 /// the provider/model configured for each (`AuxiliaryModelsResponse`).
 struct AuxiliaryModels: Equatable {
-    struct Task: Identifiable, Equatable {
+    struct Entry: Identifiable, Equatable {
         let key: String
         let label: String
         var id: String { key }
     }
 
-    let tasks: [Task]
+    let tasks: [Entry]
     /// `auxiliary[taskKey] = { provider, model, base_url, api_key, timeout }`.
     let config: JSON
 
     init(_ json: JSON) {
-        tasks = json.objects("tasks").map { Task(key: $0.string("key"), label: $0.string("label").nilIfEmpty ?? $0.string("key")) }.filter { !$0.key.isEmpty }
+        tasks = json.objects("tasks").map { Entry(key: $0.string("key"), label: $0.string("label").nilIfEmpty ?? $0.string("key")) }.filter { !$0.key.isEmpty }
         config = json.object("auxiliary")
     }
 

@@ -28,7 +28,7 @@ struct AuxiliaryModelsView: View {
         .refreshable { await load() }
     }
 
-    private func taskSection(_ task: AuxiliaryModels.Task) -> some View {
+    private func taskSection(_ task: AuxiliaryModels.Entry) -> some View {
         Section(task.label) {
             TextField("Provider", text: binding(task.key, "provider")).textInputAutocapitalization(.never).autocorrectionDisabled()
             TextField("Model", text: binding(task.key, "model")).textInputAutocapitalization(.never).autocorrectionDisabled()
