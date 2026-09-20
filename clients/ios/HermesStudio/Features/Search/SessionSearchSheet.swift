@@ -166,7 +166,7 @@ enum SessionSearchModel {
 
     /// `getItemTitle`: title, else preview, else the id.
     static func title(of session: SessionSummary) -> String {
-        if let title = session.title.nilIfEmpty { return title }
+        if let title = session.providedTitle?.nilIfEmpty { return title }
         if let preview = session.preview.nilIfEmpty { return preview }
         return session.id
     }

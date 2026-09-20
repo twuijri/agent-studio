@@ -121,6 +121,8 @@ struct AvatarSpec: Hashable {
 struct SessionSummary: Identifiable, Hashable {
     let id: String
     var title: String
+    /// The title the server actually sent, before the "New conversation" placeholder.
+    var providedTitle: String?
     var model: String
     var provider: String
     var updatedAt: String
@@ -149,7 +151,8 @@ struct SessionSummary: Identifiable, Hashable {
 
     init(_ json: JSON, profile fallbackProfile: String = "") {
         id = json.string("id", "session_id", "sessionId")
-        title = json.string("title", "name").nilIfEmpty ?? String(localized: "New conversation")
+        providedTitle = json.string("title", "name").nilIfEmpty
+        title = providedTitle ?? String(localized: "New conversation")
         model = json.string("model")
         provider = json.string("provider")
         updatedAt = json.string("last_active", "ended_at", "started_at", "updatedAt", "updated_at", "created_at", "timestamp")

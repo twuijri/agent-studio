@@ -36,7 +36,7 @@ class NavigationParityTest {
     private val iosEnglish = File("../../ios/HermesStudio/Resources/en.lproj/Localizable.strings")
     private val iosArabic = File("../../ios/HermesStudio/Resources/ar.lproj/Localizable.strings")
 
-    /** The 37 cases the contract's registry has, in declaration order. */
+    /** The 38 cases the contract's registry has, in declaration order. */
     private val expectedCases = listOf(
         "newChat", "search", "deviceConnections", "agentManager", "models", "chat", "groupChat", "workflow", "history",
         "settings", "logs", "usage", "performance", "skillsUsage", "theme", "pets", "profiles", "conversation", "room",

@@ -88,7 +88,7 @@ final class NavigationContractTests: XCTestCase {
     func testShellDestinationViewCoversEveryDestination() {
         let covered = NavDestination.allCases.map { ShellDestinationView(destination: $0).destination }
         XCTAssertEqual(covered, NavDestination.allCases)
-        XCTAssertEqual(NavDestination.allCases.count, 37)
+        XCTAssertEqual(NavDestination.allCases.count, 38)
     }
 
     func testAgentFamilyResolvesTheAgentThatWasOpenedLast() {
