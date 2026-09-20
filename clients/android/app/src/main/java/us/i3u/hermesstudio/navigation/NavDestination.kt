@@ -2,6 +2,7 @@ package us.i3u.hermesstudio.navigation
 
 import androidx.annotation.StringRes
 import us.i3u.hermesstudio.AgentKind
+import us.i3u.hermesstudio.DSH_AGENT_ID
 import us.i3u.hermesstudio.R
 import us.i3u.hermesstudio.Screen
 
@@ -48,7 +49,8 @@ enum class NavDestination(@StringRes val labelKey: Int, val screens: Set<Screen>
     kanban(R.string.nav_kanban, setOf(Screen.Kanban)),
     channels(R.string.nav_channels, setOf(Screen.Channels)),
     skills(R.string.nav_skills, setOf(Screen.Skills, Screen.EkkoSkills)),
-    plugins(R.string.nav_plugins, setOf(Screen.Plugins)),
+    plugins(R.string.nav_plugins, setOf(Screen.Plugins, Screen.DshPlugins)),
+    presets(R.string.nav_presets, setOf(Screen.DshPresets)),
     mcp(R.string.nav_mcp, setOf(Screen.Mcp, Screen.EkkoMcp)),
     memory(R.string.nav_memory, setOf(Screen.Memory, Screen.EkkoMemory)),
     journey(R.string.nav_journey, setOf(Screen.Journey)),
@@ -70,15 +72,22 @@ enum class NavDestination(@StringRes val labelKey: Int, val screens: Set<Screen>
         val settingsTools: List<NavDestination> = listOf(logs, usage, performance, skillsUsage, theme, pets, profiles)
 
         /**
+         * The two rows only the DeepSeek Harness has, ahead of the common
+         * coding-agent rows (`CodingAgentConfigSidebar.vue:19-24`).
+         */
+        val dshSections: List<NavDestination> = listOf(plugins, presets)
+
+        /**
          * What lives under one agent's card (§4): capabilities first, settings
          * last. Hermes follows `HermesConfigSidebar.vue:67-241`, Ekko
          * `EkkoConfigSidebar.vue:54-79`, a coding agent
-         * `CodingAgentConfigSidebar.vue:19-24`.
+         * `CodingAgentConfigSidebar.vue:19-24` — which lists Plugins and
+         * Presets for `dsh` alone, so the coding branch needs the agent id.
          */
-        fun agentSections(kind: AgentKind): List<NavDestination> = when (kind) {
+        fun agentSections(kind: AgentKind, agentId: String? = null): List<NavDestination> = when (kind) {
             AgentKind.Hermes -> listOf(jobs, kanban, channels, skills, plugins, mcp, memory, journey, hermesSettings)
             AgentKind.BuiltIn -> listOf(memory, skills, mcp, ekkoSettings)
-            AgentKind.Coding -> listOf(skills, mcp, codingAgentSettings)
+            AgentKind.Coding -> listOf(skills, mcp, codingAgentSettings).let { if (agentId == DSH_AGENT_ID) dshSections + it else it }
         }
 
         /** The destination an agent card itself opens. */

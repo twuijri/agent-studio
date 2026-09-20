@@ -2057,6 +2057,82 @@ class HermesApi(
         )
     }
 
+    // ── DeepSeek Harness (`api/coding-agents/dsh.ts`); every route is super-admin only on the server.
+
+    /** GET /api/coding-agents/dsh/plugin-inventory — the shipped presets with their plugin entries, and the web packages. */
+    fun dshPluginInventory(): DshPluginInventory {
+        val result = call("/api/coding-agents/dsh/plugin-inventory")
+        val presets = result.optJSONArray("presets") ?: JSONArray()
+        val web = result.optJSONObject("web")
+        val packages = web?.optJSONArray("packages") ?: JSONArray()
+        return DshPluginInventory(
+            packageVersion = result.optString("packageVersion"),
+            defaultPreset = result.optString("defaultPreset"),
+            presets = (0 until presets.length()).mapNotNull { index ->
+                val item = presets.optJSONObject(index) ?: return@mapNotNull null
+                val entries = item.optJSONArray("entries") ?: JSONArray()
+                DshPluginPreset(
+                    id = item.optString("id"),
+                    name = item.optString("name").ifBlank { item.optString("id") },
+                    description = item.optString("description"),
+                    trust = item.optString("trust"),
+                    isDefault = item.optBoolean("isDefault"),
+                    error = item.optString("error"),
+                    entries = (0 until entries.length()).mapNotNull { at ->
+                        val entry = entries.optJSONObject(at) ?: return@mapNotNull null
+                        DshPluginEntry(
+                            entryId = entry.optString("entryId"),
+                            title = entry.optString("title"),
+                            description = entry.optString("description"),
+                            moduleName = entry.optString("moduleName"),
+                            state = DshPluginState.parse(entry.opt("configuredEnabled")),
+                        )
+                    },
+                )
+            },
+            webRevision = web?.optString("revision").orEmpty(),
+            webPackages = (0 until packages.length()).mapNotNull { index ->
+                val item = packages.optJSONObject(index) ?: return@mapNotNull null
+                DshWebPackage(
+                    name = item.optString("name"),
+                    title = item.optString("title"),
+                    description = item.optString("description"),
+                    version = item.optString("version"),
+                    error = item.optString("error"),
+                )
+            },
+        )
+    }
+
+    /** GET /api/coding-agents/dsh/agent-presets — the roster with the default marked. */
+    fun dshAgentPresets(): DshAgentPresets = parseDshAgentPresets(call("/api/coding-agents/dsh/agent-presets"))
+
+    /** GET /api/coding-agents/dsh/agent-presets/{id} — the preset file, read-only on the phone. */
+    fun readDshAgentPreset(id: String): String =
+        call("/api/coding-agents/dsh/agent-presets/${enc(id)}").optString("content")
+
+    /** PUT /api/coding-agents/dsh/agent-presets/{id}/default — answers with the whole roster, like the list. */
+    fun setDefaultDshAgentPreset(id: String): DshAgentPresets =
+        parseDshAgentPresets(call("/api/coding-agents/dsh/agent-presets/${enc(id)}/default", "PUT"))
+
+    private fun parseDshAgentPresets(result: JSONObject): DshAgentPresets {
+        val array = result.optJSONArray("presets") ?: JSONArray()
+        return DshAgentPresets(
+            presets = (0 until array.length()).mapNotNull { index ->
+                val item = array.optJSONObject(index) ?: return@mapNotNull null
+                DshAgentPreset(
+                    id = item.optString("id"),
+                    name = item.optString("name").ifBlank { item.optString("id") },
+                    description = item.optString("description"),
+                    trust = item.optString("trust"),
+                    isDefault = item.optBoolean("isDefault"),
+                    broken = item.optString("broken"),
+                )
+            },
+            authorable = result.optBoolean("authorable"),
+        )
+    }
+
     fun mcpServers(): List<McpServer> = parseMcpServers("/api/hermes/mcp/servers")
 
     /** GET /api/coding-agents/{id}/mcp/servers — the same rows, for one coding agent. */
@@ -3290,6 +3366,63 @@ data class AgentUpdateCheck(
     val latestVersion: String,
     val updateAvailable: Boolean,
     val message: String,
+)
+
+/** One row of `GET /api/coding-agents/dsh/agent-presets` (`DshAgentPreset` in `api/coding-agents/dsh.ts`). */
+data class DshAgentPreset(
+    val id: String,
+    val name: String,
+    val description: String,
+    /** `system` (shipped) or `user` (copied on the server). */
+    val trust: String,
+    val isDefault: Boolean,
+    /** Why the preset cannot be used, when it cannot; blank otherwise. */
+    val broken: String,
+)
+
+data class DshAgentPresets(val presets: List<DshAgentPreset>, val authorable: Boolean)
+
+/** `configuredEnabled` of a plugin entry: `true`, `false` or the string `"conditional"`. */
+enum class DshPluginState {
+    Enabled, Disabled, Conditional;
+
+    companion object {
+        fun parse(raw: Any?): DshPluginState = when (raw) {
+            true -> Enabled
+            "conditional" -> Conditional
+            else -> Disabled
+        }
+    }
+}
+
+data class DshPluginEntry(
+    val entryId: String,
+    val title: String,
+    val description: String,
+    val moduleName: String,
+    val state: DshPluginState,
+)
+
+/** One preset of `GET /api/coding-agents/dsh/plugin-inventory` with its plugin entries. */
+data class DshPluginPreset(
+    val id: String,
+    val name: String,
+    val description: String,
+    val trust: String,
+    val isDefault: Boolean,
+    val error: String,
+    val entries: List<DshPluginEntry>,
+)
+
+data class DshWebPackage(val name: String, val title: String, val description: String, val version: String, val error: String)
+
+data class DshPluginInventory(
+    val packageVersion: String,
+    val defaultPreset: String,
+    val presets: List<DshPluginPreset>,
+    /** The `If-Match` revision the desktop sends when it changes web packages; the phone only shows it. */
+    val webRevision: String,
+    val webPackages: List<DshWebPackage>,
 )
 
 /** One of the two files the per-agent settings page edits. */

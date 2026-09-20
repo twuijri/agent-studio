@@ -33,7 +33,7 @@ enum class Screen {
     Logs, Usage, Performance, SkillsUsage, Theme, Pets, Profiles,
     Agent, CronJobs, CronJob, CronHistory, Kanban, KanbanTask, Channels, Channel,
     Skills, Skill, Plugins, Mcp, Memory, Journey, HermesSettings,
-    EkkoMemory, EkkoSkills, EkkoMcp, EkkoSettings, AgentSettings,
+    EkkoMemory, EkkoSkills, EkkoMcp, EkkoSettings, AgentSettings, DshPlugins, DshPresets,
     GlobalAgent, Files,
 }
 
@@ -388,6 +388,7 @@ data class UiState(
     val kanban: KanbanUiState = KanbanUiState(),
     val skillsUi: SkillsUiState = SkillsUiState(),
     val pluginsUi: PluginsUiState = PluginsUiState(),
+    val dshUi: DshUiState = DshUiState(),
     val mcpUi: McpUiState = McpUiState(),
     val petsUi: PetsUiState = PetsUiState(),
     val usageStats: UsageStats? = null,
@@ -4044,6 +4045,87 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ── DeepSeek Harness (dsh): Plugins and Presets (`CodingAgentConfigView.vue:139-140`)
+
+    /**
+     * dsh › Plugins (`DshPluginsPanel.vue`): the plugin inventory, read on the
+     * phone. Installing web packages and the plugin settings page (an iframe
+     * over a UI session) stay on the desktop; the screen says so.
+     */
+    fun openDshPlugins() {
+        _state.update { it.copy(screen = Screen.DshPlugins, error = null, notice = null) }
+        loadDshPlugins()
+    }
+
+    fun refreshDshPlugins() = loadDshPlugins()
+
+    private fun loadDshPlugins() {
+        _state.update { it.copy(dshUi = it.dshUi.copy(loading = true)) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.dshPluginInventory() } }
+                .onSuccess { inventory ->
+                    _state.update { it.copy(dshUi = it.dshUi.copy(loading = false, inventory = inventory)) }
+                }
+                .onFailure { failure ->
+                    _state.update { it.copy(dshUi = it.dshUi.copy(loading = false), error = failure.readableMessage(localized)) }
+                }
+        }
+    }
+
+    /**
+     * dsh › Presets (`DshAgentPresetsPanel.vue`): the agent presets with the
+     * default marked. The phone lists them, shows one's file and makes one
+     * the default (`PUT …/agent-presets/{id}/default`); copying and deleting
+     * stay on the desktop.
+     */
+    fun openDshPresets() {
+        _state.update { it.copy(screen = Screen.DshPresets, dshUi = it.dshUi.copy(viewer = null), error = null, notice = null) }
+        loadDshPresets()
+    }
+
+    fun refreshDshPresets() = loadDshPresets()
+
+    private fun loadDshPresets() {
+        _state.update { it.copy(dshUi = it.dshUi.copy(loading = true)) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.dshAgentPresets() } }
+                .onSuccess { roster -> _state.update { it.copy(dshUi = it.dshUi.withRoster(roster)) } }
+                .onFailure { failure ->
+                    _state.update { it.copy(dshUi = it.dshUi.copy(loading = false), error = failure.readableMessage(localized)) }
+                }
+        }
+    }
+
+    /** Makes [preset] the default; the server answers with the whole roster, like the web panel. */
+    fun selectDshPreset(preset: DshAgentPreset) {
+        if (preset.isDefault || preset.broken.isNotBlank()) return
+        _state.update { it.copy(dshUi = it.dshUi.copy(actionId = preset.id), error = null) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.setDefaultDshAgentPreset(preset.id) } }
+                .onSuccess { roster -> _state.update { it.copy(dshUi = it.dshUi.withRoster(roster)) } }
+                .onFailure { failure ->
+                    _state.update { it.copy(dshUi = it.dshUi.copy(actionId = null), error = failure.readableMessage(localized)) }
+                    loadDshPresets()
+                }
+        }
+    }
+
+    /** Shows the preset's file read-only (`GET …/agent-presets/{id}`). */
+    fun viewDshPreset(preset: DshAgentPreset) {
+        _state.update { it.copy(dshUi = it.dshUi.copy(actionId = preset.id), error = null) }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.readDshAgentPreset(preset.id) } }
+                .onSuccess { content ->
+                    _state.update { it.copy(dshUi = it.dshUi.copy(actionId = null, viewer = DshPresetViewer(preset.name, content))) }
+                }
+                .onFailure { failure ->
+                    _state.update { it.copy(dshUi = it.dshUi.copy(actionId = null), error = failure.readableMessage(localized)) }
+                }
+        }
+    }
+
+    fun closeDshPresetViewer() = _state.update { it.copy(dshUi = it.dshUi.copy(viewer = null)) }
+
     /** MCP for Hermes (`agentId` null) or for one coding agent (`/api/coding-agents/{id}/mcp`). */
     fun openMcp(agentId: String? = null) {
         _state.update { it.copy(screen = Screen.Mcp, mcpUi = it.mcpUi.copy(agentId = agentId, servers = emptyList()), error = null, notice = null) }
@@ -5433,7 +5515,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             NavDestination.jobs -> openCronJobs()
             NavDestination.kanban -> openKanban()
             NavDestination.channels -> openChannels()
-            NavDestination.plugins -> openPlugins()
+            NavDestination.plugins -> if (definition.id == DSH_AGENT_ID) openDshPlugins() else openPlugins()
+            NavDestination.presets -> openDshPresets()
             NavDestination.journey -> openJourney()
             NavDestination.hermesSettings -> openHermesSettings()
             NavDestination.ekkoSettings -> openEkkoSettings()

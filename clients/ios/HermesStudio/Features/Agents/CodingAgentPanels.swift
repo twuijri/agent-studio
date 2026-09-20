@@ -81,8 +81,11 @@ struct DshPluginsView: View {
     }
 }
 
-/// DSH → Presets (`DshAgentPresetsPanel.vue`): the agent presets with the
-/// default marked; a preset can be made the default or deleted.
+/// DSH → Presets (`DshAgentPresetsPanel.vue`), the `.presets` destination:
+/// the agent presets with the default marked; a preset can be made the
+/// default (a visible button, and the leading swipe) or, for a user copy,
+/// deleted. Copying a preset and editing its file stay on the desktop, and
+/// the footer says so.
 struct DshPresetsView: View {
     @EnvironmentObject private var store: AppStore
     @State private var presets: [DshPreset] = []
@@ -90,36 +93,52 @@ struct DshPresetsView: View {
 
     var body: some View {
         List {
-            if !loading && presets.isEmpty { Text("No presets.").foregroundStyle(.secondary) }
-            ForEach(presets) { preset in
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(preset.name).font(.headline)
-                        if preset.isDefault { StatusPill(text: String(localized: "Default"), color: CoreHubTokens.Palette.accent) }
-                        Spacer()
-                        Text(preset.trust).font(.caption).foregroundStyle(.secondary)
-                    }
-                    if !preset.description.isEmpty { Text(preset.description).font(.caption).foregroundStyle(.secondary).lineLimit(3) }
-                    if !preset.broken.isEmpty { Text(preset.broken).font(.caption).foregroundStyle(CoreHubTokens.Palette.error) }
-                }
-                .swipeActions(edge: .leading) {
-                    if !preset.isDefault {
-                        Button { Task { await store.attempt({ try await store.api.setDefaultDshPreset(preset.id) }); await load() } } label: { Label("Make default", systemImage: "star") }.tint(.orange)
-                    }
-                }
-                .swipeActions(edge: .trailing) {
-                    if preset.trust == "user" {
-                        Button(role: .destructive) { Task { await store.attempt({ try await store.api.deleteDshPreset(preset.id) }); await load() } } label: { Label("Delete", systemImage: "trash") }
-                    }
-                }
+            Section {
+                if !loading && presets.isEmpty { Text("No presets.").foregroundStyle(.secondary) }
+                ForEach(presets) { preset in presetRow(preset) }
+            } footer: {
+                Text("New dsh sessions start from the default preset. Choose it here; copying a preset and editing its file need the desktop client.")
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Presets")
+        .navigationTitle(NavDestination.presets.title)
         .navigationBarTitleDisplayMode(.inline)
         .overlay { if loading && presets.isEmpty { ProgressView() } }
         .task { await load() }
         .refreshable { await load() }
+    }
+
+    private func presetRow(_ preset: DshPreset) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(preset.name).font(.headline)
+                if preset.isDefault { StatusPill(text: String(localized: "Default"), color: CoreHubTokens.Palette.accent) }
+                Spacer()
+                Text(preset.trust).font(.caption).foregroundStyle(.secondary)
+            }
+            if !preset.description.isEmpty { Text(preset.description).font(.caption).foregroundStyle(.secondary).lineLimit(3) }
+            if !preset.broken.isEmpty { Text(preset.broken).font(.caption).foregroundStyle(CoreHubTokens.Palette.error) }
+            if !preset.isDefault && preset.broken.isEmpty {
+                Button("Use as default") { Task { await makeDefault(preset) } }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+            }
+        }
+        .swipeActions(edge: .leading) {
+            if !preset.isDefault && preset.broken.isEmpty {
+                Button { Task { await makeDefault(preset) } } label: { Label("Make default", systemImage: "star") }.tint(.orange)
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            if preset.trust == "user" {
+                Button(role: .destructive) { Task { await store.attempt({ try await store.api.deleteDshPreset(preset.id) }); await load() } } label: { Label("Delete", systemImage: "trash") }
+            }
+        }
+    }
+
+    private func makeDefault(_ preset: DshPreset) async {
+        await store.attempt({ try await store.api.setDefaultDshPreset(preset.id) })
+        await load()
     }
 
     private func load() async {

@@ -180,6 +180,7 @@ struct ShellDestinationView: View {
         case .channels: ChannelsView()
         case .skills: AgentSkillsScreen(family: family)
         case .plugins: AgentPluginsScreen(family: family)
+        case .presets: DshPresetsView()
         case .mcp: AgentMcpScreen(family: family)
         case .memory: AgentMemoryScreen(family: family)
         case .journey: JourneyView()

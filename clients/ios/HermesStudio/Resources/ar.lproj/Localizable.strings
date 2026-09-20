@@ -823,6 +823,7 @@
 "nav_channels" = "القنوات";
 "nav_skills" = "المهارات";
 "nav_plugins" = "الإضافات";
+"nav_presets" = "الإعدادات المسبقة";
 "nav_mcp" = "MCP";
 "nav_memory" = "الذاكرة";
 "nav_journey" = "الرحلة";
@@ -875,6 +876,8 @@
 "Logging" = "التسجيل";
 "MCP enabled" = "MCP مفعّل";
 "Make default" = "اجعله الافتراضي";
+"Use as default" = "اجعله الافتراضي";
+"New dsh sessions start from the default preset. Choose it here; copying a preset and editing its file need the desktop client." = "تبدأ جلسات dsh الجديدة من الإعداد المسبق الافتراضي. اختره هنا؛ أما نسخ إعداد مسبق أو تحرير ملفه فيحتاج إلى عميل سطح المكتب.";
 "Manage runtime" = "إدارة وقت التشغيل";
 "Maximum tokens" = "الحد الأقصى للرموز";
 "Maximum tool calls" = "الحد الأقصى لنداءات الأدوات";

@@ -242,6 +242,23 @@ data class PluginsUiState(
     val warnings: List<String> = emptyList(),
 )
 
+/** dsh › Plugins and dsh › Presets share one slice: only one of the two screens is open at a time. */
+data class DshUiState(
+    val loading: Boolean = false,
+    /** The preset a select/view call is running for, so its buttons can wait. */
+    val actionId: String? = null,
+    val presets: List<DshAgentPreset> = emptyList(),
+    /** Whether the server can write user presets at all (`DshAgentPresets.authorable`). */
+    val authorable: Boolean = false,
+    val inventory: DshPluginInventory? = null,
+    /** A preset file open read-only. */
+    val viewer: DshPresetViewer? = null,
+) {
+    fun withRoster(roster: DshAgentPresets) = copy(loading = false, actionId = null, presets = roster.presets, authorable = roster.authorable)
+}
+
+data class DshPresetViewer(val title: String, val content: String)
+
 data class McpUiState(
     val loading: Boolean = false,
     val actionName: String? = null,

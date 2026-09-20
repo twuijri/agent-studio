@@ -36,12 +36,12 @@ class NavigationParityTest {
     private val iosEnglish = File("../../ios/HermesStudio/Resources/en.lproj/Localizable.strings")
     private val iosArabic = File("../../ios/HermesStudio/Resources/ar.lproj/Localizable.strings")
 
-    /** The 36 cases the contract's registry has, in declaration order. */
+    /** The 37 cases the contract's registry has, in declaration order. */
     private val expectedCases = listOf(
         "newChat", "search", "deviceConnections", "agentManager", "models", "chat", "groupChat", "workflow", "history",
         "settings", "logs", "usage", "performance", "skillsUsage", "theme", "pets", "profiles", "conversation", "room",
         "workflowDetail", "workflowRun", "agentHermes", "agentEkko", "agentCoding", "jobs", "kanban", "channels", "skills",
-        "plugins", "mcp", "memory", "journey", "hermesSettings", "ekkoSettings", "codingAgentSettings", "globalAgent", "files",
+        "plugins", "presets", "mcp", "memory", "journey", "hermesSettings", "ekkoSettings", "codingAgentSettings", "globalAgent", "files",
     )
 
     /** `caseName(R.string.nav_key, setOf(Screen.A, Screen.B))` → (case, key, screens). */
@@ -155,6 +155,9 @@ class NavigationParityTest {
         assertEquals(listOf("jobs", "kanban", "channels", "skills", "plugins", "mcp", "memory", "journey", "hermesSettings"), agentSections("Hermes"))
         assertEquals(listOf("memory", "skills", "mcp", "ekkoSettings"), agentSections("BuiltIn"))
         assertEquals(listOf("skills", "mcp", "codingAgentSettings"), agentSections("Coding"))
+        // The DeepSeek Harness alone prepends Plugins · Presets (`CodingAgentConfigSidebar.vue:19-24`).
+        assertEquals(listOf("plugins", "presets"), registryList("dshSections"))
+        assertTrue(registry.contains("AgentKind.Coding -> listOf(skills, mcp, codingAgentSettings).let { if (agentId == DSH_AGENT_ID) dshSections + it else it }"))
         // … and no destination sits in two of them (Skills, MCP and Memory
         // exist once per agent, which is one entry each under that agent).
         val appLevel = registryList("rail") + registryList("segments") + registryList("settingsTools")
@@ -164,6 +167,8 @@ class NavigationParityTest {
             assertEquals("$kind lists a section twice", sections.size, sections.toSet().size)
             assertTrue("$kind sections must not repeat an app-level entry", sections.none { it in appLevel })
         }
+        assertTrue("dsh sections must not repeat an app-level entry", registryList("dshSections").none { it in appLevel })
+        assertTrue("Presets exists under dsh only", "presets" !in appLevel && listOf("Hermes", "BuiltIn", "Coding").none { "presets" in agentSections(it) })
 
         // Each list is drawn by exactly one composable.
         assertEquals("the rail is drawn once, in the drawer", 1, uiCount("NavDestination.rail"))
@@ -184,7 +189,7 @@ class NavigationParityTest {
             "openLogs()", "openUsage(", "openPerformance()", "openSkillsUsage(", "openTheme()", "openPets()", "openProfiles()",
             "openCronJobs()", "openKanban()", "openChannels()", "openSkills(", "openPlugins()", "openMcp(", "openHermesMemory()",
             "openJourney()", "openHermesSettings(", "openEkkoMemory()", "openEkkoSkills()", "openEkkoMcp()", "openEkkoSettings()",
-            "openAgentSettings(", "openConnections()", "openAgentManager()", "openModels()", "openSearch()", "openInsights", "openAppearance",
+            "openAgentSettings(", "openDshPlugins()", "openDshPresets()", "openConnections()", "openAgentManager()", "openModels()", "openSearch()", "openInsights", "openAppearance",
             "openSettingsGroup", "openSettingsPage", "openAgentRuntimes", "openEkkoHub", "openWebhooks", "openRuntimeVersions",
         ).forEach { call ->
             val offenders = uiSources.filterValues { it.contains("viewModel.$call") || it.contains("vm.$call") }.keys

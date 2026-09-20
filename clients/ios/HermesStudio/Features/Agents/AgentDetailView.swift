@@ -159,9 +159,6 @@ struct AgentDetailView: View {
                     Label(destination.label, systemImage: AgentDetailView.symbol(for: destination))
                 }
             }
-            if case .coding(let id) = family, id == "dsh" {
-                NavigationLink { DshPresetsView() } label: { Label("Presets", systemImage: "square.on.square.dashed") }
-            }
         } header: { Text(agent.name) }
     }
 
@@ -184,7 +181,7 @@ struct AgentDetailView: View {
         switch family {
         case .hermes: return [.jobs, .kanban, .channels, .skills, .plugins, .mcp, .memory, .journey]
         case .ekko: return [.memory, .skills, .mcp]
-        case let .coding(id): return (id == "dsh" ? [.plugins] : []) + [.skills, .mcp]
+        case let .coding(id): return (id == "dsh" ? [.plugins, .presets] : []) + [.skills, .mcp]
         }
     }
 
@@ -203,6 +200,7 @@ struct AgentDetailView: View {
         case .channels: return "antenna.radiowaves.left.and.right"
         case .skills: return "square.stack.3d.up.fill"
         case .plugins: return "puzzlepiece.extension.fill"
+        case .presets: return "square.on.square.dashed"
         case .mcp: return "server.rack"
         case .memory: return "brain"
         case .journey: return "point.3.filled.connected.trianglepath.dotted"

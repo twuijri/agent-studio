@@ -983,6 +983,35 @@ class HermesApiContractTest {
         assertEquals("DELETE", delete.method)
         assertEquals("/api/coding-agents/codex/mcp/servers/fs", delete.path)
 
+        // dsh › Presets (DshAgentPresetsPanel.vue): the roster, one file, and making one the default.
+        enqueue("""{"presets":[{"id":"default","name":"Default","trust":"system","isDefault":true},{"id":"mine","description":"Copied","trust":"user","isDefault":false,"broken":"agent-preset.json: invalid"}],"authorable":true}""")
+        val roster = api.dshAgentPresets()
+        assertEquals("/api/coding-agents/dsh/agent-presets", server.takeRequest().path)
+        assertTrue(roster.authorable)
+        assertEquals(listOf("Default", "mine"), roster.presets.map { it.name })
+        assertTrue(roster.presets[0].isDefault && roster.presets[0].broken.isBlank())
+        assertEquals("agent-preset.json: invalid", roster.presets[1].broken)
+        enqueue("""{"agentPreset":"default","content":"{\"model\":\"deepseek-chat\"}","trust":"system"}""")
+        assertEquals("{\"model\":\"deepseek-chat\"}", api.readDshAgentPreset("default"))
+        assertEquals("/api/coding-agents/dsh/agent-presets/default", server.takeRequest().path)
+        enqueue("""{"presets":[{"id":"default","trust":"system","isDefault":false},{"id":"my-preset","name":"Mine","trust":"user","isDefault":true}],"authorable":true}""")
+        val selected = api.setDefaultDshAgentPreset("my-preset")
+        val makeDefault = server.takeRequest()
+        assertEquals("PUT", makeDefault.method)
+        assertEquals("/api/coding-agents/dsh/agent-presets/my-preset/default", makeDefault.path)
+        assertEquals("Mine", selected.presets.single { it.isDefault }.name)
+        assertEquals("default", selected.presets.first().name)
+
+        // dsh › Plugins (DshNativePluginsPanel.vue): presets with entries whose configuredEnabled is true, false or "conditional".
+        enqueue("""{"source":"native-presets","packageVersion":"0.4.1","defaultPreset":"default","runtimeConnected":false,"presets":[{"id":"default","name":"Default","trust":"system","isDefault":true,"entries":[{"entryId":"a","title":"Web search","moduleName":"@dsh/web","configuredEnabled":true},{"entryId":"b","moduleName":"@dsh/off","configuredEnabled":false},{"entryId":"c","moduleName":"@dsh/maybe","configuredEnabled":"conditional"}]}],"web":{"profile":"web","revision":"r7","packages":[{"name":"@acme/plugin","version":"1.0.0","requested":"^1","bundle":true,"containsBrowserPart":true,"sourcePath":"/x","error":""}]}}""")
+        val inventory = api.dshPluginInventory()
+        assertEquals("/api/coding-agents/dsh/plugin-inventory", server.takeRequest().path)
+        assertEquals("0.4.1", inventory.packageVersion)
+        assertEquals(listOf(DshPluginState.Enabled, DshPluginState.Disabled, DshPluginState.Conditional), inventory.presets.single().entries.map { it.state })
+        assertEquals("Web search", inventory.presets.single().entries.first().title)
+        assertEquals("r7", inventory.webRevision)
+        assertEquals("@acme/plugin", inventory.webPackages.single().name)
+
         // Performance (PerformanceView.vue) reads the worker processes, not only totals.
         enqueue("""{"timestamp":5,"system":{"cpuPercent":12.5,"platform":"linux","arch":"x64","cpuCount":8,"uptimeSeconds":90},"bridge":{"workers":[{"pid":7,"profile":"default","running":true,"cpuPercent":1.5,"memoryRssBytes":2048,"sessionCount":3,"runningSessionCount":1}],"totalWorkerMemoryRssBytes":2048},"sessions":{"active":3,"running":1,"byProfile":{"default":3}}}""")
         val runtime = api.runtimePerformance()

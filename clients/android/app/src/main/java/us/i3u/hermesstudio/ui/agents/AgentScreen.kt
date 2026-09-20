@@ -72,7 +72,7 @@ fun AgentScreen(state: UiState, viewModel: AppViewModel) {
     val agent = state.openAgent ?: return
     val palette = CoreHub.palette
     val card = state.agents.firstOrNull { it.id == agent.id }
-    val sections = NavDestination.agentSections(agent.kind)
+    val sections = NavDestination.agentSections(agent.kind, agent.id)
 
     Scaffold(
         topBar = {
@@ -134,6 +134,7 @@ private fun sectionIcon(destination: NavDestination): ImageVector = when (destin
     NavDestination.channels -> Icons.Filled.Forum
     NavDestination.skills -> Icons.Filled.School
     NavDestination.plugins -> Icons.Filled.Extension
+    NavDestination.presets -> Icons.Filled.Tune
     NavDestination.mcp -> Icons.Filled.Cable
     NavDestination.memory -> Icons.Filled.Memory
     NavDestination.journey -> Icons.Filled.AccountTree
