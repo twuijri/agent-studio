@@ -7,12 +7,16 @@ import Foundation
 /// no second tap; the level is a by-product of the buffers that are flowing
 /// anyway.
 ///
-/// The arithmetic is pure so it is unit-tested (`RecordingStripTests`); only
-/// `AudioLevelTap` touches an `AVAudioPCMBuffer`.
+/// The arithmetic is pure so it is unit-tested (`RecordingStripTests`,
+/// `ContinuousDictationTests`); only `AudioLevelTap` touches an
+/// `AVAudioPCMBuffer`.
 enum AudioLevelMeter {
-    /// Silence, in dBFS. Anything quieter draws as a dot.
+    /// Silence, in dBFS, for a *processed* input (the server-path recorder's
+    /// `averagePower`, which runs with the system's automatic gain).
+    /// Anything quieter draws as a dot.
     static let floorDecibels: Double = -50
-    /// Loud speech close to the microphone; anything louder is clamped.
+    /// Loud speech close to the microphone on a processed input; anything
+    /// louder is clamped.
     static let ceilingDecibels: Double = -10
     /// How often a level is published (≈ 20 Hz), and so one bar's worth of time.
     static let publishInterval: TimeInterval = 0.05
@@ -41,19 +45,74 @@ enum AudioLevelMeter {
         return 20 * log10(rms)
     }
 
-    /// Maps dBFS onto 0…1 between the floor and the ceiling, clamped.
+    /// Maps dBFS onto 0…1 between the fixed floor and ceiling, clamped. Only
+    /// right for a processed input; the recogniser's raw tap goes through
+    /// `AudioLevelRange` instead (see there for why).
     static func normalized(decibels: Double) -> Double {
         guard decibels.isFinite else { return 0 }
         let span = ceilingDecibels - floorDecibels
         return min(1, max(0, (decibels - floorDecibels) / span))
     }
 
-    /// Linear RMS straight to the strip's 0…1.
+    /// Linear RMS straight to the fixed window's 0…1.
     static func level(rms: Double) -> Double { normalized(decibels: decibels(rms: rms)) }
 
     /// Instant attack, exponential release, never below the incoming level.
     static func smoothed(previous: Double, incoming: Double) -> Double {
         incoming >= previous ? incoming : max(incoming, previous * release)
+    }
+}
+
+/// A window that follows the signal instead of a fixed dBFS range.
+///
+/// The recogniser opens the audio session in `.measurement` mode, which
+/// switches the system's input processing — automatic gain included — off.
+/// The raw microphone then sits far below the −50…−10 dBFS window that suits
+/// a processed input: a quiet room around −70 dBFS, ordinary speech at arm's
+/// length around −45, so with the fixed window every bar of the strip was a
+/// dot. Rather than guess a second window for a gain that differs per
+/// device and per distance, the window is learnt from the take itself:
+///
+/// - the **floor** is the quietest level of the last two seconds (the room);
+/// - the **peak** follows the loudest level and falls at 3 dB/s, so the
+///   strip re-scales when the speaker moves or the voice drops;
+/// - a level within `margin` of the floor is a dot (room noise never draws),
+///   and the peak is never closer than `minimumSpan` to the floor, so a
+///   fluctuating noise floor cannot fill the strip either.
+///
+/// Silence at digital zero is a dot and is not learnt as the floor. The first
+/// tick of a take has nothing to compare against and is a dot too; the room
+/// noise that precedes the first word gives the floor a moment later.
+struct AudioLevelRange: Equatable {
+    /// Ticks the floor looks back over (≈ 2 s at `publishInterval`).
+    static let window = 40
+    /// dB above the floor that still count as the room.
+    static let margin: Double = 6
+    /// The least distance from the floor at which a level fills the strip.
+    static let minimumSpan: Double = 12
+    /// How fast the peak falls, in dB per tick (3 dB/s).
+    static let peakFall: Double = 0.15
+
+    private(set) var recent: [Double] = []
+    private(set) var peak: Double = -Double.infinity
+
+    /// The quietest recent level; `-infinity` before the first finite one.
+    var floor: Double { recent.min() ?? -Double.infinity }
+
+    /// Learns `decibels` and returns it as 0…1 inside the current window.
+    mutating func level(decibels: Double) -> Double {
+        guard decibels.isFinite else { return 0 }
+        recent.append(decibels)
+        if recent.count > Self.window { recent.removeFirst() }
+        peak = max(decibels, peak - Self.peakFall)
+        let bottom = floor + Self.margin
+        let top = max(peak, floor + Self.minimumSpan)
+        return min(1, max(0, (decibels - bottom) / (top - bottom)))
+    }
+
+    mutating func reset() {
+        recent = []
+        peak = -Double.infinity
     }
 }
 
@@ -65,6 +124,8 @@ struct RecordingWaveform: Equatable {
     static let barCount = CoreHubTokens.Layout.waveformBarCount
 
     private(set) var levels: [Double]
+    /// The learnt window a dBFS reading is placed in (`push(decibels:)`).
+    private(set) var range = AudioLevelRange()
 
     init() { levels = Array(repeating: 0, count: Self.barCount) }
 
@@ -78,29 +139,43 @@ struct RecordingWaveform: Equatable {
         levels.append(next)
     }
 
-    mutating func reset() { levels = Array(repeating: 0, count: Self.barCount) }
+    /// Appends a raw dBFS reading placed inside the window learnt so far.
+    mutating func push(decibels: Double) {
+        push(range.level(decibels: decibels))
+    }
+
+    mutating func reset() {
+        levels = Array(repeating: 0, count: Self.barCount)
+        range.reset()
+    }
 
     /// An idle bar is drawn as a dot.
     static func isIdle(_ level: Double) -> Bool { level < AudioLevelMeter.idleThreshold }
 }
 
-/// Reads the level of each buffer on the audio thread and hands a normalised
-/// level to `sink` at most once per `AudioLevelMeter.publishInterval`.
-/// Called from inside the tap `OnDeviceSpeechRecognizer` already installs,
-/// so it adds no audio plumbing of its own. The tap block is invoked
-/// serially, which is why `lastEmit` needs no lock.
+/// Reads the level of each buffer on the audio thread and hands its dBFS
+/// (`-infinity` for digital silence) to `sink` at most once per
+/// `AudioLevelMeter.publishInterval`. Called from inside the tap
+/// `OnDeviceSpeechRecognizer` already installs, so it adds no audio plumbing
+/// of its own. The tap block is invoked serially, which is why `lastEmit`
+/// needs no lock. `clock` is injectable so the throttle is unit-tested.
 final class AudioLevelTap {
     private let sink: (Double) -> Void
-    private var lastEmit: TimeInterval = 0
+    private let clock: () -> TimeInterval
+    private var lastEmit: TimeInterval = -Double.infinity
 
-    init(sink: @escaping (Double) -> Void) { self.sink = sink }
+    init(clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+         sink: @escaping (Double) -> Void) {
+        self.clock = clock
+        self.sink = sink
+    }
 
     func process(_ buffer: AVAudioPCMBuffer) {
-        let now = ProcessInfo.processInfo.systemUptime
+        let now = clock()
         guard now - lastEmit >= AudioLevelMeter.publishInterval else { return }
         lastEmit = now
         guard let channel = buffer.floatChannelData?[0] else { return }
         let samples = UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength))
-        sink(AudioLevelMeter.level(rms: AudioLevelMeter.rms(samples)))
+        sink(AudioLevelMeter.decibels(rms: AudioLevelMeter.rms(samples)))
     }
 }

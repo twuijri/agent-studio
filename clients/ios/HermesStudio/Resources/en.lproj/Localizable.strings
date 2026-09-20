@@ -292,6 +292,7 @@
 "Recording" = "Recording";
 "Recording in %@" = "Recording in %@";
 "Level %lld%%" = "Level %lld%%";
+"Dictation stopped after %lld minutes. Tap the microphone to continue." = "Dictation stopped after %lld minutes. Tap the microphone to continue.";
 
 "Open with Quick Look" = "Open with Quick Look";
 "Downloading…" = "Downloading…";

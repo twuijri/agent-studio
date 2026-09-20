@@ -5,6 +5,18 @@ import Speech
 /// Live speech-to-text on the iPhone (Apple Speech + AVAudioEngine).
 /// Partial results are delivered while the user speaks; the final text is
 /// delivered once after `stop()`.
+///
+/// One take, many requests. Apple ends a
+/// `SFSpeechAudioBufferRecognitionRequest` on its own — after about a minute
+/// of audio when the server does the recognition, and sometimes after a
+/// long pause ("no speech detected") — with a final result or an error.
+/// None of that is the user's gesture, so it never ends the take: the audio
+/// engine and its tap stay up, the ended request's text is committed, a new
+/// request takes over the same tap without a gap, and the next partials are
+/// appended after the committed text. `DictationTake` (pure, in
+/// `Core/Dictation.swift`) decides restart / finish / fail; this class only
+/// carries it out. The take ends on ■ / ↑ / ✕, on a real failure, or at
+/// `DictationTake.ceiling`.
 @MainActor
 final class OnDeviceSpeechRecognizer: ObservableObject {
     enum Failure: LocalizedError {
@@ -25,19 +37,30 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
     @Published private(set) var isListening = false
     /// `stop()` was called and the final result has not arrived yet.
     @Published private(set) var isFinishing = false
+    /// The whole take so far: the text committed by ended requests plus the
+    /// partial of the request now open.
     @Published private(set) var transcript = ""
     /// Set when recognition ended with an error and produced no text.
     @Published var lastError: String?
+    /// The take was stopped by the recogniser at `DictationTake.ceiling`,
+    /// not by the user; the final result still lands the usual way.
+    @Published private(set) var endedAtCeiling = false
     /// Live input level for the recording strip, read from the same tap that
     /// feeds the recogniser (≈ 20 Hz). Flat while the microphone is closed.
     @Published private(set) var waveform = RecordingWaveform()
 
     private let audioEngine = AVAudioEngine()
+    /// The request the tap feeds right now; swapped at every restart.
+    private let feed = SpeechRequestFeed()
     private var recognizer: SFSpeechRecognizer?
-    private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var onUpdate: ((String, Bool) -> Void)?
     private var finishTimeout: Task<Void, Never>?
+    private var ceilingTimer: Task<Void, Never>?
+    private var take = DictationTake()
+    /// Increments per request; a callback from a superseded request is ignored.
+    private var generation = 0
+    private var requestStartedAt: TimeInterval = 0
 
     var isActive: Bool { isListening || isFinishing }
 
@@ -56,7 +79,8 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
     }
 
     /// Starts listening. `onUpdate(text, isFinal)` runs on the main actor for
-    /// every partial result and once more with the final text.
+    /// every partial result and once more with the final text. `text` is
+    /// always the whole take, so the caller writes it after its own base.
     func start(localeIdentifier: String, onUpdate: @escaping (String, Bool) -> Void) async throws {
         cancel()
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier)), recognizer.isAvailable else {
@@ -70,20 +94,19 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
         try session.setCategory(.record, mode: .measurement, options: .duckOthers)
         try session.setActive(true, options: .notifyOthersOnDeactivation)
 
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        request.taskHint = .dictation
-
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
         inputNode.removeTap(onBus: 0)
-        // One tap, two readers: the recogniser gets every buffer, the strip
-        // gets a level from the same buffer about twenty times a second.
-        let meter = AudioLevelTap { [weak self] level in
-            Task { @MainActor in self?.waveform.push(level) }
+        // One tap, two readers: whichever request is open gets every buffer,
+        // the strip gets a level from the same buffer about twenty times a
+        // second. The tap is installed once per take and outlives every
+        // request, so a restart never drops the waveform.
+        let feed = self.feed
+        let meter = AudioLevelTap { [weak self] decibels in
+            Task { @MainActor in self?.waveform.push(decibels: decibels) }
         }
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            request.append(buffer)
+            feed.append(buffer)
             meter.process(buffer)
         }
         audioEngine.prepare()
@@ -96,33 +119,86 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
         }
 
         self.recognizer = recognizer
-        self.request = request
         self.onUpdate = onUpdate
-        transcript = ""; lastError = nil
+        take = DictationTake()
+        transcript = ""; lastError = nil; endedAtCeiling = false
         waveform.reset()
         isListening = true; isFinishing = false
+        openRequest()
 
+        ceilingTimer?.cancel()
+        ceilingTimer = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(DictationTake.ceiling))
+            guard !Task.isCancelled, let self, self.isListening else { return }
+            self.endedAtCeiling = true
+            self.stop()
+        }
+    }
+
+    /// Opens the next request on the running engine. The new request is put
+    /// on the tap *before* the old one is ended, so no buffer falls between
+    /// them.
+    private func openRequest() {
+        guard let recognizer else { return }
+        generation += 1
+        let gen = generation
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        request.taskHint = .dictation
+        feed.swap(request)?.endAudio()
+        requestStartedAt = ProcessInfo.processInfo.systemUptime
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor in
                 guard let self else { return }
-                self.handle(result: result, error: error)
+                self.handle(generation: gen, result: result, error: error)
             }
         }
     }
 
-    private func handle(result: SFSpeechRecognitionResult?, error: Error?) {
-        guard isActive else { return }
+    private func handle(generation gen: Int, result: SFSpeechRecognitionResult?, error: Error?) {
+        guard gen == generation, isActive else { return }
         if let result {
-            transcript = result.bestTranscription.formattedString
-            onUpdate?(transcript, result.isFinal)
-            if result.isFinal { finish() }
+            let text = result.bestTranscription.formattedString
+            if result.isFinal {
+                requestEnded(finalText: text, error: nil)
+            } else {
+                take.partialResult(text)
+                transcript = take.text
+                onUpdate?(transcript, false)
+            }
             return
         }
         if let error {
-            // Apple reports "no speech detected" and similar as errors after
-            // endAudio(). Deliver whatever was heard as final, and surface the
-            // failure only when nothing at all was transcribed.
-            if transcript.isEmpty { lastError = error.localizedDescription }
+            // Apple reports "no speech detected", the per-request limit and
+            // similar as errors; while the take is open they are a restart,
+            // not the end. `DictationTake` tells them apart from real ones.
+            requestEnded(finalText: nil, error: error)
+        }
+    }
+
+    private func requestEnded(finalText: String?, error: Error?) {
+        let end = DictationTake.RequestEnd(
+            finalText: finalText,
+            failed: error != nil,
+            authorized: SFSpeechRecognizer.authorizationStatus() == .authorized,
+            recognizerAvailable: recognizer?.isAvailable ?? false,
+            engineRunning: audioEngine.isRunning,
+            requestDuration: ProcessInfo.processInfo.systemUptime - requestStartedAt
+        )
+        let outcome = take.requestEnded(end)
+        transcript = take.text
+        switch outcome {
+        case .restart:
+            onUpdate?(transcript, false)
+            openRequest()
+        case .finish:
+            onUpdate?(transcript, true)
+            finish()
+        case .fail:
+            // Surface the failure only when nothing at all was transcribed;
+            // with text in the field the caller keeps it and just tells why
+            // the take ended.
+            lastError = error?.localizedDescription ?? Failure.unavailable.localizedDescription
             onUpdate?(transcript, true)
             finish()
         }
@@ -133,10 +209,12 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
         guard isListening else { return }
         isListening = false
         isFinishing = true
+        take.stop()
+        ceilingTimer?.cancel(); ceilingTimer = nil
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         waveform.reset()
-        request?.endAudio()
+        feed.swap(nil)?.endAudio()
         finishTimeout?.cancel()
         finishTimeout = Task { [weak self] in
             try? await Task.sleep(for: .seconds(4))
@@ -153,10 +231,7 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
         isListening = false
         isFinishing = false
         onUpdate = nil
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
-        waveform.reset()
-        request?.endAudio()
+        feed.swap(nil)?.endAudio()
         task?.cancel()
         cleanUp()
     }
@@ -169,7 +244,40 @@ final class OnDeviceSpeechRecognizer: ObservableObject {
 
     private func cleanUp() {
         finishTimeout?.cancel(); finishTimeout = nil
-        task = nil; request = nil; recognizer = nil; onUpdate = nil
+        ceilingTimer?.cancel(); ceilingTimer = nil
+        // Idempotent after `stop()`; needed when a failure ends the take
+        // while the engine is still running.
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        waveform.reset()
+        feed.swap(nil)?.endAudio()
+        task = nil; recognizer = nil; onUpdate = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+}
+
+/// The hand-over point between the audio thread and the main actor: the tap
+/// appends every buffer to whichever request is current, and a restart swaps
+/// the request under a lock instead of touching actor-isolated state from
+/// the render thread.
+final class SpeechRequestFeed: @unchecked Sendable {
+    private let lock = NSLock()
+    private var request: SFSpeechAudioBufferRecognitionRequest?
+
+    func append(_ buffer: AVAudioPCMBuffer) {
+        lock.lock()
+        let current = request
+        lock.unlock()
+        current?.append(buffer)
+    }
+
+    /// Installs `next` (or nothing) and returns the request it replaced.
+    @discardableResult
+    func swap(_ next: SFSpeechAudioBufferRecognitionRequest?) -> SFSpeechAudioBufferRecognitionRequest? {
+        lock.lock()
+        defer { lock.unlock() }
+        let previous = request
+        request = next
+        return previous
     }
 }

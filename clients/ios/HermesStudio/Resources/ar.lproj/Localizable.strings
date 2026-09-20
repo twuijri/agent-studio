@@ -347,6 +347,7 @@
 "Recording" = "تسجيل";
 "Recording in %@" = "تسجيل بلغة %@";
 "Level %lld%%" = "المستوى %lld٪";
+"Dictation stopped after %lld minutes. Tap the microphone to continue." = "توقّف الإملاء بعد %lld دقائق. اضغط على الميكروفون للمتابعة.";
 
 "Open with Quick Look" = "فتح بالمعاينة السريعة";
 "Downloading…" = "جارٍ التنزيل…";
