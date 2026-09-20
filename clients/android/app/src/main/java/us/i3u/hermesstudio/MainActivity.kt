@@ -309,6 +309,8 @@ private fun AppContent(state: UiState, viewModel: AppViewModel) {
         Screen.EkkoMcp -> EkkoMcpScreen(state, viewModel)
         Screen.EkkoSettings -> EkkoSettingsScreen(state, viewModel)
         Screen.AgentSettings -> AgentSettingsScreen(state, viewModel)
+        Screen.DshPlugins -> DshPluginsScreen(state, viewModel)
+        Screen.DshPresets -> DshPresetsScreen(state, viewModel)
         // No menu entry, as on the web: search results and the pending banner
         // reach the Global Agent; a profile card's "Edit config" reaches Files.
         Screen.GlobalAgent -> GlobalAgentScreen(state, viewModel)

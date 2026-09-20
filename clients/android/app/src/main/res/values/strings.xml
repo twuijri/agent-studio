@@ -827,6 +827,7 @@
     <string name="nav_channels">Channels</string>
     <string name="nav_skills">Skills</string>
     <string name="nav_plugins">Plugins</string>
+    <string name="nav_presets">Presets</string>
     <string name="nav_mcp">MCP</string>
     <string name="nav_memory">Memory</string>
     <string name="nav_journey">Journey</string>
@@ -1223,4 +1224,24 @@
     <string name="journey_clusters">Categories</string>
     <string name="journey_empty">No journey data yet</string>
     <string name="profile_edit_config">Edit config</string>
+    <!-- DeepSeek Harness (dsh): Plugins and Presets under its card (CodingAgentConfigView.vue:139-140) -->
+    <string name="dsh_plugins_note">The DeepSeek Harness plugin inventory on the server: each preset\'s plugin entries and the installed web packages.</string>
+    <string name="dsh_plugins_summary">%1$d presets · %2$d web packages</string>
+    <string name="dsh_plugins_entries">%1$d entries · %2$d enabled</string>
+    <string name="dsh_plugins_web_packages">Web packages</string>
+    <string name="dsh_plugins_web_note">Installing or removing web packages, and the plugin settings page, need the desktop client.</string>
+    <string name="dsh_plugins_empty">No plugin inventory</string>
+    <string name="dsh_plugins_empty_note">The server returned no presets or web packages for dsh.</string>
+    <string name="dsh_plugin_enabled">Enabled</string>
+    <string name="dsh_plugin_disabled">Disabled</string>
+    <string name="dsh_plugin_conditional">Conditional</string>
+    <string name="dsh_presets_note">New dsh sessions start from the default preset. Choose it here; copying or deleting a preset and editing its file need the desktop client.</string>
+    <string name="dsh_presets_default">Default</string>
+    <string name="dsh_presets_active_summary">Default: %1$s</string>
+    <string name="dsh_presets_use_default">Use as default</string>
+    <string name="dsh_presets_view">View</string>
+    <string name="dsh_presets_trust_system">System</string>
+    <string name="dsh_presets_trust_user">User</string>
+    <string name="dsh_presets_empty">No presets</string>
+    <string name="dsh_presets_empty_note">The server returned no dsh agent presets.</string>
 </resources>

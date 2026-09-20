@@ -279,6 +279,54 @@ FALLBACK_PROVIDERS = [
     {"provider": "custom:subrouter.ai", "model": "sub/fast"},
 ]
 
+# DeepSeek Harness (dsh) › Presets and › Plugins, the two rows only its card
+# lists (CodingAgentConfigSidebar.vue:19-24). The presets roster is the shape
+# of GET /api/coding-agents/dsh/agent-presets; PUT …/{id}/default answers with
+# the same roster, and refuses a broken or unknown id with 422 as the server
+# does. The inventory is GET /api/coding-agents/dsh/plugin-inventory with the
+# three `configuredEnabled` shapes (true, false, "conditional").
+DSH_PRESETS = [
+    {"id": "default", "name": "Default", "description": "The preset shipped with the harness.",
+     "trust": "system", "isDefault": True},
+    {"id": "research", "name": "بحث أولًا", "description": "Web search before any code change.",
+     "trust": "user", "isDefault": False},
+    {"id": "broken", "name": "Broken copy", "description": "", "trust": "user", "isDefault": False,
+     "broken": "agent-preset.json: unexpected token at line 3"},
+]
+DSH_PRESET_FILES = {
+    "default": '{\n  "model": "deepseek-chat",\n  "plugins": ["@dsh/web", "@dsh/fs"]\n}\n',
+    "research": '{\n  "model": "deepseek-reasoner",\n  "plugins": ["@dsh/web"]\n}\n',
+}
+DSH_PLUGIN_INVENTORY = {
+    "source": "native-presets", "sourceHome": "/home/agent/.dsh", "packageVersion": "0.4.1",
+    "defaultPreset": "default", "runtimeConnected": False, "discovery": "shipped-and-user-roots",
+    "presets": [
+        {"id": "default", "name": "Default", "description": "", "trust": "system",
+         "sourcePath": "/home/agent/.dsh/presets/default", "isDefault": True, "entries": [
+             {"entryId": "web", "title": "Web search", "description": "Search the web from a session.",
+              "moduleName": "@dsh/web", "configuredEnabled": True, "runtimePhase": None, "groupPath": []},
+             {"entryId": "fs", "title": "Files", "description": "Read and write the workspace.",
+              "moduleName": "@dsh/fs", "configuredEnabled": True, "runtimePhase": None, "groupPath": []},
+             {"entryId": "shell", "title": "Shell", "description": "Only when the sandbox allows it.",
+              "moduleName": "@dsh/shell", "configuredEnabled": "conditional", "runtimePhase": None, "groupPath": []},
+             {"entryId": "telemetry", "moduleName": "@dsh/telemetry", "configuredEnabled": False,
+              "runtimePhase": None, "groupPath": []},
+         ]},
+        {"id": "research", "name": "بحث أولًا", "description": "", "trust": "user",
+         "sourcePath": "/home/agent/.dsh/presets/research", "isDefault": False, "entries": [
+             {"entryId": "web", "title": "Web search", "moduleName": "@dsh/web", "configuredEnabled": True,
+              "runtimePhase": None, "groupPath": []},
+         ]},
+    ],
+    "web": {"profile": "web", "sourcePath": "/home/agent/.dsh/web", "revision": "r7", "packages": [
+        {"name": "@acme/dsh-diagrams", "title": "Diagrams", "description": "Mermaid previews in the chat.",
+         "requested": "^1.2", "version": "1.2.0", "bundle": True, "containsBrowserPart": True,
+         "sourcePath": "/home/agent/.dsh/web/node_modules/@acme/dsh-diagrams", "error": ""},
+        {"name": "@acme/dsh-broken", "requested": "*", "version": "", "bundle": False, "containsBrowserPart": False,
+         "sourcePath": "", "error": "package.json is missing a \"main\" entry"},
+    ]},
+}
+
 # The Agent Manager lists the fixed catalogue the server source declares, so
 # the mock answers with all eight ids: the six coding agents on
 # /api/coding-agents, and Hermes and Ekko only on /api/agents/status.
@@ -787,6 +835,18 @@ class Handler(BaseHTTPRequestHandler):
             self.send({"revision": 12, "updatedAt": "2026-09-20T00:00:00Z",
                        "agents": [{"id": a["id"], "installed": a["installed"], "source": a["source"]}
                                   for a in AGENT_STATUS]})
+        elif path == '/api/coding-agents/dsh/agent-presets':
+            self.send({"presets": DSH_PRESETS, "authorable": True})
+        elif re.fullmatch(r'/api/coding-agents/dsh/agent-presets/[^/]+', path):
+            preset_id = unquote(path.rsplit('/', 1)[1])
+            preset = next((row for row in DSH_PRESETS if row['id'] == preset_id), None)
+            if preset is None:
+                self.send({"error": "Preset not found", "code": "DSH_PRESET_OPERATION_FAILED"}, 404)
+            else:
+                self.send({"agentPreset": preset_id, "content": DSH_PRESET_FILES.get(preset_id, ''),
+                           "name": preset.get('name'), "trust": preset['trust']})
+        elif path == '/api/coding-agents/dsh/plugin-inventory':
+            self.send(DSH_PLUGIN_INVENTORY)
         elif re.fullmatch(r'/api/coding-agents/[^/]+/config-files/[^/]+', path):
             agent, key = unquote(path.split('/')[3]), unquote(path.split('/')[5])
             self.send(self.agent_config_file(agent, key))
@@ -988,6 +1048,18 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/hermes/config/fallback-providers':
             FALLBACK_PROVIDERS[:] = body.get('fallback_providers', [])
             self.send({"success": True, "fallback_providers": FALLBACK_PROVIDERS})
+            return
+        preset_default = re.fullmatch(r'/api/coding-agents/dsh/agent-presets/([^/]+)/default', path)
+        if preset_default:
+            preset_id = unquote(preset_default.group(1))
+            preset = next((row for row in DSH_PRESETS if row['id'] == preset_id), None)
+            if preset is None or preset.get('broken'):
+                self.send({"error": "Select an available preset", "code": "DSH_PRESET_INVALID"}, 422)
+                return
+            for row in DSH_PRESETS: row['isDefault'] = row['id'] == preset_id
+            DSH_PLUGIN_INVENTORY['defaultPreset'] = preset_id
+            for row in DSH_PLUGIN_INVENTORY['presets']: row['isDefault'] = row['id'] == preset_id
+            self.send({"presets": DSH_PRESETS, "authorable": True})
             return
         policy_put = re.fullmatch(r'/api/coding-agents/([^/]+)/update-policy', path)
         if policy_put:

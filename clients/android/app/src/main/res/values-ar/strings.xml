@@ -826,6 +826,7 @@
     <string name="nav_channels">القنوات</string>
     <string name="nav_skills">المهارات</string>
     <string name="nav_plugins">الإضافات</string>
+    <string name="nav_presets">الإعدادات المسبقة</string>
     <string name="nav_mcp">MCP</string>
     <string name="nav_memory">الذاكرة</string>
     <string name="nav_journey">الرحلة</string>
@@ -1218,4 +1219,24 @@
     <string name="journey_clusters">التصنيفات</string>
     <string name="journey_empty">لا بيانات رحلة بعد</string>
     <string name="profile_edit_config">تحرير الإعدادات</string>
+    <!-- DeepSeek Harness (dsh): الإضافات والإعدادات المسبقة تحت بطاقته (CodingAgentConfigView.vue:139-140) -->
+    <string name="dsh_plugins_note">جرد إضافات DeepSeek Harness على الخادم: مدخلات الإضافات لكل إعداد مسبق وحزم الويب المثبّتة.</string>
+    <string name="dsh_plugins_summary">%1$d إعداد مسبق · %2$d حزمة ويب</string>
+    <string name="dsh_plugins_entries">%1$d مدخلًا · %2$d مفعّل</string>
+    <string name="dsh_plugins_web_packages">حزم الويب</string>
+    <string name="dsh_plugins_web_note">تثبيت حزم الويب أو إزالتها، وصفحة إعدادات الإضافات، يحتاجان إلى عميل سطح المكتب.</string>
+    <string name="dsh_plugins_empty">لا جرد إضافات</string>
+    <string name="dsh_plugins_empty_note">لم يُرجع الخادم أي إعدادات مسبقة أو حزم ويب لـ dsh.</string>
+    <string name="dsh_plugin_enabled">مفعّل</string>
+    <string name="dsh_plugin_disabled">معطّل</string>
+    <string name="dsh_plugin_conditional">مشروط</string>
+    <string name="dsh_presets_note">تبدأ جلسات dsh الجديدة من الإعداد المسبق الافتراضي. اختره هنا؛ أما نسخ إعداد مسبق أو حذفه أو تحرير ملفه فيحتاج إلى عميل سطح المكتب.</string>
+    <string name="dsh_presets_default">الافتراضي</string>
+    <string name="dsh_presets_active_summary">الافتراضي: %1$s</string>
+    <string name="dsh_presets_use_default">اجعله الافتراضي</string>
+    <string name="dsh_presets_view">عرض</string>
+    <string name="dsh_presets_trust_system">النظام</string>
+    <string name="dsh_presets_trust_user">المستخدم</string>
+    <string name="dsh_presets_empty">لا إعدادات مسبقة</string>
+    <string name="dsh_presets_empty_note">لم يُرجع الخادم أي إعدادات مسبقة لوكيل dsh.</string>
 </resources>

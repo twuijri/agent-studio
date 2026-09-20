@@ -213,11 +213,12 @@ class NavigationStructureTest {
         assertFalse("the standalone Agents (runtimes) entry is gone", viewModel.contains("Screen.AgentRuntimes") || activity.contains("AgentRuntimeScreen"))
         assertTrue("Agent Manager is opened from the drawer rail", viewModel.contains("NavDestination.agentManager -> openAgentManager()"))
         // The section list is the registry's, and every section resolves to a screen.
-        assertTrue(agentScreen.contains("NavDestination.agentSections(agent.kind)"))
+        assertTrue(agentScreen.contains("NavDestination.agentSections(agent.kind, agent.id)"))
         assertTrue(agentScreen.contains("viewModel.openAgentSection(agent, destination)"))
         listOf(
             "NavDestination.jobs -> openCronJobs()", "NavDestination.kanban -> openKanban()", "NavDestination.channels -> openChannels()",
-            "NavDestination.plugins -> openPlugins()", "NavDestination.journey -> openJourney()",
+            "NavDestination.plugins -> if (definition.id == DSH_AGENT_ID) openDshPlugins() else openPlugins()",
+            "NavDestination.presets -> openDshPresets()", "NavDestination.journey -> openJourney()",
             "NavDestination.hermesSettings -> openHermesSettings()", "NavDestination.ekkoSettings -> openEkkoSettings()",
             "NavDestination.codingAgentSettings -> openAgentSettings(definition)",
             "AgentKind.BuiltIn -> openEkkoMcp()", "AgentKind.Coding -> openMcp(definition.id)", "AgentKind.Hermes -> openMcp()",
@@ -235,6 +236,30 @@ class NavigationStructureTest {
         assertTrue(tools.contains("pendingWrites") && tools.contains("resolvePendingSkillWrite"))
         // Agent tools never open the website.
         assertFalse(agentScreen.contains("ACTION_VIEW") || agentManager.contains("ACTION_VIEW"))
+    }
+
+    /**
+     * `CodingAgentConfigSidebar.vue:19-24`: Plugins and Presets exist for the
+     * DeepSeek Harness alone, each its own screen titled by its row's key,
+     * and each says on screen what stays on the desktop.
+     */
+    @Test
+    fun theDeepSeekHarnessAloneListsPluginsAndPresets() {
+        val dsh = File(src, "ui/agents/DshScreens.kt").readText()
+        assertTrue(viewModel.contains("Screen.DshPlugins") && viewModel.contains("Screen.DshPresets"))
+        assertTrue(activity.contains("Screen.DshPlugins -> DshPluginsScreen(state, viewModel)"))
+        assertTrue(activity.contains("Screen.DshPresets -> DshPresetsScreen(state, viewModel)"))
+        assertTrue("Plugins is titled by its row", dsh.contains("stringResource(NavDestination.plugins.labelKey)"))
+        assertTrue("Presets is titled by its row", dsh.contains("stringResource(NavDestination.presets.labelKey)"))
+        // Read/select first: the roster, the default, one file, and choosing the default.
+        assertTrue(viewModel.contains("api.dshAgentPresets()") && viewModel.contains("api.setDefaultDshAgentPreset(preset.id)"))
+        assertTrue(viewModel.contains("api.readDshAgentPreset(preset.id)") && viewModel.contains("api.dshPluginInventory()"))
+        assertTrue(dsh.contains("viewModel.selectDshPreset(preset)") && dsh.contains("viewModel.viewDshPreset(preset)"))
+        // What the phone cannot do is stated, not hidden.
+        assertTrue(dsh.contains("R.string.dsh_plugins_web_note") && dsh.contains("R.string.dsh_presets_note"))
+        assertFalse("no web-package install on the phone", viewModel.contains("web-plugins") || viewModel.contains("ui-session"))
+        // Hermes' own Plugins screen is untouched; the dsh row is the only way to the inventory.
+        assertTrue(File(src, "AgentToolScreens.kt").readText().contains("fun PluginsScreen(state: UiState, viewModel: AppViewModel)"))
     }
 
     @Test

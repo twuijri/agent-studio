@@ -57,8 +57,10 @@ same product (`docs/mobile/DESIGN-SPEC.md` is the authoritative spec).
   - **Agent Manager**: the agent cards, nothing else. A card opens its agent:
     Hermes lists `Jobs · Kanban · Channels · Skills · Plugins · MCP · Memory ·
     Journey · Settings` (Agent / Memory / Session tabs); Ekko lists `Memory ·
-    Skills · MCP · Settings`; a coding agent lists `Skills · MCP · Settings` and
-    keeps install, update and remove on its card. The Hermes card also carries
+    Skills · MCP · Settings`; a coding agent lists `Skills · MCP · Settings` —
+    the DeepSeek Harness (`dsh`) alone puts `Plugins · Presets` in front of them
+    (`CodingAgentConfigSidebar.vue:19-24`) — and keeps install, update and remove
+    on its card. The Hermes card also carries
     `CLI details` and `Manage runtime` (the runtime versions, as a sheet)
   - **No menu entry, as on the web**: the Global Agent (reached from search hits
     and from the banner that appears when a Global Agent session needs you) and
@@ -579,11 +581,18 @@ every tab or section the web has:
   provider from the phone asks only for the name, base URL, key and API mode.
 - **Agent Manager**: a coding agent's card lists Skills (the web's per-target
   skill filter), its own MCP servers, and the two settings files the web's
-  `CodingAgentConfigView` edits. The DeepSeek Harness presets and plugins
-  (`CodingAgentConfigSidebar.vue:19`) are not on the phone: the shared navigation
-  registry has no destination for presets, and the dsh plugin inventory has no
-  native screen yet. Ekko › Settings edits the config sections as JSON rather than
-  the web's per-field forms.
+  `CodingAgentConfigView` edits. The DeepSeek Harness card also lists `Plugins`
+  and `Presets` (`ui/agents/DshScreens.kt`, the `presets` destination of the
+  shared registry). Presets is read/select: the roster with the default marked,
+  a preset's file read-only, and "Use as default" (`PUT
+  /api/coding-agents/dsh/agent-presets/{id}/default`); copying or deleting a
+  preset stays on the desktop and the screen says so. Plugins is the inventory
+  (`GET /api/coding-agents/dsh/plugin-inventory`): each preset's entries with
+  their enabled / disabled / conditional state and the web packages; installing
+  or removing web packages and the plugin settings page (an iframe over a UI
+  session the phone cannot host) stay on the desktop, stated on screen. Ekko ›
+  Settings edits the config sections as JSON rather than the web's per-field
+  forms.
 - **Copilot**: the web gives GitHub Copilot its own "disable" action, which keeps a
   token that came from `gh` or VS Code. The phone treats it like any other built-in
   provider, so its destructive action clears the credentials outright. Disable

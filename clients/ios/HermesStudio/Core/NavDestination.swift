@@ -21,7 +21,7 @@ enum NavDestination: String, CaseIterable, Hashable, Identifiable {
     case conversation, room, workflowDetail, workflowRun
     // Under the agent (§4): entered from an Agent Manager card only.
     case agentHermes, agentEkko, agentCoding
-    case jobs, kanban, channels, skills, plugins, mcp, memory, journey
+    case jobs, kanban, channels, skills, plugins, presets, mcp, memory, journey
     case hermesSettings, ekkoSettings, codingAgentSettings
     // No menu entry on the desktop either; reached from search results
     // (`global_agent`) and from a profile card's "Edit config".
@@ -93,7 +93,7 @@ enum NavNamingTable {
         .agentManager: "Agent Manager", .models: "Models", .chat: "Chat", .groupChat: "Group Chat",
         .workflow: "Workflow", .history: "History", .settings: "Settings", .logs: "Logs",
         .usage: "Usage", .performance: "Performance", .skillsUsage: "Skills Usage", .theme: "Theme",
-        .pets: "Pets", .profiles: "Profiles",
+        .pets: "Pets", .profiles: "Profiles", .presets: "Presets",
     ]
 
     static let arabic: [NavDestination: String] = [
@@ -101,6 +101,6 @@ enum NavNamingTable {
         .agentManager: "مدير الوكلاء", .models: "النماذج", .chat: "محادثة", .groupChat: "الغرف",
         .workflow: "سير العمل", .history: "السجل", .settings: "الإعدادات", .logs: "السجلات",
         .usage: "الاستخدام", .performance: "الأداء", .skillsUsage: "استخدام المهارات", .theme: "السمة",
-        .pets: "الحيوانات", .profiles: "الملفات الشخصية",
+        .pets: "الحيوانات", .profiles: "الملفات الشخصية", .presets: "الإعدادات المسبقة",
     ]
 }

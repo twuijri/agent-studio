@@ -16,7 +16,7 @@ final class NavigationContractTests: XCTestCase {
             "settings", "logs", "usage", "performance", "skillsUsage", "theme", "pets", "profiles",
             "conversation", "room", "workflowDetail", "workflowRun",
             "agentHermes", "agentEkko", "agentCoding",
-            "jobs", "kanban", "channels", "skills", "plugins", "mcp", "memory", "journey",
+            "jobs", "kanban", "channels", "skills", "plugins", "presets", "mcp", "memory", "journey",
             "hermesSettings", "ekkoSettings", "codingAgentSettings",
             "globalAgent", "files",
         ])
@@ -88,7 +88,7 @@ final class NavigationContractTests: XCTestCase {
     func testShellDestinationViewCoversEveryDestination() {
         let covered = NavDestination.allCases.map { ShellDestinationView(destination: $0).destination }
         XCTAssertEqual(covered, NavDestination.allCases)
-        XCTAssertEqual(NavDestination.allCases.count, 36)
+        XCTAssertEqual(NavDestination.allCases.count, 37)
     }
 
     func testAgentFamilyResolvesTheAgentThatWasOpenedLast() {
@@ -104,7 +104,13 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(AgentDetailView.capabilities(for: .hermes), [.jobs, .kanban, .channels, .skills, .plugins, .mcp, .memory, .journey])
         XCTAssertEqual(AgentDetailView.capabilities(for: .ekko), [.memory, .skills, .mcp])
         XCTAssertEqual(AgentDetailView.capabilities(for: .coding(id: "codex")), [.skills, .mcp])
-        XCTAssertEqual(AgentDetailView.capabilities(for: .coding(id: "dsh")), [.plugins, .skills, .mcp])
+        XCTAssertEqual(AgentDetailView.capabilities(for: .coding(id: "dsh")), [.plugins, .presets, .skills, .mcp])
+        // Presets exists under dsh alone (`CodingAgentConfigSidebar.vue:19-24`), never at app level.
+        XCTAssertFalse(NavDestination.rail.contains(.presets) || NavDestination.tools.contains(.presets))
+        XCTAssertFalse(AgentDetailView.capabilities(for: .hermes).contains(.presets))
+        XCTAssertFalse(AgentDetailView.capabilities(for: .coding(id: "codex")).contains(.presets))
+        XCTAssertEqual(NavDestination.presets.labelKey, "nav_presets")
+        XCTAssertEqual(AgentDetailView.symbol(for: .presets), "square.on.square.dashed")
         XCTAssertEqual(AgentDetailView.settingsDestination(for: .hermes), .hermesSettings)
         XCTAssertEqual(AgentDetailView.settingsDestination(for: .ekko), .ekkoSettings)
         XCTAssertEqual(AgentDetailView.settingsDestination(for: .coding(id: "pi")), .codingAgentSettings)

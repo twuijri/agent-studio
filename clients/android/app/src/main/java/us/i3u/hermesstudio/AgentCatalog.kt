@@ -19,6 +19,12 @@ package us.i3u.hermesstudio
  */
 enum class AgentKind { Hermes, BuiltIn, Coding }
 
+/**
+ * The DeepSeek Harness: the one coding agent whose card also lists Plugins
+ * and Presets (`CodingAgentConfigSidebar.vue:19-24`).
+ */
+const val DSH_AGENT_ID = "dsh"
+
 /** A row of the catalogue before any server state is folded in. */
 data class AgentDefinition(
     val id: String,
@@ -144,7 +150,7 @@ object AgentCatalog {
             configurationKey = "settings",
         ),
         AgentDefinition(
-            id = "dsh",
+            id = DSH_AGENT_ID,
             name = "DeepSeek Harness",
             provider = "DeepSeek",
             kind = AgentKind.Coding,
