@@ -5,9 +5,28 @@ import SwiftUI
 /// scrim, swipe to close, edge swipe to open) — the web's mobile layout.
 ///
 /// One `NavigationStack` bound to `store.path`, one
-/// `navigationDestination(for: NavDestination.self)`: every registry case is
-/// pushable, and the desktop's nesting (Agent Manager → Hermes → Kanban) is a
-/// plain `store.push`.
+/// `navigationDestination(for: NavDestination.self)` on the stack's root view
+/// (`content`, outside every `List`): every registry case is pushable, and
+/// the desktop's nesting (Agent Manager → Hermes → Kanban) is a plain
+/// `store.push`.
+///
+/// **The rule** (found on TestFlight build 41, where Jobs/Kanban/… under
+/// Hermes did nothing while "Manage runtime" on the same screen opened):
+/// a `NavigationStack(path:)` honours `NavigationLink(value:)` only from a
+/// screen that is itself an element of the path. A screen pushed by a
+/// view-destination link (`NavigationLink { SomeView() }`) sits *outside*
+/// the path; a value link inside it appends to `store.path`, but the stack
+/// cannot place the new screen above one it does not track, so the tap is
+/// dropped — a view-destination link from that same screen still works,
+/// which is the contrast the owner saw. The registration itself was fine:
+/// the modifier is on the root view, `.id(store.languageRefresh)` only
+/// recreates the stack, and the mode switch inside `RootContentView` is
+/// below the modifier. So: a screen that contains value links must be
+/// reached by value — `store.show` / `store.push`, or a
+/// `NavigationLink(value:)` from a screen that is already in the path —
+/// never by a view-destination link. `AgentManagerView`'s cards go through
+/// `store.openAgent`, `AgentDetailView` is constructed by `AgentScreenLoader`
+/// alone, and `NavigationRulesTests` pins both.
 struct RootShell: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.layoutDirection) private var layoutDirection

@@ -225,14 +225,11 @@
 "Structured" = "عرض منظم";
 "Skills Usage" = "استخدام المهارات";
 "Webhooks" = "خطافات الويب";
-"Runtime Versions" = "إصدارات التشغيل";
 "Dispatch ready tasks" = "تشغيل المهام الجاهزة";
 "Preview dispatch" = "معاينة التشغيل";
 "Board health" = "حالة اللوحة";
 "Webhook delivered" = "تم إرسال الخطاف";
 "Webhook failed" = "فشل إرسال الخطاف";
-"Download started" = "بدأ التنزيل";
-"Restart requested" = "طُلبت إعادة التشغيل";
 "Explore connected skills and memories" = "استكشف ترابط المهارات والذكريات";
 "See skill loads, edits and trends" = "اعرض تحميل المهارات وتعديلها واتجاهاتها";
 "Deliver Studio chat events" = "أرسل أحداث محادثات الاستديو";
@@ -343,7 +340,6 @@
 "On-device speech is unavailable for %@; using the Core Hub server" = "التعرّف على الكلام داخل الجهاز غير متاح للغة %@؛ سيُستخدم خادم Core Hub";
 "The Core Hub server cannot transcribe right now (%1$@). Dictating in %2$@ on this iPhone instead." = "تعذّر التفريغ في خادم Core Hub حاليًا (%1$@). سيجري الإملاء بلغة %2$@ على هذا الآيفون بدلًا من ذلك.";
 
-"Download" = "تنزيل";
 "Open with Quick Look" = "فتح بالمعاينة السريعة";
 "Downloading…" = "جارٍ التنزيل…";
 
@@ -722,10 +718,10 @@
 "Clear the stored key" = "مسح المفتاح المخزَّن";
 "Connected, %lld tools." = "متصل، %lld أداة.";
 "Core Hub did not return an agent inventory." = "لم يُرجع Core Hub قائمة الوكلاء.";
-"Core Hub installs complete runtime packages; it never installs the Hermes CLI on its own." = "يثبّت Core Hub حِزم تشغيل كاملة، ولا يثبّت أداة Hermes CLI بمفردها.";
 "Core Hub reports these agents but this version of the app has no screen for them yet." = "يذكر Core Hub هؤلاء الوكلاء، لكن هذه النسخة من التطبيق لا تملك شاشة لهم بعد.";
 "Core Hub uninstalls the package on the server and stops any session using it." = "يزيل Core Hub الحزمة من الخادم ويوقف أي جلسة تستخدمها.";
 "Delete this provider" = "حذف هذا المزوّد";
+"The Hermes runtime is part of the Core Hub server image. Install or update it on the server or in the desktop app, not from the phone." = "وقت تشغيل Hermes جزء من صورة خادم Core Hub؛ ثبّته أو حدّثه على الخادم أو في تطبيق سطح المكتب، لا من الهاتف.";
 "Ekko ships with Core Hub, so it is never installed or removed." = "إيكو يأتي مع Core Hub، فلا يُثبَّت ولا يُزال.";
 "Everything on this screen runs on the Core Hub server, not on this iPhone." = "كل ما في هذه الشاشة يعمل على خادم Core Hub، لا على هذا الآيفون.";
 "In use" = "قيد الاستخدام";
@@ -777,7 +773,7 @@
 "Unknown" = "غير معروف";
 "Unknown version" = "إصدار غير معروف";
 "Up to date" = "محدَّث";
-"Update %@" = "تحديث %@";
+"Update" = "تحديث";
 "Update available" = "يتوفر تحديث";
 "Update status" = "حالة التحديث";
 "Update to %@" = "التحديث إلى %@";
@@ -878,7 +874,6 @@
 "Make default" = "اجعله الافتراضي";
 "Use as default" = "اجعله الافتراضي";
 "New dsh sessions start from the default preset. Choose it here; copying a preset and editing its file need the desktop client." = "تبدأ جلسات dsh الجديدة من الإعداد المسبق الافتراضي. اختره هنا؛ أما نسخ إعداد مسبق أو تحرير ملفه فيحتاج إلى عميل سطح المكتب.";
-"Manage runtime" = "إدارة وقت التشغيل";
 "Maximum tokens" = "الحد الأقصى للرموز";
 "Maximum tool calls" = "الحد الأقصى لنداءات الأدوات";
 "Message push" = "دفع الرسائل";
