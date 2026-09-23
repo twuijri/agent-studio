@@ -55,10 +55,3 @@ CLAUDE.local.md
 packages/client/src/**/*.js
 .hermes/
 
-# Developer knowledge: retain reviewed graph/config/baselines, not scratch output.
-.ua/intermediate/*
-!.ua/intermediate/scan-result.json
-.ua/tmp/
-.ua/logs/
-.ua/cache/
-.ua/.trash-*/
