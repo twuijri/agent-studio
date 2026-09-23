@@ -7,8 +7,6 @@ dist
 hermes_data
 .hermes
 .hermes-web-ui
-.ua
-.understand-anything
 **/.env
 **/.env.*
 **/*.pem

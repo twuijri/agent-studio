@@ -18,7 +18,7 @@ and keep this file small enough to fit into every task context.
 ## First Reads
 
 - `docs/TEAM-RULES.md` - mandatory shared team/AI development policy. Explain the problem and plan before implementation; record each task under `docs/changes/`; isolate concurrent work; get owner approval before opening a PR, merging, publishing, or deploying. A request to write code alone does not authorize these external actions.
-- `docs/KNOWLEDGE-WORKFLOW.md` - durable personal-fork decisions and scoped code knowledge. Reuse verified knowledge; do not repeat whole-repo analysis by default. Understand-Anything is an external developer aid, NEVER a Studio runtime dependency. Check graph freshness and current source before relying on it.
+- `docs/KNOWLEDGE-WORKFLOW.md` - durable personal-fork decisions. Reuse verified decisions; do not repeat whole-repo analysis by default. Read current source before relying on any note.
 - `DEVELOPMENT.md` - project commands, coding rules, test rules, and PR shape.
 - `ARCHITECTURE.md` - package boundaries, data ownership, and runtime flow.
 - `docs/harness/README.md` - how this repository is prepared for agent work.
