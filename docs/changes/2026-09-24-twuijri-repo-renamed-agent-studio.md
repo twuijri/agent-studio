@@ -20,16 +20,26 @@
   ثابتة؛ صار الخيار العام `agent-studio` (والافتراضي)، وحُذف `core-hub` من الخيارات كي لا تُنشر
   صورة هذه النسخة بالخطأ في اسم المنتج الجديد. `latest` محجوز لـ`agent-studio`، والفحص يتوقع
   أن تكون حزمته عامة كما كانت `core-hub`. مسار التجربة `core-hub-test` لم يتغيّر.
+- روابط تعمل فعلًا كانت تشير إلى `twuijri/core-hub`، وبعد أن يأخذ المنتج الجديد الاسم ستشير إليه:
+  إشعار الإصدارات في تطبيق سطح المكتب (`release-notice-core.ts` يقرأ آخر إصدار من API الريبو)،
+  ورابطا المستودع في القائمة الجانبية، و`homepage` تطبيق سطح المكتب، و`HTTP-Referer` الذي يرسله
+  Hermes إلى OpenRouter. كلها صارت `twuijri/agent-studio`.
+- اختبار الهوية (`tests/client/core-hub-branding.test.ts`) كان يثبّت `core-hub` حزمةً عامة؛ صار
+  يثبّت `agent-studio` افتراضيًا وأن الخيارين `agent-studio` و`core-hub-test` فقط.
 - الهوية داخل النسخة (كور هب) لا تتغيّر.
 
 ## الملفات والتأثير
-`.github/workflows/test-track.yml`، `.github/workflows/personal-image.yml`، `package.json`، `README.md`، `deploy/README.md`،
-`docs/CORE-HUB-BRANDING.md`. لا كود ولا صورة.
+`.github/workflows/test-track.yml`، `.github/workflows/personal-image.yml`، `package.json`، `packages/desktop/src/main/release-notice-core.ts`، `packages/desktop/package.json`، `packages/client/src/components/layout/AppSidebar.vue`، `packages/server/src/modules/hermes/services/bridge/manager.ts`، واختباراتها، `README.md`، `deploy/README.md`،
+`docs/CORE-HUB-BRANDING.md`. روابط نصية فقط في الكود، بلا تغيير سلوك آخر.
 
 ## الفحوص
 ```
 $ node scripts/harness-check.mjs
 Harness check passed
+$ npx vitest run tests/server/agent-bridge-manager.test.ts tests/desktop/release-notice.test.ts tests/client/core-hub-branding.test.ts
+      Tests  46 passed (46)
+# أول تشغيل في CI فشل في اختبار الهوية قبل تحديثه:
+AssertionError: expected 'name: Personal Core Hub image…' to contain 'const expected = '${{ inputs.image_repo }}' === 'core-hub' …'
 ```
 
 ## المخاطر والرجوع

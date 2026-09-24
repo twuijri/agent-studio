@@ -15,7 +15,7 @@ const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
 
 function latest(tag: string, extra: Record<string, unknown> = {}) {
-  return { tag_name: tag, html_url: `https://github.com/twuijri/core-hub/releases/tag/${tag}`, published_at: '2026-09-18T20:00:00Z', draft: false, prerelease: false, ...extra }
+  return { tag_name: tag, html_url: `https://github.com/twuijri/agent-studio/releases/tag/${tag}`, published_at: '2026-09-18T20:00:00Z', draft: false, prerelease: false, ...extra }
 }
 
 describe('release notice (new version available, no updater)', () => {
@@ -28,7 +28,7 @@ describe('release notice (new version available, no updater)', () => {
   })
 
   it('parses the GitHub latest-release payload and ignores drafts and pre-releases', () => {
-    expect(parseLatestRelease(latest('v1.0.1'))).toEqual({ version: '1.0.1', tag: 'v1.0.1', url: 'https://github.com/twuijri/core-hub/releases/tag/v1.0.1', publishedAt: '2026-09-18T20:00:00Z' })
+    expect(parseLatestRelease(latest('v1.0.1'))).toEqual({ version: '1.0.1', tag: 'v1.0.1', url: 'https://github.com/twuijri/agent-studio/releases/tag/v1.0.1', publishedAt: '2026-09-18T20:00:00Z' })
     expect(parseLatestRelease(latest('v1.0.1', { prerelease: true }))).toBeNull()
     expect(parseLatestRelease(latest('v1.0.1', { draft: true }))).toBeNull()
     expect(parseLatestRelease(latest('v1.0.1', { html_url: 'http://evil.example/x' }))).toBeNull()
