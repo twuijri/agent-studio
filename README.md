@@ -64,7 +64,7 @@ volumes, network, and environment as they are.
 ```yaml
 services:
   core-hub:
-    image: ghcr.io/twuijri/core-hub:latest
+    image: ghcr.io/twuijri/agent-studio:latest
     ports:
       - "127.0.0.1:6060:6060"
     volumes:

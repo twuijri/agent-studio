@@ -41,7 +41,7 @@ concurrency:
 
 jobs:
   gate:
-    if: github.repository == 'twuijri/core-hub' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    if: (github.repository == 'twuijri/agent-studio' || github.repository == 'twuijri/core-hub') && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.pick.outputs.sha }}
