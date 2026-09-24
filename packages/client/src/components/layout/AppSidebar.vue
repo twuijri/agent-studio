@@ -365,7 +365,7 @@ function handleUpdateClick() {
         <div class="version-links">
           <a
             class="sidebar-footer-link"
-            href="https://github.com/twuijri/core-hub"
+            href="https://github.com/twuijri/agent-studio"
             target="_blank"
             rel="noopener noreferrer"
             title="GitHub"
@@ -378,7 +378,7 @@ function handleUpdateClick() {
           </a>
           <a
             class="sidebar-footer-link"
-            href="https://github.com/twuijri/core-hub#readme"
+            href="https://github.com/twuijri/agent-studio#readme"
             target="_blank"
             rel="noopener noreferrer"
             title="Website"

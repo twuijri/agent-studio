@@ -7,7 +7,7 @@ import { dirname } from 'node:path'
 // user opens the release page and installs the new build themselves.
 // Pure module (no Electron) so the decision logic is unit-testable.
 
-export const DEFAULT_RELEASE_API_URL = 'https://api.github.com/repos/twuijri/core-hub/releases/latest'
+export const DEFAULT_RELEASE_API_URL = 'https://api.github.com/repos/twuijri/agent-studio/releases/latest'
 export const RELEASE_NOTICE_FILE = 'release-notice.json'
 
 export interface ReleaseInfo {

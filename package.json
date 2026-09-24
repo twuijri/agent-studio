@@ -5,9 +5,9 @@
   "description": "Core Hub: a personal non-commercial fork of Ekko Studio for multi-agent chat, coding, and visual workflows.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/twuijri/core-hub.git"
+    "url": "https://github.com/twuijri/agent-studio.git"
   },
-  "homepage": "https://github.com/twuijri/core-hub",
+  "homepage": "https://github.com/twuijri/agent-studio",
   "license": "BSL-1.1",
   "engines": {
     "node": ">=23.0.0"

@@ -45,9 +45,13 @@ describe('Core Hub branding without a data or deployment migration', () => {
     expect(text).not.toContain('(await repo.json()).private !== true')
     expect(text).not.toContain("visibility !== 'private'")
     expect(text).toContain('Report the image package visibility')
-    expect(text).toContain("const expected = '${{ inputs.image_repo }}' === 'core-hub' ? 'public' : 'private';")
+    expect(text).toContain("const expected = '${{ inputs.image_repo }}' === 'agent-studio' ? 'public' : 'private';")
     expect(text).toContain('if (visibility !== expected) console.log(`::warning::')
-    // The package name is an input (core-hub = public deployment image, core-hub-test = private test track).
+    // The package name is an input (agent-studio = public deployment image since the repository took
+    // that name back on 2026-09-24, core-hub-test = private test track). core-hub now belongs to the
+    // new product, so it must never be offered here.
+    expect(workflow.on.workflow_dispatch.inputs.image_repo.default).toBe('agent-studio')
+    expect(workflow.on.workflow_dispatch.inputs.image_repo.options).toEqual(['agent-studio', 'core-hub-test'])
     expect(text).toContain('ghcr.io/twuijri/${{ inputs.image_repo }}:latest')
     expect(text).toContain('Refuse to promote the test-track package to latest')
     expect(text).not.toContain('ghcr.io/twuijri/agent-studio:')
