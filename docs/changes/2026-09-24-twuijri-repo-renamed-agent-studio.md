@@ -16,10 +16,14 @@
   الصورة في `README.md` صار هذا الاسم، وأضيف تحديث مؤرّخ في `deploy/README.md` و
   `docs/CORE-HUB-BRANDING.md` دون تعديل تاريخ القرار السابق. المالك يغيّر ستاكه بنفسه
   («ادخل على ستاكي واغيره قبل يحدث هو»)، ثم يحذف حزمة `core-hub` القديمة.
+- `personal-image.yml` (مسار الصورة الشخصية) كان يختار بين `core-hub` و`core-hub-test` بأسماء
+  ثابتة؛ صار الخيار العام `agent-studio` (والافتراضي)، وحُذف `core-hub` من الخيارات كي لا تُنشر
+  صورة هذه النسخة بالخطأ في اسم المنتج الجديد. `latest` محجوز لـ`agent-studio`، والفحص يتوقع
+  أن تكون حزمته عامة كما كانت `core-hub`. مسار التجربة `core-hub-test` لم يتغيّر.
 - الهوية داخل النسخة (كور هب) لا تتغيّر.
 
 ## الملفات والتأثير
-`.github/workflows/test-track.yml`، `package.json`، `README.md`، `deploy/README.md`،
+`.github/workflows/test-track.yml`، `.github/workflows/personal-image.yml`، `package.json`، `README.md`، `deploy/README.md`،
 `docs/CORE-HUB-BRANDING.md`. لا كود ولا صورة.
 
 ## الفحوص

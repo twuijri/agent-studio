@@ -29,12 +29,12 @@ on:
         required: false
         type: string
       image_repo:
-        description: GHCR package to publish to. core-hub is the public deployment image; core-hub-test is the owner's private test track.
-        default: core-hub
+        description: GHCR package to publish to. agent-studio is the public deployment image (the repository's name again since 2026-09-24; core-hub now belongs to the new product); core-hub-test is the owner's private test track.
+        default: agent-studio
         required: false
         type: choice
         options:
-          - core-hub
+          - agent-studio
           - core-hub-test
 
 permissions:
@@ -61,9 +61,9 @@ jobs:
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Refuse to promote the test-track package to latest
-        if: ${{ inputs.image_repo != 'core-hub' && (inputs.publish_latest || inputs.promote_latest) }}
+        if: ${{ inputs.image_repo != 'agent-studio' && (inputs.publish_latest || inputs.promote_latest) }}
         run: |
-          echo "::error::latest is reserved for the public core-hub package; the test track never publishes latest." >&2
+          echo "::error::latest is reserved for the public agent-studio package; the test track never publishes latest." >&2
           exit 1
       - name: Require successful CI for this exact commit
         env:
@@ -156,7 +156,7 @@ jobs:
           else {
             const visibility = (await response.json()).visibility;
             console.log(`Published package visibility: ${visibility}`);
-            const expected = '${{ inputs.image_repo }}' === 'core-hub' ? 'public' : 'private';
+            const expected = '${{ inputs.image_repo }}' === 'agent-studio' ? 'public' : 'private';
             if (visibility !== expected) console.log(`::warning::The ${'${{ inputs.image_repo }}'} package is ${visibility}; expected ${expected}. Change it under Package settings → Danger zone.`);
           }
           NODE
